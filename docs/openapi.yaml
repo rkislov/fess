@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Fence WAF Control API
+  version: 0.1.0
+servers:
+  - url: https://localhost:8443/api/v1
+paths:
+  /policies:
+    get:
+      summary: List policies
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyCreate"
+      responses:
+        "201":
+          description: Created
+  /policies/{id}:
+    put:
+      summary: Update policy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated
+  /policies/{id}/publish:
+    post:
+      summary: Publish policy version
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Accepted
+  /policies/{id}/rules:
+    post:
+      summary: Create rule in policy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created
+  /rules/{id}:
+    put:
+      summary: Update rule
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated
+  /logs:
+    get:
+      summary: Query detection logs
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+        - in: query
+          name: to
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+components:
+  schemas:
+    PolicyCreate:
+      type: object
+      required:
+        - name
+        - mode
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [block, log]
+        priority:
+          type: integer
+          default: 100

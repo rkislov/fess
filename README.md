@@ -1,0 +1,156 @@
+# Fence WAF Blueprint
+
+Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with on-the-fly policy updates, no service restart, and a web UI.
+
+## Monorepo Layout
+
+- `services/waf-gateway` - reverse proxy and enforcement engine
+- `services/policy-api` - management API for policies/rules/logs/sites
+- `pkg/engine` - rule matching/evaluation primitives
+- `pkg/policy` - active policy snapshot store (atomic swap)
+- `pkg/routing` - virtual host → upstream resolution for the gateway
+- `db/schema.sql` - PostgreSQL schema
+- `db/003_sites_backends.sql` - sites + backends tables and seed
+- `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream)
+- `docs/openapi.yaml` - REST API contract
+- `docs/blueprint.md` - architecture and rollout plan
+- `deploy/docker-compose.yml` - local stack for development
+
+## Core Runtime Pattern
+
+1. Admin updates policy via `policy-api`.
+2. `policy-api` validates, versions, stores in PostgreSQL.
+3. Update event is published to Redis channel.
+4. `waf-gateway` instances reload and atomically swap active policy snapshot.
+5. New requests use new policy immediately.
+
+**Sites / backends:** same pattern via Redis channel `routing_updated` and in-memory routing table in `waf-gateway` (no restart).
+
+## Quick Start (Docker)
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+**`relation "sites" does not exist`:** `db/003_sites_backends.sql` runs only when Postgres creates a **new** data volume. If the volume already existed from an older checkout, apply the migration once (from repo root):
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T postgres \
+  psql -U fence -d fence < db/003_sites_backends.sql
+```
+
+Or with a local client: `psql "postgres://fence:fence@localhost:5432/fence?sslmode=disable" -f db/003_sites_backends.sql`.
+
+To wipe the DB and re-run all init scripts (destructive): `docker compose -f deploy/docker-compose.yml down -v` then `up -d` again.
+
+Optional demo seed:
+
+```bash
+psql "postgres://fence:fence@localhost:5432/fence?sslmode=disable" -f db/seeds.sql
+```
+
+## API Smoke Flow
+
+Create policy:
+
+```bash
+curl -sS -X POST http://localhost:8082/api/v1/policies \
+  -H 'content-type: application/json' \
+  -d '{"name":"api-policy","mode":"block","priority":10}'
+```
+
+Create rule in policy:
+
+```bash
+curl -sS -X POST http://localhost:8082/api/v1/policies/<policy-id>/rules \
+  -H 'content-type: application/json' \
+  -d '{"name":"block-bot-ua","action":"block","priority":10,"condition_json":{"header_contains":{"User-Agent":"bot"}}}'
+```
+
+Publish policy:
+
+```bash
+curl -sS -X POST http://localhost:8082/api/v1/policies/<policy-id>/publish
+```
+
+After publish, gateway applies it live without restart.
+
+## OWASP CRS–inspired rule packs
+
+List embedded packs:
+
+```bash
+curl -sS http://localhost:8082/api/v1/owasp/packs
+```
+
+Import pack `crs-lite-v1` into a new policy and publish (so gateways reload immediately):
+
+```bash
+curl -sS -X POST http://localhost:8082/api/v1/owasp/import \
+  -H 'content-type: application/json' \
+  -d '{"pack_id":"crs-lite-v1","policy_name":"OWASP CRS Lite","mode":"log","publish":true}'
+```
+
+This is **not** a full ModSecurity CRS port: rules are expressed in Fence’s `condition_json` schema (subset of CRS ideas). The canonical CRS lives at [coreruleset/coreruleset](https://github.com/coreruleset/coreruleset).
+
+## Malware scanning (ICAP + ClamAV + optional HTTP / sandbox)
+
+- **ICAP REQMOD** to [c-icap](http://c-icap.sourceforge.net/) with ClamAV (Docker: `opencloudeu/clamav-icap`, services `avscan` / `srv_clamav` on port **1344**).
+- **Gateway** reads request bodies (within `body_scan` limits and MIME filters), runs **ICAP first**, then optional **HTTP POST** scanners and a **sandbox webhook** (same multipart contract: field `file`, JSON response `{"clean": true}` / `{"clean": false, "reason": "..."}`).
+- **ClamAV mirror**: UI stores `clamav_mirror.database_mirror`; `GET /api/v1/settings/malware/freshclam-snippet` returns a `DatabaseMirror …` line for `freshclam.conf` on your mirror host (or bind-mount into a ClamAV container).
+- **Live reload**: saving settings publishes `malware_settings_updated` on Redis; `waf-gateway` reloads config without restart.
+
+API:
+
+- `GET/PUT /api/v1/settings/malware`
+- `GET /api/v1/settings/malware/freshclam-snippet`
+
+**Sites & backends (reverse proxy)**
+
+- `GET/POST /api/v1/sites` — virtual hosts: `host_pattern` exact (`api.example.com`), wildcard (`*.example.com`), or catch-all `*`; lower `priority` is tried first. Optional **`policy_id`**: if set, the gateway evaluates **only that enabled policy** for traffic matching the site; empty / omitted = **all** enabled policies (legacy).
+- `PUT/DELETE /api/v1/sites/{id}`
+- `GET/POST /api/v1/sites/{id}/backends` — origin `base_url` (must include `scheme://host`); first enabled backend by `priority` is used.
+- `PUT/DELETE /api/v1/backends/{id}`
+
+**Gateway & policy logs (read via policy-api)**
+
+- `GET /api/v1/proxy-access-logs` — журнал соединений (host, upstream, исход: proxied / waf_block / redirect / malware_block); пишет **waf-gateway** в таблицу `proxy_access_logs` (см. `db/005_proxy_access_logs.sql`).
+- `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …).
+
+Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **`UPSTREAM_URL`**.
+
+On first deploy after adding `db/002_malware_settings.sql`, existing Postgres volumes need the migration applied once (re-create volume or run the SQL manually). Same for `db/003_sites_backends.sql`, `db/004_site_policy.sql`, and `db/005_proxy_access_logs.sql`.
+
+## Multi-platform Docker (arm64 / amd64)
+
+- **Go services** (`policy-api`, `waf-gateway`): Dockerfiles use BuildKit’s `TARGETARCH` (with a `uname -m` fallback) so the binary matches the image architecture (native **arm64** on Apple Silicon, **amd64** on typical servers).
+- **Demo upstream**: `mccutchen/go-httpbin` is multi-arch (replaces `kennethreitz/httpbin`).
+- **Base images** (`postgres`, `redis`, `golang`, `alpine`, `node`, `nginx`) are official multi-arch manifests.
+- **`opencloudeu/clamav-icap`**: if your registry does not publish `linux/arm64`, either run that service with `platform: linux/amd64` (emulation on Apple Silicon) or point ICAP to an external scanner and disable the compose `clamav-icap` service.
+
+To build and push a multi-arch manifest for Fence images (optional):
+
+```bash
+cd /path/to/fence
+docker buildx create --use 2>/dev/null || true
+docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Dockerfile -t yourrepo/fence-policy-api:tag --push .
+```
+
+## Service Endpoints
+
+- UI (Nginx + static Nuxt build): `http://localhost:5173`
+- WAF Gateway: `http://localhost:8080`
+- Policy API (direct): `http://localhost:8082`
+- Demo upstream (`go-httpbin`, multi-arch / **arm64** friendly): `http://localhost:8081` → WAF uses `http://httpbin:8080` inside the stack.
+
+UI uses Nginx proxy and forwards `/api/*` to `policy-api`.
+
+**UI sign-in (demo):** the static Nuxt app shows a login screen that only protects the browser session (credentials are checked in the client bundle; they are **not** the same as Postgres or `policy-api` auth, which is not implemented yet). Defaults: user `admin`, password `fence`. Docker Compose passes build args from `FENCE_UI_USER`, `FENCE_UI_PASSWORD`, and `FENCE_UI_AUTH_ENABLED` (set the last to `false` to hide the login screen, e.g. behind your own SSO). For production, add real auth (API + cookies or reverse-proxy basic auth) and do not rely on client-only checks alone.
+
+## Next Engineering Steps
+
+1. Implement OpenAPI endpoints and request validation.
+2. Add policy compiler (regex/expr precompilation).
+3. Implement request pipeline (match -> action -> log).
+4. Integrate Redis pub/sub for live updates.
+5. Add auth + RBAC for UI/API.

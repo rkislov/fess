@@ -1,0 +1,127 @@
+{
+  "pack_id": "crs-lite-v1",
+  "title": "OWASP Core Rule Set — inspired lite pack for Fence",
+  "description": "Curated subset of detection ideas aligned with OWASP CRS categories (not a byte-for-byte CRS port). Official CRS: https://github.com/coreruleset/coreruleset",
+  "rules": [
+    {
+      "name": "SQLi: classic OR tautology (body)",
+      "crs_rule_id": "942100",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942100,
+      "condition": { "body_contains": "' OR '1'='1" }
+    },
+    {
+      "name": "SQLi: UNION SELECT (body)",
+      "crs_rule_id": "942190",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942190,
+      "condition": { "body_contains": "UNION SELECT" }
+    },
+    {
+      "name": "SQLi: OR 1=1 (URI)",
+      "crs_rule_id": "942260",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942260,
+      "condition": { "request_uri_contains": " OR 1=1" }
+    },
+    {
+      "name": "SQLi: sleep benchmark (body)",
+      "crs_rule_id": "942420",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942420,
+      "condition": { "body_contains": "SLEEP(" }
+    },
+    {
+      "name": "XSS: script tag (body)",
+      "crs_rule_id": "941100",
+      "category": "xss",
+      "action": "block",
+      "priority": 941100,
+      "condition": { "body_contains": "<script" }
+    },
+    {
+      "name": "XSS: javascript: scheme (URI)",
+      "crs_rule_id": "941120",
+      "category": "xss",
+      "action": "block",
+      "priority": 941120,
+      "condition": { "request_uri_contains": "javascript:" }
+    },
+    {
+      "name": "XSS: onerror handler (body)",
+      "crs_rule_id": "941160",
+      "category": "xss",
+      "action": "block",
+      "priority": 941160,
+      "condition": { "body_contains": "onerror=" }
+    },
+    {
+      "name": "Path traversal: ../ (path)",
+      "crs_rule_id": "930100",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930100,
+      "condition": { "path_contains": "../" }
+    },
+    {
+      "name": "Path traversal: ..\\ (URI)",
+      "crs_rule_id": "930110",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930110,
+      "condition": { "request_uri_contains": "..\\" }
+    },
+    {
+      "name": "LFI: etc passwd (URI)",
+      "crs_rule_id": "930120",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930120,
+      "condition": { "request_uri_contains": "/etc/passwd" }
+    },
+    {
+      "name": "PHP: php://filter wrapper (URI)",
+      "crs_rule_id": "933100",
+      "category": "lfi",
+      "action": "block",
+      "priority": 933100,
+      "condition": { "request_uri_contains": "php://filter" }
+    },
+    {
+      "name": "Command injection: pipe (body)",
+      "crs_rule_id": "932100",
+      "category": "rce",
+      "action": "block",
+      "priority": 932100,
+      "condition": { "body_contains": "| nc " }
+    },
+    {
+      "name": "Command injection: semicolon curl (body)",
+      "crs_rule_id": "932110",
+      "category": "rce",
+      "action": "block",
+      "priority": 932110,
+      "condition": { "body_contains": "; curl " }
+    },
+    {
+      "name": "SQLi: information_schema (URI)",
+      "crs_rule_id": "942200",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942200,
+      "condition": { "request_uri_contains": "information_schema" }
+    },
+    {
+      "name": "Suspicious User-Agent: sqlmap",
+      "crs_rule_id": "913100",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913100,
+      "condition": { "header_contains": { "User-Agent": "sqlmap" } }
+    }
+  ]
+}

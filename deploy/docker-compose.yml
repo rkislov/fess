@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: fence
+      POSTGRES_PASSWORD: fence
+      POSTGRES_DB: fence
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ../db/002_malware_settings.sql:/docker-entrypoint-initdb.d/002-malware.sql:ro
+      - ../db/003_sites_backends.sql:/docker-entrypoint-initdb.d/003-sites.sql:ro
+      - ../db/004_site_policy.sql:/docker-entrypoint-initdb.d/004-site-policy.sql:ro
+      - ../db/005_proxy_access_logs.sql:/docker-entrypoint-initdb.d/005-proxy-access.sql:ro
+      - ../db/006_proxy_access_stats.sql:/docker-entrypoint-initdb.d/006-proxy-stats.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  policy-api:
+    build:
+      context: ..
+      dockerfile: services/policy-api/Dockerfile
+    image: fence/policy-api:local
+    environment:
+      POLICY_API_LISTEN_ADDR: ":8082"
+      POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O- http://127.0.0.1:8082/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  clamav-icap:
+    image: opencloudeu/clamav-icap:latest
+    ports:
+      - "1344:1344"
+    restart: unless-stopped
+
+  waf-gateway:
+    build:
+      context: ..
+      dockerfile: services/waf-gateway/Dockerfile
+    image: fence/waf-gateway:local
+    environment:
+      WAF_LISTEN_ADDR: ":8080"
+      UPSTREAM_URL: "http://httpbin:8080"
+      POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav-icap:
+        condition: service_started
+
+  httpbin:
+    image: mccutchen/go-httpbin:latest
+    ports:
+      - "8081:8080"
+
+  ui:
+    build:
+      context: ..
+      dockerfile: ui/Dockerfile
+      args:
+        NUXT_PUBLIC_UI_AUTH_ENABLED: ${FENCE_UI_AUTH_ENABLED:-true}
+        NUXT_PUBLIC_UI_USER: ${FENCE_UI_USER:-admin}
+        NUXT_PUBLIC_UI_PASSWORD: ${FENCE_UI_PASSWORD:-fence}
+    image: fence/ui:local
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    depends_on:
+      policy-api:
+        condition: service_healthy

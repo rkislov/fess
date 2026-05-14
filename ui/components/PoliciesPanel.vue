@@ -1,0 +1,514 @@
+<template>
+  <div class="space-y-8">
+    <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
+    <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
+
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+      <h2 class="text-lg font-semibold text-white">Policies</h2>
+      <p class="mt-1 text-sm text-slate-400">Create, edit, publish. Rules use JSON condition/transform schemas.</p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button
+          v-for="p in policies"
+          :key="p.id"
+          type="button"
+          class="rounded-lg border px-3 py-1.5 text-sm transition"
+          :class="
+            selectedId === p.id
+              ? 'border-emerald-500 bg-emerald-950/50 text-emerald-100'
+              : 'border-slate-700 bg-slate-800/80 text-slate-200 hover:border-slate-500'
+          "
+          @click="selectPolicy(p.id)"
+        >
+          {{ p.name }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-dashed border-slate-600 px-3 py-1.5 text-sm text-slate-400 hover:border-slate-400 hover:text-slate-200"
+          @click="clearSelection"
+        >
+          Clear
+        </button>
+      </div>
+
+      <div class="mt-6 grid gap-4 border-t border-slate-800 pt-6 md:grid-cols-2">
+        <div>
+          <h3 class="text-sm font-medium text-slate-300">New policy</h3>
+          <div class="mt-2 space-y-2">
+            <input
+              v-model="newPolicy.name"
+              placeholder="Name"
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-emerald-500/30 focus:ring-2"
+            />
+            <select
+              v-model="newPolicy.mode"
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30"
+            >
+              <option value="block">block</option>
+              <option value="log">log</option>
+            </select>
+            <input
+              v-model.number="newPolicy.priority"
+              type="number"
+              placeholder="Priority (default 100)"
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30"
+            />
+            <button
+              type="button"
+              class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+              :disabled="busy"
+              @click="createPolicy"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+
+        <div v-if="detail">
+          <h3 class="text-sm font-medium text-slate-300">Selected policy</h3>
+          <div class="mt-2 space-y-2">
+            <input
+              v-model="detail.name"
+              class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            />
+            <select v-model="detail.mode" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+              <option value="block">block</option>
+              <option value="log">log</option>
+            </select>
+            <input v-model.number="detail.priority" type="number" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            <label class="flex items-center gap-2 text-sm text-slate-300">
+              <input v-model="detail.enabled" type="checkbox" class="rounded border-slate-600" />
+              Enabled
+            </label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600"
+                :disabled="busy"
+                @click="savePolicy"
+              >
+                Save policy
+              </button>
+              <button
+                type="button"
+                class="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500"
+                :disabled="busy"
+                @click="publishPolicy"
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="detail" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+      <h2 class="text-lg font-semibold text-white">Rules</h2>
+      <div class="mt-4 space-y-6">
+        <div
+          v-for="(r, idx) in ruleRows"
+          :key="r.id"
+          class="rounded-lg border border-slate-800 bg-slate-950/50 p-4"
+        >
+          <div class="flex flex-wrap items-end gap-2">
+            <div class="min-w-[140px] flex-1">
+              <label class="text-xs text-slate-500">Name</label>
+              <input v-model="r.name" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+            <div class="w-28">
+              <label class="text-xs text-slate-500">Action</label>
+              <select v-model="r.action" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
+                <option value="allow">allow</option>
+                <option value="block">block</option>
+                <option value="log">log</option>
+                <option value="redirect">redirect</option>
+                <option value="replace">replace</option>
+              </select>
+            </div>
+            <div class="w-24">
+              <label class="text-xs text-slate-500">Priority</label>
+              <input v-model.number="r.priority" type="number" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+            <label class="flex items-center gap-2 pb-1 text-sm text-slate-400">
+              <input v-model="r.enabled" type="checkbox" class="rounded border-slate-600" />
+              On
+            </label>
+            <button type="button" class="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600" :disabled="busy" @click="saveRule(idx)">
+              Save rule
+            </button>
+          </div>
+          <div class="mt-3 grid gap-3 md:grid-cols-2">
+            <div>
+              <label class="text-xs text-slate-500">condition_json</label>
+              <textarea
+                v-model="r.conditionText"
+                rows="6"
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 font-mono text-xs leading-relaxed"
+              />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">transform_json</label>
+              <textarea
+                v-model="r.transformText"
+                rows="6"
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 font-mono text-xs leading-relaxed"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 border-t border-slate-800 pt-6">
+        <h3 class="text-sm font-medium text-slate-300">Add rule</h3>
+        <div class="mt-2 space-y-2">
+          <input v-model="newRule.name" placeholder="Name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+          <select v-model="newRule.action" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+            <option value="block">block</option>
+            <option value="log">log</option>
+            <option value="allow">allow</option>
+            <option value="redirect">redirect</option>
+            <option value="replace">replace</option>
+          </select>
+          <input v-model.number="newRule.priority" type="number" placeholder="Priority" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+          <textarea
+            v-model="newRule.conditionText"
+            rows="4"
+            placeholder='condition JSON e.g. {"path_contains":"/admin"}'
+            class="w-full rounded-lg border border-slate-700 bg-slate-950 font-mono text-xs"
+          />
+          <textarea
+            v-model="newRule.transformText"
+            rows="3"
+            placeholder="transform JSON (optional)"
+            class="w-full rounded-lg border border-slate-700 bg-slate-950 font-mono text-xs"
+          />
+          <button type="button" class="rounded-lg bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600" :disabled="busy || !detail" @click="addRule">
+            Add rule
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+      <h2 class="text-lg font-semibold text-white">OWASP packs</h2>
+      <p class="mt-1 text-sm text-slate-400">Import embedded CRS-style packs into a new policy.</p>
+      <div class="mt-4 grid gap-3 md:grid-cols-2">
+        <select v-model="owasp.packId" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+          <option v-for="p in packs" :key="p.id" :value="p.id">{{ p.title }} ({{ p.rule_count }} rules)</option>
+        </select>
+        <input v-model="owasp.policyName" placeholder="Policy name" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+        <select v-model="owasp.mode" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+          <option value="block">block</option>
+          <option value="log">log</option>
+        </select>
+        <input v-model.number="owasp.priority" type="number" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+        <label class="flex items-center gap-2 text-sm text-slate-300 md:col-span-2">
+          <input v-model="owasp.publish" type="checkbox" class="rounded border-slate-600" />
+          Publish after import
+        </label>
+        <button
+          type="button"
+          class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 md:col-span-2"
+          :disabled="busy"
+          @click="importOwasp"
+        >
+          Import pack
+        </button>
+      </div>
+    </section>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { FetchError } from 'ofetch'
+
+const { apiUrl } = useApi()
+
+const err = ref('')
+const ok = ref('')
+const busy = ref(false)
+const policies = ref<{ id: string; name: string; mode: string; priority: number; enabled: boolean }[]>([])
+const selectedId = ref<string | null>(null)
+const detail = ref<{
+  id: string
+  name: string
+  mode: string
+  priority: number
+  enabled: boolean
+} | null>(null)
+
+type RuleRow = {
+  id: string
+  name: string
+  action: string
+  priority: number
+  enabled: boolean
+  conditionText: string
+  transformText: string
+}
+const ruleRows = ref<RuleRow[]>([])
+
+const newPolicy = reactive({ name: '', mode: 'block' as 'block' | 'log', priority: 0 })
+const newRule = reactive({
+  name: '',
+  action: 'block',
+  priority: 0,
+  conditionText: '{}',
+  transformText: '{}',
+})
+
+const packs = ref<{ id: string; title: string; rule_count: number }[]>([])
+const owasp = reactive({
+  packId: '',
+  policyName: 'OWASP CRS Lite',
+  mode: 'block' as 'block' | 'log',
+  priority: 50,
+  publish: true,
+})
+
+function flashErr(e: unknown) {
+  ok.value = ''
+  const fe = e as FetchError<{ error?: string }>
+  err.value = fe?.data?.error || fe?.message || String(e)
+}
+
+function flashOk(msg: string) {
+  err.value = ''
+  ok.value = msg
+  setTimeout(() => {
+    ok.value = ''
+  }, 4000)
+}
+
+async function loadPolicies() {
+  const data = await $fetch<{ items: typeof policies.value }>(apiUrl('/policies'))
+  policies.value = data.items || []
+}
+
+async function loadPacks() {
+  const data = await $fetch<{ items: typeof packs.value }>(apiUrl('/owasp/packs'))
+  packs.value = data.items || []
+  if (!owasp.packId && packs.value.length) owasp.packId = packs.value[0].id
+}
+
+function stringifyJson(raw: unknown) {
+  if (raw == null) return '{}'
+  if (typeof raw === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(raw), null, 2)
+    } catch {
+      return raw
+    }
+  }
+  return JSON.stringify(raw, null, 2)
+}
+
+async function selectPolicy(id: string) {
+  err.value = ''
+  selectedId.value = id
+  busy.value = true
+  try {
+    const d = await $fetch<{
+      id: string
+      name: string
+      mode: string
+      priority: number
+      enabled: boolean
+      rules: {
+        id: string
+        name: string
+        action: string
+        priority: number
+        enabled: boolean
+        condition_json: unknown
+        transform_json: unknown
+      }[]
+    }>(apiUrl(`/policies/${id}`))
+    detail.value = {
+      id: d.id,
+      name: d.name,
+      mode: d.mode,
+      priority: d.priority,
+      enabled: d.enabled,
+    }
+    ruleRows.value = (d.rules || []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      action: r.action,
+      priority: r.priority,
+      enabled: r.enabled,
+      conditionText: stringifyJson(r.condition_json),
+      transformText: stringifyJson(r.transform_json),
+    }))
+  } catch (e) {
+    flashErr(e)
+    detail.value = null
+    ruleRows.value = []
+  } finally {
+    busy.value = false
+  }
+}
+
+function clearSelection() {
+  selectedId.value = null
+  detail.value = null
+  ruleRows.value = []
+}
+
+async function createPolicy() {
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl('/policies'), {
+      method: 'POST',
+      body: {
+        name: newPolicy.name,
+        mode: newPolicy.mode,
+        priority: newPolicy.priority || undefined,
+      },
+    })
+    newPolicy.name = ''
+    await loadPolicies()
+    flashOk('Policy created')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function savePolicy() {
+  if (!detail.value) return
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl(`/policies/${detail.value.id}`), {
+      method: 'PUT',
+      body: {
+        name: detail.value.name,
+        mode: detail.value.mode,
+        priority: detail.value.priority,
+        enabled: detail.value.enabled,
+      },
+    })
+    await loadPolicies()
+    flashOk('Policy saved')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function publishPolicy() {
+  if (!detail.value) return
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl(`/policies/${detail.value.id}/publish`), { method: 'POST' })
+    flashOk('Published')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function parseJsonField(text: string, field: string) {
+  const t = text.trim() || '{}'
+  try {
+    return JSON.parse(t) as object
+  } catch {
+    throw new Error(`Invalid JSON in ${field}`)
+  }
+}
+
+async function saveRule(idx: number) {
+  const r = ruleRows.value[idx]
+  if (!r) return
+  busy.value = true
+  err.value = ''
+  try {
+    const condition_json = parseJsonField(r.conditionText, 'condition_json')
+    const transform_json = parseJsonField(r.transformText, 'transform_json')
+    await $fetch(apiUrl(`/rules/${r.id}`), {
+      method: 'PUT',
+      body: {
+        name: r.name,
+        action: r.action,
+        priority: r.priority,
+        enabled: r.enabled,
+        condition_json,
+        transform_json,
+      },
+    })
+    flashOk('Rule saved')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function addRule() {
+  if (!detail.value) return
+  busy.value = true
+  err.value = ''
+  try {
+    const condition_json = parseJsonField(newRule.conditionText, 'condition_json')
+    const transform_json = parseJsonField(newRule.transformText || '{}', 'transform_json')
+    await $fetch(apiUrl(`/policies/${detail.value.id}/rules`), {
+      method: 'POST',
+      body: {
+        name: newRule.name,
+        action: newRule.action,
+        priority: newRule.priority || undefined,
+        condition_json,
+        transform_json,
+      },
+    })
+    newRule.name = ''
+    newRule.conditionText = '{}'
+    newRule.transformText = '{}'
+    await selectPolicy(detail.value.id)
+    flashOk('Rule added')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function importOwasp() {
+  busy.value = true
+  err.value = ''
+  try {
+    const res = await $fetch<{ policy_id: string }>(apiUrl('/owasp/import'), {
+      method: 'POST',
+      body: {
+        pack_id: owasp.packId,
+        policy_name: owasp.policyName,
+        mode: owasp.mode,
+        priority: owasp.priority || undefined,
+        publish: owasp.publish,
+        published_by: 'ui',
+      },
+    })
+    await loadPolicies()
+    if (res.policy_id) await selectPolicy(res.policy_id)
+    flashOk('OWASP pack imported')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    await Promise.all([loadPolicies(), loadPacks()])
+  } catch (e) {
+    flashErr(e)
+  }
+})
+</script>

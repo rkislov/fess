@@ -1,0 +1,13 @@
+.git
+.gitignore
+node_modules
+ui/node_modules
+ui/dist
+ui/.nuxt
+ui/.output
+ui/.npm-cache
+**/.DS_Store
+**/*.log
+tmp
+dist
+build
