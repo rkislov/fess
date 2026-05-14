@@ -30,10 +30,11 @@ type siteUpdateRequest struct {
 }
 
 type backendCreateRequest struct {
-	Name     string `json:"name"`
-	BaseURL  string `json:"base_url"`
-	Priority int    `json:"priority"`
-	Enabled  *bool  `json:"enabled"`
+	Name            string `json:"name"`
+	BaseURL         string `json:"base_url"`
+	Priority        int    `json:"priority"`
+	Enabled         *bool  `json:"enabled"`
+	TLSSkipVerify   *bool  `json:"tls_skip_verify"`
 }
 
 func publishRoutingUpdate(ctx context.Context, rdb *redis.Client) error {
@@ -360,7 +361,7 @@ func deleteSite(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.C
 
 func listBackends(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
 	rows, err := db.QueryContext(r.Context(), `
-SELECT id::text, name, base_url, priority, enabled, created_at, updated_at
+SELECT id::text, name, base_url, priority, enabled, tls_skip_verify, created_at, updated_at
 FROM backends
 WHERE site_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, siteID)
@@ -370,18 +371,19 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 	}
 	defer rows.Close()
 	type row struct {
-		ID        string    `json:"id"`
-		Name      string    `json:"name"`
-		BaseURL   string    `json:"base_url"`
-		Priority  int       `json:"priority"`
-		Enabled   bool      `json:"enabled"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
+		ID              string    `json:"id"`
+		Name            string    `json:"name"`
+		BaseURL         string    `json:"base_url"`
+		Priority        int       `json:"priority"`
+		Enabled         bool      `json:"enabled"`
+		TLSSkipVerify   bool      `json:"tls_skip_verify"`
+		CreatedAt       time.Time `json:"created_at"`
+		UpdatedAt       time.Time `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
-		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -406,16 +408,20 @@ func createBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.Enabled != nil {
 		en = *payload.Enabled
 	}
+	tlsSkip := false
+	if payload.TLSSkipVerify != nil {
+		tlsSkip = *payload.TLSSkipVerify
+	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO backends(id, site_id, name, base_url, priority, enabled)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
-		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en)
+INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify)
+VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)`,
+		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeAuditLog(r.Context(), db, "system", "create", "backend", id, nil, map[string]any{"site_id": siteID, "base_url": payload.BaseURL})
+	writeAuditLog(r.Context(), db, "system", "create", "backend", id, nil, map[string]any{"site_id": siteID, "base_url": payload.BaseURL, "tls_skip_verify": tlsSkip})
 	if err := publishRoutingUpdate(r.Context(), rdb); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -439,9 +445,13 @@ func updateBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.Enabled != nil {
 		en = *payload.Enabled
 	}
+	tlsSkip := false
+	if payload.TLSSkipVerify != nil {
+		tlsSkip = *payload.TLSSkipVerify
+	}
 	res, err := db.ExecContext(r.Context(), `
-UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en)
+UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6, updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -450,7 +460,7 @@ WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payloa
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "backend not found"})
 		return
 	}
-	writeAuditLog(r.Context(), db, "system", "update", "backend", id, nil, map[string]any{"id": id})
+	writeAuditLog(r.Context(), db, "system", "update", "backend", id, nil, map[string]any{"id": id, "tls_skip_verify": tlsSkip})
 	if err := publishRoutingUpdate(r.Context(), rdb); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

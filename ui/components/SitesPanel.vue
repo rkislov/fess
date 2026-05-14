@@ -179,6 +179,10 @@
                   placeholder="Приоритет бэкенда (100 по умолчанию)"
                   class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                 />
+                <label class="flex items-center gap-2 text-sm text-amber-200/90">
+                  <input v-model="wizard.tls_skip_verify" type="checkbox" class="rounded border-slate-600" />
+                  Не проверять TLS-сертификат upstream (только для <span class="font-mono">https://</span> бэкенда; небезопасно)
+                </label>
               </div>
 
               <div v-show="wizardStep === 3" class="space-y-3">
@@ -326,7 +330,8 @@
               <div>
                 <h3 class="text-sm font-medium text-slate-300">Бэкенды</h3>
                 <p class="mt-1 text-sm text-slate-400">
-                  Upstream для выбранного сайта: используется первый включённый бэкенд с наименьшим приоритетом.
+                  Upstream для выбранного сайта: используется первый включённый бэкенд с наименьшим приоритетом. Для
+                  <span class="font-mono">https://</span> бэкенда можно отключить проверку сертификата (только если доверяете сети).
                 </p>
 
                 <div class="mt-4 overflow-x-auto">
@@ -337,12 +342,13 @@
                         <th class="py-2 pr-4">Base URL</th>
                         <th class="py-2 pr-4">Приоритет</th>
                         <th class="py-2">Вкл.</th>
+                        <th class="py-2 pr-2 text-center" title="InsecureSkipVerify к upstream HTTPS">TLS</th>
                         <th class="py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-if="!backends.length">
-                        <td colspan="5" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
+                        <td colspan="6" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
                       </tr>
                       <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
                         <td class="py-2 pr-4">
@@ -357,6 +363,9 @@
                         <td class="py-2">
                           <input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" />
                         </td>
+                        <td class="py-2 text-center">
+                          <input v-model="b.tls_skip_verify" type="checkbox" class="rounded border-slate-600" title="Не проверять сертификат HTTPS upstream" />
+                        </td>
                         <td class="py-2">
                           <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
                           <button type="button" class="ml-2 text-rose-400 hover:underline" @click="removeBackend(b)">Удалить</button>
@@ -368,17 +377,23 @@
 
                 <div class="mt-6 border-t border-slate-800 pt-6">
                   <h4 class="text-sm font-medium text-slate-300">Новый бэкенд</h4>
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    <input v-model="newBackend.name" placeholder="Имя" class="min-w-[120px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                    <input
-                      v-model="newBackend.base_url"
-                      placeholder="http://upstream:8080"
-                      class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
-                    />
-                    <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                    <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
-                      Добавить
-                    </button>
+                  <div class="mt-2 flex flex-col gap-3">
+                    <div class="flex flex-wrap gap-2">
+                      <input v-model="newBackend.name" placeholder="Имя" class="min-w-[120px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                      <input
+                        v-model="newBackend.base_url"
+                        placeholder="https://upstream:443"
+                        class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
+                      />
+                      <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                      <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
+                        Добавить
+                      </button>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-amber-200/90">
+                      <input v-model="newBackend.tls_skip_verify" type="checkbox" class="rounded border-slate-600" />
+                      Не проверять TLS upstream (только для https)
+                    </label>
                   </div>
                 </div>
               </div>
@@ -405,7 +420,7 @@ type Site = {
   tls_enabled: boolean
   tls_has_certificate: boolean
 }
-type Backend = { id: string; name: string; base_url: string; priority: number; enabled: boolean }
+type Backend = { id: string; name: string; base_url: string; priority: number; enabled: boolean; tls_skip_verify: boolean }
 
 const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
 
@@ -431,6 +446,7 @@ const wizard = reactive({
   backend_name: '',
   backend_url: '',
   backend_priority: 0,
+  tls_skip_verify: false,
   tls_enabled: false,
   tls_cert_pem: '',
   tls_key_pem: '',
@@ -439,7 +455,7 @@ const wizard = reactive({
 const tlsMeta = reactive({ tls_enabled: false, tls_has_certificate: false })
 const tlsForm = reactive({ enabled: false, cert_pem: '', key_pem: '' })
 
-const newBackend = reactive({ name: '', base_url: '', priority: 0 })
+const newBackend = reactive({ name: '', base_url: '', priority: 0, tls_skip_verify: false })
 
 function flashErr(e: unknown) {
   ok.value = ''
@@ -475,6 +491,7 @@ function normBackend(raw: Record<string, unknown>): Backend {
     base_url: String(raw.base_url ?? raw.BaseURL),
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
+    tls_skip_verify: Boolean(raw.tls_skip_verify ?? raw.tlsSkipVerify ?? raw.TLSSkipVerify ?? false),
   }
 }
 
@@ -511,6 +528,7 @@ function resetWizard() {
   wizard.backend_name = ''
   wizard.backend_url = ''
   wizard.backend_priority = 0
+  wizard.tls_skip_verify = false
   wizard.tls_enabled = false
   wizard.tls_cert_pem = ''
   wizard.tls_key_pem = ''
@@ -577,6 +595,7 @@ async function finalizeWizard() {
         base_url: wizard.backend_url.trim(),
         priority: wizard.backend_priority || undefined,
         enabled: true,
+        tls_skip_verify: wizard.tls_skip_verify,
       },
     })
     if (withTls) {
@@ -776,6 +795,7 @@ async function saveBackend(b: Backend) {
         base_url: b.base_url,
         priority: b.priority,
         enabled: b.enabled,
+        tls_skip_verify: b.tls_skip_verify,
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
@@ -814,10 +834,12 @@ async function addBackend() {
         base_url: newBackend.base_url,
         priority: newBackend.priority || undefined,
         enabled: true,
+        tls_skip_verify: newBackend.tls_skip_verify,
       },
     })
     newBackend.name = ''
     newBackend.base_url = ''
+    newBackend.tls_skip_verify = false
     await loadBackends(selected.value.id)
     flashOk('Бэкенд добавлен')
   } catch (e) {

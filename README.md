@@ -132,7 +132,7 @@ API:
 
 - `GET/POST /api/v1/sites` — virtual hosts: `host_pattern` exact (`api.example.com`), wildcard (`*.example.com`), or catch-all `*`; lower `priority` is tried first. Optional **`policy_id`**: if set, the gateway evaluates **only that enabled policy** for traffic matching the site; empty / omitted = **all** enabled policies (legacy).
 - `PUT/DELETE /api/v1/sites/{id}`
-- `GET/POST /api/v1/sites/{id}/backends` — origin `base_url` (must include `scheme://host`); first enabled backend by `priority` is used.
+- `GET/POST /api/v1/sites/{id}/backends` — origin `base_url` (`http://` or `https://`); optional **`tls_skip_verify`** (boolean): for HTTPS upstream, gateway uses `InsecureSkipVerify` when true (lab/self-signed only).
 - `PUT/DELETE /api/v1/backends/{id}`
 
 **Gateway & policy logs (read via policy-api)**
@@ -142,7 +142,7 @@ API:
 
 Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **`UPSTREAM_URL`**.
 
-On first deploy after adding `db/002_malware_settings.sql`, existing Postgres volumes need the migration applied once (re-create volume or run the SQL manually). Same for `db/003_sites_backends.sql`, `db/004_site_policy.sql`, and `db/005_proxy_access_logs.sql`.
+On first deploy after adding `db/002_malware_settings.sql`, existing Postgres volumes need the migration applied once (re-create volume or run the SQL manually). Same for `db/003_sites_backends.sql`, `db/004_site_policy.sql`, `db/005_proxy_access_logs.sql`, and newer numbered files under `db/` (e.g. `008_backend_tls_skip_verify.sql` for per-backend `tls_skip_verify`).
 
 ## Multi-platform Docker (arm64 / amd64)
 
