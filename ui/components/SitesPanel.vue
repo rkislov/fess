@@ -3,12 +3,88 @@
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <!-- Мастер создания сайта -->
+    <!-- Список сайтов -->
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-white">Новый сайт — по шагам</h2>
-      <p class="mt-1 text-sm text-slate-400">
-        Сначала виртуальный хост и политика, затем бэкенд, при необходимости — TLS для HTTPS на шлюзе (SNI по шаблону хоста).
-      </p>
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Список сайтов</h2>
+          <p class="mt-1 text-sm text-slate-400">Выберите строку для редактирования, бэкендов и TLS.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-md hover:from-teal-500 hover:to-emerald-500"
+            :disabled="busy"
+            @click="openAddWizard"
+          >
+            Добавить сайт
+          </button>
+          <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700" :disabled="busy" @click="loadSites">
+            Обновить список
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-slate-500">
+              <th class="py-2 pr-3">Название</th>
+              <th class="py-2 pr-3">Host</th>
+              <th class="py-2 pr-3">Приоритет</th>
+              <th class="py-2 pr-3">Вкл.</th>
+              <th class="py-2 pr-3">Политика WAF</th>
+              <th class="py-2">HTTPS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!sites.length && !busy">
+              <td colspan="6" class="py-10 text-center text-slate-500">Нет сайтов — нажмите «Добавить сайт».</td>
+            </tr>
+            <tr
+              v-for="s in sites"
+              :key="s.id"
+              class="cursor-pointer border-b border-slate-800/80 transition hover:bg-slate-800/40"
+              :class="selectedId === s.id ? 'bg-sky-950/35' : ''"
+              @click="selectSite(s)"
+            >
+              <td class="py-2.5 pr-3 font-medium text-slate-100">{{ s.name }}</td>
+              <td class="py-2.5 pr-3 font-mono text-xs text-slate-300">{{ s.host_pattern }}</td>
+              <td class="py-2.5 pr-3 text-slate-400">{{ s.priority }}</td>
+              <td class="py-2.5 pr-3">
+                <span :class="s.enabled ? 'text-emerald-400' : 'text-slate-500'">{{ s.enabled ? 'да' : 'нет' }}</span>
+              </td>
+              <td class="max-w-[180px] truncate py-2.5 pr-3 text-xs text-slate-400" :title="policyLabel(s.policy_id)">
+                {{ policyLabel(s.policy_id) }}
+              </td>
+              <td class="py-2.5">
+                <span v-if="s.tls_enabled && s.tls_has_certificate" class="text-emerald-400" title="TLS настроен">🔒</span>
+                <span v-else class="text-slate-600">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Мастер создания (только после «Добавить сайт») -->
+    <section v-if="showWizard" class="rounded-2xl border border-teal-500/20 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Новый сайт — по шагам</h2>
+          <p class="mt-1 text-sm text-slate-400">
+            Виртуальный хост, бэкенд и при необходимости TLS (SNI по шаблону хоста).
+          </p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          :disabled="busy"
+          @click="cancelWizard"
+        >
+          Закрыть
+        </button>
+      </div>
 
       <div class="mt-5 flex flex-wrap gap-2" role="navigation" aria-label="Шаги мастера">
         <button
@@ -140,34 +216,11 @@
       </div>
     </section>
 
-    <div class="flex flex-wrap gap-2">
-      <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700" :disabled="busy" @click="loadSites">
-        Обновить список
-      </button>
-    </div>
+    <section v-if="selected" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
+      <h2 class="text-lg font-semibold text-white">Редактирование: {{ selected.name }}</h2>
+      <p class="mt-1 font-mono text-xs text-slate-500">{{ selected.host_pattern }}</p>
 
-    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-white">Сайты</h2>
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button
-          v-for="s in sites"
-          :key="s.id"
-          type="button"
-          class="rounded-lg border px-3 py-1.5 text-sm transition"
-          :class="
-            selectedId === s.id
-              ? 'border-sky-500 bg-sky-950/50 text-sky-100'
-              : 'border-slate-700 bg-slate-800/80 text-slate-200 hover:border-slate-500'
-          "
-          @click="selectSite(s)"
-        >
-          {{ s.name }}
-          <span class="text-slate-500">({{ s.host_pattern }})</span>
-          <span v-if="s.tls_enabled && s.tls_has_certificate" class="ml-1 text-emerald-400" title="HTTPS настроен">🔒</span>
-        </button>
-      </div>
-
-      <div v-if="selected" class="mt-8 space-y-8 border-t border-slate-800 pt-8">
+      <div class="mt-8 space-y-8">
         <div class="grid gap-8 lg:grid-cols-2">
           <div>
             <h3 class="text-sm font-medium text-slate-300">Параметры сайта</h3>
@@ -323,6 +376,7 @@ const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
 const err = ref('')
 const ok = ref('')
 const busy = ref(false)
+const showWizard = ref(false)
 const sites = ref<Site[]>([])
 const selectedId = ref('')
 const selected = computed(() => sites.value.find((s) => s.id === selectedId.value) ?? null)
@@ -385,6 +439,21 @@ function normBackend(raw: Record<string, unknown>): Backend {
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
   }
+}
+
+function policyLabel(policyId: string) {
+  if (!policyId) return 'по умолчанию'
+  const p = policies.value.find((x) => x.id === policyId)
+  return p?.name ?? policyId
+}
+
+function openAddWizard() {
+  resetWizard()
+  showWizard.value = true
+}
+
+function cancelWizard() {
+  showWizard.value = false
 }
 
 function resetWizard() {
@@ -476,6 +545,7 @@ async function finalizeWizard() {
       })
     }
     resetWizard()
+    showWizard.value = false
     await loadSites()
     if (siteId) applySelection(siteId)
     flashOk('Сайт и бэкенд созданы' + (withTls ? ', TLS включён' : ''))
@@ -556,6 +626,7 @@ function applySelection(siteId: string) {
 }
 
 function selectSite(s: Site) {
+  showWizard.value = false
   applySelection(s.id)
 }
 
