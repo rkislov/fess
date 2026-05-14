@@ -7,8 +7,8 @@ func TestListMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ms) < 8 {
-		t.Fatalf("expected at least 8 numbered migrations, got %d", len(ms))
+	if len(ms) < 9 {
+		t.Fatalf("expected at least 9 numbered migrations, got %d", len(ms))
 	}
 	for i := 1; i < len(ms); i++ {
 		if ms[i].version <= ms[i-1].version {

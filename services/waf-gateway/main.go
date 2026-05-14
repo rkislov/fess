@@ -61,7 +61,8 @@ func main() {
 		log.Fatalf("redis: %v", err)
 	}
 
-	initGeoIP(getenv("GEOIP_MMDB_PATH", ""))
+	initGeoPath := getenv("GEOIP_MMDB_PATH", "")
+	reloadGeoIP(initGeoPath)
 	defer closeGeoIP()
 
 	ipRes := clientip.ParseTrustedProxies(getenv("WAF_TRUSTED_PROXIES", ""))
@@ -82,6 +83,7 @@ func main() {
 	reloadTLSTable(db, tlsStore)
 	go subscribePolicyUpdates(db, rdb, store)
 	go subscribeMalwareUpdates(db, rdb, mwStore)
+	go subscribeGeoIPUpdates(rdb, initGeoPath)
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

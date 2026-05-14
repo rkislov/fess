@@ -5,7 +5,7 @@
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
       <p class="mt-1 text-xs text-slate-500">
-        Круги — приблизительные центроиды стран; радиус и насыщенность по числу соединений. Нужны GeoIP (MMDB) или заголовок CF-IPCountry на шлюзе.
+        Круги — приблизительные центроиды стран; радиус и насыщенность по числу соединений. Нужен код страны в логах: установите MMDB в <span class="font-mono text-slate-400">Malware → GeoIP</span> или задайте путь на шлюзе; альтернатива — <span class="font-mono text-slate-400">CF-IPCountry</span>.
       </p>
       <div ref="elMap" class="mt-4 h-[420px] w-full overflow-hidden rounded-xl border border-slate-700/80" />
     </section>
@@ -552,7 +552,7 @@ async function renderMap(rows: CountryRow[]) {
 
   if (!pts.length) {
     elMap.value.innerHTML =
-      '<div class="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">Нет координат для карты: в логах нет кода страны (нужен GeoIP MMDB на шлюзе или заголовок CF-IPCountry) либо код страны не найден в справочнике центроидов.</div>'
+      '<div class="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">Нет точек на карте: в логах нет известного кода страны. Установите базу GeoIP в разделе <span class="font-mono text-slate-400">Антивирус / Malware → GeoIP</span> (загрузка файла или скачивание по HTTPS), либо задайте <span class="font-mono text-slate-400">GEOIP_MMDB_PATH</span> на шлюзе / общий том в compose. Либо пробросьте <span class="font-mono text-slate-400">CF-IPCountry</span> с Cloudflare. Редкие коды без центроида в справочнике не попадут на карту.</div>'
     return
   }
 

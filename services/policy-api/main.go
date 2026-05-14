@@ -81,6 +81,10 @@ func main() {
 		log.Printf("db migrate: skipped (FENCE_SKIP_DB_MIGRATE is set)")
 	}
 
+	if err := ensureGeoIPDir(); err != nil {
+		log.Printf("geoip data dir: %v (upload/fetch may fail until directory is writable)", err)
+	}
+
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer rdb.Close()
 	if err := bootstrap.RetryUntil(waitCtx, "redis", time.Second, func() error {
@@ -124,6 +128,12 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/settings/malware/freshclam-snippet", func(w http.ResponseWriter, r *http.Request) {
 		freshclamSnippetHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/geoip/mmdb", func(w http.ResponseWriter, r *http.Request) {
+		postGeoIPMMDBUpload(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/geoip/fetch", func(w http.ResponseWriter, r *http.Request) {
+		postGeoIPMMDBFetch(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/owasp/packs", func(w http.ResponseWriter, r *http.Request) {
 		owaspPacksHandler(w, r)

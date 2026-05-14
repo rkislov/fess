@@ -1,18 +1,31 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/oschwald/geoip2-golang"
+	"github.com/redis/go-redis/v9"
 )
 
-var geoReader *geoip2.Reader
+var (
+	geoMu     sync.RWMutex
+	geoReader *geoip2.Reader
+)
 
-func initGeoIP(mmdbPath string) {
-	if strings.TrimSpace(mmdbPath) == "" {
+func reloadGeoIP(mmdbPath string) {
+	mmdbPath = strings.TrimSpace(mmdbPath)
+	geoMu.Lock()
+	defer geoMu.Unlock()
+	if geoReader != nil {
+		_ = geoReader.Close()
+		geoReader = nil
+	}
+	if mmdbPath == "" {
 		return
 	}
 	r, err := geoip2.Open(mmdbPath)
@@ -25,9 +38,21 @@ func initGeoIP(mmdbPath string) {
 }
 
 func closeGeoIP() {
+	geoMu.Lock()
+	defer geoMu.Unlock()
 	if geoReader != nil {
 		_ = geoReader.Close()
 		geoReader = nil
+	}
+}
+
+func subscribeGeoIPUpdates(rdb *redis.Client, mmdbPath string) {
+	ctx := context.Background()
+	sub := rdb.Subscribe(ctx, "geoip_mmdb_updated")
+	defer sub.Close()
+	for msg := range sub.Channel() {
+		log.Printf("geoip mmdb event: %s", msg.Payload)
+		reloadGeoIP(mmdbPath)
 	}
 }
 
@@ -38,6 +63,8 @@ func countryCodeForRequest(r *http.Request, clientIP string) string {
 			return u
 		}
 	}
+	geoMu.RLock()
+	defer geoMu.RUnlock()
 	if geoReader == nil || clientIP == "" {
 		return ""
 	}

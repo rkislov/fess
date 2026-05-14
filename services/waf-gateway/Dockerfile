@@ -15,6 +15,7 @@ RUN set -eux; \
 
 FROM alpine:3.20
 RUN adduser -D -g "" appuser
+RUN mkdir -p /var/lib/fence/geoip && chown appuser:appuser /var/lib/fence/geoip
 WORKDIR /app
 COPY --from=builder /out/waf-gateway /usr/local/bin/waf-gateway
 USER appuser
