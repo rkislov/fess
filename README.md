@@ -9,8 +9,10 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - `pkg/engine` - rule matching/evaluation primitives
 - `pkg/policy` - active policy snapshot store (atomic swap)
 - `pkg/routing` - virtual host → upstream resolution for the gateway
+- `pkg/tlssites` - TLS keypairs per site (SNI) for HTTPS on the gateway
 - `db/schema.sql` - PostgreSQL schema
 - `db/003_sites_backends.sql` - sites + backends tables and seed
+- `db/007_site_tls.sql` - optional TLS PEM columns on `sites`
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream)
 - `docs/openapi.yaml` - REST API contract
 - `docs/blueprint.md` - architecture and rollout plan
@@ -24,7 +26,14 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 4. `waf-gateway` instances reload and atomically swap active policy snapshot.
 5. New requests use new policy immediately.
 
-**Sites / backends:** same pattern via Redis channel `routing_updated` and in-memory routing table in `waf-gateway` (no restart).
+**Sites / backends:** same pattern via Redis channel `routing_updated` and in-memory routing table in `waf-gateway` (no restart). TLS material for HTTPS is reloaded on the same channel.
+
+## HTTPS and edge ports
+
+- HTTP listener: `WAF_LISTEN_ADDR` (default `:8080`). Optional TLS listener: `WAF_TLS_LISTEN_ADDR` (empty = disabled; in `deploy/docker-compose.yml` example it is `:8443`).
+- Typical host mapping for “standard” external ports: `- "80:8080"` and `- "443:8443"` on `waf-gateway` (the container process listens on high ports; binding 80/443 on the host is fine).
+- Per-site PEM (full chain + private key) is configured in the UI; the gateway picks a certificate by SNI using the same host patterns as routing.
+- If the DB volume was created before TLS support, apply `db/007_site_tls.sql` once (same way as `003_sites_backends.sql` in Quick Start).
 
 ## Quick Start (Docker)
 

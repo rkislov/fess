@@ -14,11 +14,11 @@ import (
 )
 
 type siteCreateRequest struct {
-	Name         string `json:"name"`
-	HostPattern  string `json:"host_pattern"`
-	Priority     int    `json:"priority"`
-	Enabled      *bool  `json:"enabled"`
-	PolicyID     string `json:"policy_id"`
+	Name        string `json:"name"`
+	HostPattern string `json:"host_pattern"`
+	Priority    int    `json:"priority"`
+	Enabled     *bool  `json:"enabled"`
+	PolicyID    string `json:"policy_id"`
 }
 
 type siteUpdateRequest struct {
@@ -80,6 +80,22 @@ func sitesTreeHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *r
 		}
 		return
 	}
+	if len(parts) == 2 && parts[1] == "tls" {
+		switch r.Method {
+		case http.MethodGet:
+			getSiteTLS(w, r, db, siteID)
+		case http.MethodPut:
+			var payload siteTLSPutRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+				return
+			}
+			putSiteTLS(w, r, db, rdb, siteID, payload)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
 	if len(parts) == 2 && parts[1] == "backends" {
 		switch r.Method {
 		case http.MethodGet:
@@ -125,9 +141,85 @@ func backendByIDHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 	}
 }
 
+type siteTLSPutRequest struct {
+	TLSEnabled *bool   `json:"tls_enabled"`
+	TLSCertPem *string `json:"tls_cert_pem"`
+	TLSKeyPem  *string `json:"tls_key_pem"`
+}
+
+func getSiteTLS(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
+	var en bool
+	var cert, key sql.NullString
+	err := db.QueryRowContext(r.Context(), `
+SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, siteID).Scan(&en, &cert, &key)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "site not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	has := strings.TrimSpace(cert.String) != "" && strings.TrimSpace(key.String) != ""
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tls_enabled":         en,
+		"tls_has_certificate": has,
+	})
+}
+
+func putSiteTLS(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client, siteID string, payload siteTLSPutRequest) {
+	var curEn bool
+	var curCert, curKey sql.NullString
+	err := db.QueryRowContext(r.Context(), `
+SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, siteID).Scan(&curEn, &curCert, &curKey)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "site not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	en := curEn
+	if payload.TLSEnabled != nil {
+		en = *payload.TLSEnabled
+	}
+	cert := curCert.String
+	if payload.TLSCertPem != nil {
+		cert = *payload.TLSCertPem
+	}
+	key := curKey.String
+	if payload.TLSKeyPem != nil {
+		key = *payload.TLSKeyPem
+	}
+
+	if en && (strings.TrimSpace(cert) == "" || strings.TrimSpace(key) == "") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tls_enabled requires non-empty tls_cert_pem and tls_key_pem"})
+		return
+	}
+
+	_, err = db.ExecContext(r.Context(), `
+UPDATE sites SET tls_enabled=$2, tls_cert_pem=NULLIF(trim($3), ''), tls_key_pem=NULLIF(trim($4), ''), updated_at=NOW()
+WHERE id=$1::uuid`,
+		siteID, en, strings.TrimSpace(cert), strings.TrimSpace(key))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeAuditLog(r.Context(), db, "system", "update", "site_tls", siteID, nil, map[string]any{"tls_enabled": en})
+	if err := publishRoutingUpdate(r.Context(), rdb); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": siteID, "updated": true})
+}
+
 func listSites(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	rows, err := db.QueryContext(r.Context(), `
-SELECT id::text, name, host_pattern, priority, enabled, COALESCE(policy_id::text, ''), created_at, updated_at
+SELECT id::text, name, host_pattern, priority, enabled, COALESCE(policy_id::text, ''), tls_enabled,
+  (length(trim(COALESCE(tls_cert_pem, ''))) > 0 AND length(trim(COALESCE(tls_key_pem, ''))) > 0) AS tls_has_certificate,
+  created_at, updated_at
 FROM sites
 ORDER BY priority ASC, created_at ASC`)
 	if err != nil {
@@ -136,19 +228,21 @@ ORDER BY priority ASC, created_at ASC`)
 	}
 	defer rows.Close()
 	type row struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		HostPattern string    `json:"host_pattern"`
-		Priority    int       `json:"priority"`
-		Enabled     bool      `json:"enabled"`
-		PolicyID    string    `json:"policy_id"`
-		CreatedAt   time.Time `json:"created_at"`
-		UpdatedAt   time.Time `json:"updated_at"`
+		ID                string    `json:"id"`
+		Name              string    `json:"name"`
+		HostPattern       string    `json:"host_pattern"`
+		Priority          int       `json:"priority"`
+		Enabled           bool      `json:"enabled"`
+		PolicyID          string    `json:"policy_id"`
+		TLSEnabled        bool      `json:"tls_enabled"`
+		TLSHasCertificate bool      `json:"tls_has_certificate"`
+		CreatedAt         time.Time `json:"created_at"`
+		UpdatedAt         time.Time `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
-		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.TLSEnabled, &it.TLSHasCertificate, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

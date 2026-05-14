@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"fence/pkg/routing"
+	"fence/pkg/tlssites"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -25,13 +26,26 @@ func reloadRoutingTable(db *sql.DB, defaultUpstream *url.URL, store *routing.Sto
 	log.Printf("routing table loaded sites=%d default=%s", len(snap.Sites), snap.Default.String())
 }
 
-func subscribeRoutingUpdates(db *sql.DB, rdb *redis.Client, defaultUpstream *url.URL, store *routing.Store) {
+func reloadTLSTable(db *sql.DB, tlsStore *tlssites.Store) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	snap, err := tlssites.LoadSnapshot(ctx, db)
+	if err != nil {
+		log.Printf("tls snapshot reload failed: %v", err)
+		return
+	}
+	tlsStore.Swap(snap)
+	log.Printf("tls site certificates loaded count=%d", len(snap.Entries))
+}
+
+func subscribeRoutingUpdates(db *sql.DB, rdb *redis.Client, defaultUpstream *url.URL, store *routing.Store, tlsStore *tlssites.Store) {
 	ctx := context.Background()
 	sub := rdb.Subscribe(ctx, "routing_updated")
 	defer sub.Close()
 	for msg := range sub.Channel() {
 		log.Printf("routing update event: %s", msg.Payload)
 		reloadRoutingTable(db, defaultUpstream, store)
+		reloadTLSTable(db, tlsStore)
 	}
 }
 

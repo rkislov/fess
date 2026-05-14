@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"fence/pkg/malware"
 	"fence/pkg/policy"
 	"fence/pkg/routing"
+	"fence/pkg/tlssites"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
@@ -26,6 +29,7 @@ import (
 func main() {
 	target := getenv("UPSTREAM_URL", "http://localhost:8081")
 	listen := getenv("WAF_LISTEN_ADDR", ":8080")
+	tlsListen := getenv("WAF_TLS_LISTEN_ADDR", "")
 	pgDSN := getenv("POSTGRES_DSN", "postgres://fence:fence@localhost:5432/fence?sslmode=disable")
 	redisAddr := getenv("REDIS_ADDR", "localhost:6379")
 	failMode := getenv("WAF_FAIL_MODE", "open")
@@ -64,13 +68,15 @@ func main() {
 	evaluator := engine.NewEvaluator()
 
 	routeStore := routing.NewStore(upstream)
+	tlsStore := &tlssites.Store{}
 	proxy := newDynamicReverseProxy(upstream, routeStore)
 	reloadPolicySnapshot(db, store)
 	reloadMalwareConfig(db, mwStore)
 	reloadRoutingTable(db, upstream, routeStore)
+	reloadTLSTable(db, tlsStore)
 	go subscribePolicyUpdates(db, rdb, store)
 	go subscribeMalwareUpdates(db, rdb, mwStore)
-	go subscribeRoutingUpdates(db, rdb, upstream, routeStore)
+	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mcfg := mwStore.Current()
@@ -146,6 +152,31 @@ func main() {
 		Addr:              listen,
 		Handler:           loggingMiddleware(handler),
 		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	tlsCfg := &tls.Config{
+		MinVersion:     tls.VersionTLS12,
+		GetCertificate: tlsStore.GetCertificate,
+		NextProtos:     []string{"h2", "http/1.1"},
+	}
+
+	if tlsListen != "" {
+		go func(addr string, cfg *tls.Config) {
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				log.Fatalf("tls listen %s: %v", addr, err)
+			}
+			tlsLn := tls.NewListener(ln, cfg)
+			srvTLS := &http.Server{
+				Handler:           loggingMiddleware(handler),
+				ReadHeaderTimeout: 3 * time.Second,
+			}
+			n := len(tlsStore.Current().Entries)
+			log.Printf("waf-gateway TLS listening on %s (loaded site certificates=%d)", addr, n)
+			if err := srvTLS.Serve(tlsLn); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("tls server error: %v", err)
+			}
+		}(tlsListen, tlsCfg)
 	}
 
 	log.Printf("waf-gateway listening on %s -> %s", listen, target)

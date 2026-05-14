@@ -2,6 +2,14 @@
   <div class="space-y-8">
     <p v-if="err" class="rounded-xl border border-rose-500/25 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
 
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
+      <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
+      <p class="mt-1 text-xs text-slate-500">
+        Круги — приблизительные центроиды стран; радиус и насыщенность по числу соединений. Нужны GeoIP (MMDB) или заголовок CF-IPCountry на шлюзе.
+      </p>
+      <div ref="elMap" class="mt-4 h-[420px] w-full overflow-hidden rounded-xl border border-slate-700/80" />
+    </section>
+
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -35,6 +43,22 @@
       </div>
     </section>
 
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-inner">
+      <div class="mb-3">
+        <h3 class="text-sm font-medium text-slate-300">Трафик (RPS)</h3>
+        <p class="mt-1 text-xs text-slate-500">
+          Средняя интенсивность запросов в секунду по журналу соединений (усреднение по интервалу
+          <span class="font-mono text-slate-400">{{ rpsBucketHint }}</span>).
+        </p>
+      </div>
+      <p v-if="summary && !(summary.rps_series?.length)" class="mb-2 text-center text-xs text-slate-500">
+        Нет записей за выбранный период — график появится после трафика через шлюз.
+      </p>
+      <div class="relative h-64 w-full sm:h-72">
+        <canvas ref="elRps"></canvas>
+      </div>
+    </section>
+
     <div class="grid gap-6 lg:grid-cols-2">
       <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-4 shadow-inner">
         <h3 class="mb-3 text-sm font-medium text-slate-300">Топ виртуальных хостов</h3>
@@ -61,14 +85,6 @@
         </div>
       </div>
     </div>
-
-    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
-      <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
-      <p class="mt-1 text-xs text-slate-500">
-        Круги — приблизительные центроиды стран; радиус и насыщенность по числу соединений. Нужны GeoIP (MMDB) или заголовок CF-IPCountry на шлюзе.
-      </p>
-      <div ref="elMap" class="mt-4 h-[420px] w-full overflow-hidden rounded-xl border border-slate-700/80" />
-    </section>
 
     <div class="grid gap-6 lg:grid-cols-2">
       <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
@@ -140,6 +156,7 @@ type HostRow = { host: string; count: number }
 type CountryRow = { country_code: string; count: number; lat: number; lon: number }
 type WafAction = { action: string; count: number }
 type WafRule = { rule_id: string; action: string; count: number }
+type RpsPoint = { bucket_start: string; bucket_seconds: number; count: number; rps: number }
 
 type Summary = {
   period_hours: number
@@ -151,6 +168,9 @@ type Summary = {
   by_country: CountryRow[]
   top_waf_actions: WafAction[]
   top_waf_rules: WafRule[]
+  rps_series?: RpsPoint[]
+  rps_bucket_seconds?: number
+  rps_bucket_interval?: string
 }
 
 const hours = ref(24)
@@ -162,18 +182,44 @@ const elHost = ref<HTMLCanvasElement | null>(null)
 const elMethod = ref<HTMLCanvasElement | null>(null)
 const elProto = ref<HTMLCanvasElement | null>(null)
 const elOutcome = ref<HTMLCanvasElement | null>(null)
+const elRps = ref<HTMLCanvasElement | null>(null)
 const elMap = ref<HTMLDivElement | null>(null)
 
 let chartHost: ChartType | null = null
 let chartMethod: ChartType | null = null
 let chartProto: ChartType | null = null
 let chartOutcome: ChartType | null = null
+let chartRps: ChartType | null = null
 let mapInst: LeafMap | null = null
 const markers: CircleMarker[] = []
 
 let chartPrepared = false
 
 const countryRows = computed(() => summary.value?.by_country || [])
+
+const rpsBucketHint = computed(() => {
+  const raw = summary.value?.rps_bucket_interval || ''
+  const m: Record<string, string> = {
+    '1 minute': '1 минута',
+    '5 minutes': '5 минут',
+    '15 minutes': '15 минут',
+    '1 hour': '1 час',
+  }
+  return m[raw] || raw || '—'
+})
+
+function fmtBucketLabel(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('ru-RU', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
 
 function labelWafAction(a: string) {
   const m: Record<string, string> = {
@@ -191,10 +237,12 @@ function destroyCharts() {
   chartMethod?.destroy()
   chartProto?.destroy()
   chartOutcome?.destroy()
+  chartRps?.destroy()
   chartHost = null
   chartMethod = null
   chartProto = null
   chartOutcome = null
+  chartRps = null
 }
 
 function tealPalette(i: number, n: number) {
@@ -214,11 +262,28 @@ async function ensureChartLib() {
     CategoryScale,
     Chart,
     DoughnutController,
+    Filler,
     Legend,
     LinearScale,
+    LineController,
+    LineElement,
+    PointElement,
     Tooltip,
   } = await import('chart.js')
-  Chart.register(BarController, BarElement, CategoryScale, LinearScale, DoughnutController, ArcElement, Legend, Tooltip)
+  Chart.register(
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    DoughnutController,
+    ArcElement,
+    LineController,
+    LineElement,
+    PointElement,
+    Filler,
+    Legend,
+    Tooltip,
+  )
   chartPrepared = true
 }
 
@@ -246,6 +311,62 @@ async function buildBar(canvas: HTMLCanvasElement, labels: string[], data: numbe
       scales: {
         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.12)' } },
         y: { ticks: { color: '#cbd5e1', maxRotation: 0 }, grid: { display: false } },
+      },
+    },
+  })
+}
+
+async function buildLineRps(canvas: HTMLCanvasElement, labels: string[], data: number[]) {
+  await ensureChartLib()
+  const { Chart } = await import('chart.js')
+  return new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'RPS',
+          data,
+          fill: true,
+          backgroundColor: 'rgba(45, 212, 191, 0.12)',
+          borderColor: 'rgb(45, 212, 191)',
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: '#cbd5e1' } },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const v = typeof ctx.raw === 'number' ? ctx.raw : 0
+              return ` ${v.toFixed(3)} запр./с`
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#94a3b8',
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 14,
+          },
+          grid: { color: 'rgba(148,163,184,0.08)' },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(148,163,184,0.12)' },
+        },
       },
     },
   })
@@ -285,6 +406,18 @@ function labelOutcome(o: string) {
     malware_block: 'Антивирус',
   }
   return m[o] || o
+}
+
+async function renderRpsChart(s: Summary) {
+  if (!import.meta.client) return
+  chartRps?.destroy()
+  chartRps = null
+  await nextTick()
+  const ser = s.rps_series || []
+  if (!elRps.value || !ser.length) return
+  const labels = ser.map((p) => fmtBucketLabel(p.bucket_start))
+  const data = ser.map((p) => p.rps)
+  chartRps = await buildLineRps(elRps.value, labels, data)
 }
 
 async function renderCharts(s: Summary) {
@@ -385,6 +518,7 @@ async function load() {
     const data = await $fetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
     summary.value = data
     await renderCharts(data)
+    await renderRpsChart(data)
     await renderMap(data.by_country || [])
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }

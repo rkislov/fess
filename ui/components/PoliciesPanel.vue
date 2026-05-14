@@ -159,6 +159,77 @@
       </div>
 
       <div class="mt-6 border-t border-slate-800 pt-6">
+        <h3 class="text-sm font-medium text-slate-300">Конструктор условия</h3>
+        <p class="mt-1 text-xs text-slate-500">
+          Соберите <code class="text-slate-400">condition_json</code> в том же формате, что и правила OWASP-паков.
+        </p>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            <label class="text-xs text-slate-500">Тип условия</label>
+            <select v-model="ctor.kind" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
+              <option value="path_contains">path_contains</option>
+              <option value="path_exact">path_exact</option>
+              <option value="body_contains">body_contains</option>
+              <option value="request_uri_contains">request_uri_contains</option>
+              <option value="path_regex">path_regex</option>
+              <option value="method">method (HTTP)</option>
+              <option value="header_contains">header_contains</option>
+              <option value="query_equals">query_equals (одна пара)</option>
+            </select>
+          </div>
+          <div v-if="ctor.kind === 'method'">
+            <label class="text-xs text-slate-500">Метод</label>
+            <select v-model="ctor.method" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+              <option>HEAD</option>
+              <option>OPTIONS</option>
+              <option>TRACE</option>
+            </select>
+          </div>
+          <template v-else-if="ctor.kind === 'header_contains'">
+            <div>
+              <label class="text-xs text-slate-500">Имя заголовка</label>
+              <input v-model="ctor.hdrKey" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Подстрока в значении</label>
+              <input v-model="ctor.hdrVal" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+          </template>
+          <template v-else-if="ctor.kind === 'query_equals'">
+            <div>
+              <label class="text-xs text-slate-500">Имя параметра</label>
+              <input v-model="ctor.qKey" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Значение</label>
+              <input v-model="ctor.qVal" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+          </template>
+          <div v-else class="md:col-span-2">
+            <label class="text-xs text-slate-500">Строка или регулярное выражение (path_regex)</label>
+            <input
+              v-model="ctor.value"
+              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+              placeholder="например /admin или ^/api/v[0-9]+/"
+            />
+          </div>
+        </div>
+        <pre class="mt-3 max-h-40 overflow-auto rounded border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">{{ ctorPreview }}</pre>
+        <button
+          type="button"
+          class="mt-3 rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600"
+          @click="applyCtorToNewRule"
+        >
+          Вставить в форму «Добавить правило»
+        </button>
+      </div>
+
+      <div class="mt-6 border-t border-slate-800 pt-6">
         <h3 class="text-sm font-medium text-slate-300">Add rule</h3>
         <div class="mt-2 space-y-2">
           <input v-model="newRule.name" placeholder="Name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
@@ -191,11 +262,17 @@
 
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">OWASP packs</h2>
-      <p class="mt-1 text-sm text-slate-400">Import embedded CRS-style packs into a new policy.</p>
+      <p class="mt-1 text-sm text-slate-400">
+        Импорт встроенных наборов: <strong class="text-slate-200">crs-bundle-v1</strong> — полный набор эвристик; <strong class="text-slate-200">crs-lite-v1</strong> — 15
+        правил для тестов. Импорт создаёт <em>все</em> правила пакета в новой политике.
+      </p>
       <div class="mt-4 grid gap-3 md:grid-cols-2">
         <select v-model="owasp.packId" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
           <option v-for="p in packs" :key="p.id" :value="p.id">{{ p.title }} ({{ p.rule_count }} rules)</option>
         </select>
+        <p v-if="selectedPack" class="text-xs text-slate-500 md:col-span-2">
+          Выбрано правил: <span class="font-mono text-slate-300">{{ selectedPack.rule_count }}</span>
+        </p>
         <input v-model="owasp.policyName" placeholder="Policy name" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
         <select v-model="owasp.mode" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
           <option value="block">block</option>
@@ -206,14 +283,24 @@
           <input v-model="owasp.publish" type="checkbox" class="rounded border-slate-600" />
           Publish after import
         </label>
-        <button
-          type="button"
-          class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 md:col-span-2"
-          :disabled="busy"
-          @click="importOwasp"
-        >
-          Import pack
-        </button>
+        <div class="flex flex-wrap gap-2 md:col-span-2">
+          <button
+            type="button"
+            class="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+            :disabled="busy || !owasp.packId"
+            @click="downloadOwaspPack"
+          >
+            Скачать JSON пака
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500"
+            :disabled="busy"
+            @click="importOwasp"
+          >
+            Import pack
+          </button>
+        </div>
       </div>
     </section>
   </div>
@@ -257,14 +344,26 @@ const newRule = reactive({
   transformText: '{}',
 })
 
+const ctor = reactive({
+  kind: 'path_contains',
+  value: '',
+  method: 'GET',
+  hdrKey: 'User-Agent',
+  hdrVal: '',
+  qKey: '',
+  qVal: '',
+})
+
 const packs = ref<{ id: string; title: string; rule_count: number }[]>([])
 const owasp = reactive({
   packId: '',
-  policyName: 'OWASP CRS Lite',
+  policyName: 'OWASP CRS',
   mode: 'block' as 'block' | 'log',
   priority: 50,
   publish: true,
 })
+
+const selectedPack = computed(() => packs.value.find((p) => p.id === owasp.packId))
 
 function flashErr(e: unknown) {
   ok.value = ''
@@ -288,7 +387,85 @@ async function loadPolicies() {
 async function loadPacks() {
   const data = await $fetch<{ items: typeof packs.value }>(apiUrl('/owasp/packs'))
   packs.value = data.items || []
-  if (!owasp.packId && packs.value.length) owasp.packId = packs.value[0].id
+  const prefer = packs.value.find((p) => p.id === 'crs-bundle-v1')
+  owasp.packId = prefer?.id || packs.value[0]?.id || ''
+}
+
+function buildCtorCondition(): Record<string, unknown> {
+  const k = ctor.kind
+  if (k === 'method') {
+    return { method: ctor.method }
+  }
+  if (k === 'header_contains') {
+    const key = ctor.hdrKey.trim()
+    if (!key) return {}
+    return { header_contains: { [key]: ctor.hdrVal } }
+  }
+  if (k === 'query_equals') {
+    const qk = ctor.qKey.trim()
+    if (!qk) return {}
+    return { query_equals: { [qk]: ctor.qVal } }
+  }
+  const v = typeof ctor.value === 'string' ? ctor.value.trim() : ''
+  if (!v) return {}
+  switch (k) {
+    case 'path_contains':
+      return { path_contains: v }
+    case 'path_exact':
+      return { path_exact: v }
+    case 'body_contains':
+      return { body_contains: v }
+    case 'request_uri_contains':
+      return { request_uri_contains: v }
+    case 'path_regex':
+      return { path_regex: v }
+    default:
+      return {}
+  }
+}
+
+const ctorPreview = computed(() => {
+  try {
+    return JSON.stringify(buildCtorCondition(), null, 2)
+  } catch {
+    return '{}'
+  }
+})
+
+function applyCtorToNewRule() {
+  const o = buildCtorCondition()
+  if (!Object.keys(o).length) {
+    flashErr(new Error('Заполните поля конструктора'))
+    return
+  }
+  newRule.conditionText = JSON.stringify(o, null, 2)
+  flashOk('Условие вставлено в форму добавления правила')
+}
+
+async function downloadOwaspPack() {
+  if (!owasp.packId) return
+  busy.value = true
+  err.value = ''
+  try {
+    const u = `${apiUrl('/owasp/pack')}?pack_id=${encodeURIComponent(owasp.packId)}`
+    const res = await fetch(u)
+    if (!res.ok) {
+      const t = await res.text()
+      throw new Error(t || res.statusText)
+    }
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `fence-owasp-${owasp.packId}.json`
+    a.rel = 'noopener'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    flashOk('Файл пака скачан')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 function stringifyJson(raw: unknown) {

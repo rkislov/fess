@@ -38,7 +38,7 @@ func (s Snapshot) Match(hostHeader string) MatchResult {
 	}
 
 	for _, site := range s.Sites {
-		if hostMatch(site.HostPattern, h) {
+		if HostMatch(site.HostPattern, h) {
 			if site.Backend != nil {
 				return MatchResult{Backend: site.Backend, PolicyID: site.PolicyID}
 			}
@@ -47,7 +47,8 @@ func (s Snapshot) Match(hostHeader string) MatchResult {
 	return MatchResult{Backend: s.Default, PolicyID: ""}
 }
 
-func hostMatch(pattern, reqHost string) bool {
+// HostMatch reports whether reqHost matches pattern (same rules as gateway routing: *, exact, or *.example.com).
+func HostMatch(pattern, reqHost string) bool {
 	pat := strings.TrimSpace(strings.ToLower(pattern))
 	if pat == "*" || pat == "" {
 		return true

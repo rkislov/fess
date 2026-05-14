@@ -14,6 +14,7 @@ services:
       - ../db/004_site_policy.sql:/docker-entrypoint-initdb.d/004-site-policy.sql:ro
       - ../db/005_proxy_access_logs.sql:/docker-entrypoint-initdb.d/005-proxy-access.sql:ro
       - ../db/006_proxy_access_stats.sql:/docker-entrypoint-initdb.d/006-proxy-stats.sql:ro
+      - ../db/007_site_tls.sql:/docker-entrypoint-initdb.d/007-site-tls.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -41,6 +42,8 @@ services:
       POLICY_API_LISTEN_ADDR: ":8082"
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
+      # Порт clamd внутри хоста ICAP (для VERSION / даты сигнатур в панели).
+      CLAMAV_CLAMD_PORT: "3310"
     ports:
       - "8082:8082"
     restart: unless-stopped
@@ -59,6 +62,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      clamav-icap:
+        condition: service_started
 
   clamav-icap:
     image: opencloudeu/clamav-icap:latest
@@ -72,12 +77,16 @@ services:
       dockerfile: services/waf-gateway/Dockerfile
     image: fence/waf-gateway:local
     environment:
+      # HTTP reverse proxy. На границе сети сопоставьте хост :80 → контейнер :8080 (см. README).
       WAF_LISTEN_ADDR: ":8080"
+      # HTTPS (SNI по host_pattern сайта и PEM в БД). Хост :443 → :8443.
+      WAF_TLS_LISTEN_ADDR: ":8443"
       UPSTREAM_URL: "http://httpbin:8080"
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
     ports:
       - "8080:8080"
+      - "8443:8443"
     restart: unless-stopped
     depends_on:
       postgres:

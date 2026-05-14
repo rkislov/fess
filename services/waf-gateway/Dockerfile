@@ -18,5 +18,5 @@ RUN adduser -D -g "" appuser
 WORKDIR /app
 COPY --from=builder /out/waf-gateway /usr/local/bin/waf-gateway
 USER appuser
-EXPOSE 8080
+EXPOSE 8080 8443
 ENTRYPOINT ["/usr/local/bin/waf-gateway"]

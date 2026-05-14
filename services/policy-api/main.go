@@ -100,6 +100,9 @@ func main() {
 	mux.HandleFunc("/api/v1/dashboard/summary", func(w http.ResponseWriter, r *http.Request) {
 		dashboardSummaryHandler(w, r, db)
 	})
+	mux.HandleFunc("/api/v1/settings/malware/status", func(w http.ResponseWriter, r *http.Request) {
+		malwareStatusHandler(w, r, db)
+	})
 	mux.HandleFunc("/api/v1/settings/malware", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -115,6 +118,9 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/owasp/packs", func(w http.ResponseWriter, r *http.Request) {
 		owaspPacksHandler(w, r)
+	})
+	mux.HandleFunc("/api/v1/owasp/pack", func(w http.ResponseWriter, r *http.Request) {
+		owaspPackExportHandler(w, r)
 	})
 	mux.HandleFunc("/api/v1/owasp/import", func(w http.ResponseWriter, r *http.Request) {
 		importOWASPHandler(w, r, db, rdb)
@@ -254,16 +260,50 @@ func ruleByIDHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	updateRule(w, r, db, id, payload)
 }
 
+func logActionParamOK(s string) bool {
+	if len(s) == 0 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func logsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	rows, err := db.QueryContext(r.Context(), `
+	action := strings.TrimSpace(r.URL.Query().Get("action"))
+	if action != "" && !logActionParamOK(action) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid action query (use letters, digits, underscore)"})
+		return
+	}
+
+	var rows *sql.Rows
+	var err error
+	if action == "" {
+		rows, err = db.QueryContext(r.Context(), `
 SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
 FROM waf_logs
 ORDER BY created_at DESC
 LIMIT 200`)
+	} else {
+		rows, err = db.QueryContext(r.Context(), `
+SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
+FROM waf_logs
+WHERE action = $1
+ORDER BY created_at DESC
+LIMIT 200`, action)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

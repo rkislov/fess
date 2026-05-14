@@ -9,6 +9,9 @@ import (
 //go:embed data/crs_lite_v1.json
 var crsLiteV1JSON []byte
 
+//go:embed data/crs_bundle_v1.json
+var crsBundleV1JSON []byte
+
 // Pack is an OWASP CRS–inspired rule bundle (Fence condition schema).
 type Pack struct {
 	PackID      string     `json:"pack_id"`
@@ -37,25 +40,31 @@ type PackMeta struct {
 
 // ListPacks returns known embedded packs.
 func ListPacks() []PackMeta {
-	p, err := ParsePack(crsLiteV1JSON)
-	if err != nil {
-		return nil
+	var out []PackMeta
+	for _, raw := range [][]byte{crsBundleV1JSON, crsLiteV1JSON} {
+		p, err := ParsePack(raw)
+		if err != nil {
+			continue
+		}
+		out = append(out, PackMeta{
+			ID:          p.PackID,
+			Title:       p.Title,
+			Description: p.Description,
+			RuleCount:   len(p.Rules),
+		})
 	}
-	return []PackMeta{{
-		ID:          p.PackID,
-		Title:       p.Title,
-		Description: p.Description,
-		RuleCount:   len(p.Rules),
-	}}
+	return out
 }
 
-// LoadPack returns a pack by id (e.g. crs-lite-v1).
+// LoadPack returns a pack by id (e.g. crs-bundle-v1, crs-lite-v1).
 func LoadPack(id string) (*Pack, error) {
 	switch id {
+	case "crs-bundle-v1":
+		return ParsePack(crsBundleV1JSON)
 	case "crs-lite-v1":
 		return ParsePack(crsLiteV1JSON)
 	default:
-		return nil, fmt.Errorf("unknown pack_id: %s (try crs-lite-v1)", id)
+		return nil, fmt.Errorf("unknown pack_id: %s (try crs-bundle-v1 or crs-lite-v1)", id)
 	}
 }
 

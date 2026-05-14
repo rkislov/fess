@@ -82,8 +82,15 @@ function fmt(iso: string) {
 
 function reason(it: Row) {
   const d = it.details
-  if (d && typeof d === 'object' && 'reason' in d && typeof (d as { reason?: string }).reason === 'string') {
-    return (d as { reason: string }).reason
+  if (d && typeof d === 'object') {
+    if ('detail' in d && typeof (d as { detail?: string }).detail === 'string') {
+      const src = 'source' in d && typeof (d as { source?: string }).source === 'string' ? (d as { source: string }).source : ''
+      const det = (d as { detail: string }).detail
+      return src ? `${src}: ${det}` : det
+    }
+    if ('reason' in d && typeof (d as { reason?: string }).reason === 'string') {
+      return (d as { reason: string }).reason
+    }
   }
   return '—'
 }
