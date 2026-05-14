@@ -97,6 +97,9 @@ services:
       UPSTREAM_URL: "http://httpbin:8080"
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
+      # За балансировщиком: CIDR доверенных источников (LB), с которых читаются X-Forwarded-For / X-Real-IP / True-Client-IP / CF-Connecting-IP.
+      # Пусто = только TCP peer. Пример: "10.0.0.0/8,172.16.0.0/12"
+      # WAF_TRUSTED_PROXIES: "172.16.0.0/12"
     ports:
       - "8080:8080"
       - "8443:8443"

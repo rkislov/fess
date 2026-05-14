@@ -7,18 +7,23 @@ import (
 	"net"
 	"net/http"
 
+	"fence/pkg/clientip"
 	"fence/pkg/routing"
 )
 
-func writeProxyAccessLog(ctx context.Context, db *sql.DB, r *http.Request, mr routing.MatchResult, outcome string) {
+func writeProxyAccessLog(ctx context.Context, db *sql.DB, r *http.Request, mr routing.MatchResult, outcome string, ipRes *clientip.Resolver) {
 	host := hostHeader(r)
 	up := ""
 	if mr.Backend != nil {
 		up = mr.Backend.String()
 	}
-	ip := r.RemoteAddr
-	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ip = h
+	ip := ipRes.ClientHost(r)
+	if ip == "" {
+		if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			ip = h
+		} else {
+			ip = r.RemoteAddr
+		}
 	}
 	scheme := requestScheme(r)
 	cc := countryCodeForRequest(r, ip)

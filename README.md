@@ -173,6 +173,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Do
 - UI (Nginx + static Nuxt build): `http://localhost:5173`
 - WAF Gateway: `http://localhost:8080`
 - Policy API (direct): `http://localhost:8082`
+- **Real client IP behind a load balancer:** on `waf-gateway`, set **`WAF_TRUSTED_PROXIES`** to comma-separated **CIDRs of your LB / trusted hops** (e.g. `10.0.0.0/8,172.16.0.0/12`). Only then are `X-Forwarded-For` (first non-trusted IP left-to-right), `X-Real-IP`, `True-Client-IP`, and `CF-Connecting-IP` used for **`proxy_access_logs.client_ip`**, **`waf_logs.source_ip`**, GeoIP, and structured access logs. If the TCP peer is **not** in that list, headers are ignored (spoofing-safe). When trusted and inbound `X-Forwarded-For` is empty but the resolved client differs from the peer, the gateway sets **`X-Forwarded-For`** on the upstream request.
 - Demo upstream (`go-httpbin`, multi-arch / **arm64** friendly): `http://localhost:8081` → WAF uses `http://httpbin:8080` inside the stack.
 
 UI uses Nginx proxy and forwards `/api/*` to `policy-api`.

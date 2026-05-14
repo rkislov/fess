@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"fence/internal/bootstrap"
+	"fence/pkg/clientip"
 	"fence/pkg/engine"
 	"fence/pkg/malware"
 	"fence/pkg/policy"
@@ -63,13 +64,15 @@ func main() {
 	initGeoIP(getenv("GEOIP_MMDB_PATH", ""))
 	defer closeGeoIP()
 
+	ipRes := clientip.ParseTrustedProxies(getenv("WAF_TRUSTED_PROXIES", ""))
+
 	store := policy.NewStore()
 	mwStore := newMalwareStore()
 	evaluator := engine.NewEvaluator()
 
 	routeStore := routing.NewStore(upstream)
 	tlsStore := &tlssites.Store{}
-	proxy := newDynamicReverseProxy(upstream, routeStore)
+	proxy := newDynamicReverseProxy(upstream, routeStore, ipRes)
 	reloadPolicySnapshot(db, store)
 	reloadMalwareConfig(db, mwStore)
 	reloadRoutingTable(db, upstream, routeStore)
@@ -100,8 +103,8 @@ func main() {
 		if mcfg.ShouldScanHTTPRequest(r.Method, r.Header.Get("Content-Type"), int64(len(body))) {
 			v := malware.Scan(r.Context(), mcfg, r.Method, r.URL.RequestURI(), hostHeader(r), r.Header.Get("Content-Type"), body)
 			if !v.Clean {
-				writeMalwareLog(r.Context(), db, r, v)
-				writeProxyAccessLog(r.Context(), db, r, mr, "malware_block")
+				writeMalwareLog(r.Context(), db, r, v, ipRes)
+				writeProxyAccessLog(r.Context(), db, r, mr, "malware_block", ipRes)
 				http.Error(w, "request blocked by malware scanner", http.StatusForbidden)
 				return
 			}
@@ -113,7 +116,7 @@ func main() {
 		if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
 			effectiveAction = "log"
 		}
-		writeWAFLog(r.Context(), db, r, decision, effectiveAction)
+		writeWAFLog(r.Context(), db, r, decision, effectiveAction, ipRes)
 
 		accessOutcome := "proxied"
 		switch effectiveAction {
@@ -122,7 +125,7 @@ func main() {
 		case "redirect":
 			accessOutcome = "redirect"
 		}
-		writeProxyAccessLog(r.Context(), db, r, mr, accessOutcome)
+		writeProxyAccessLog(r.Context(), db, r, mr, accessOutcome, ipRes)
 
 		switch effectiveAction {
 		case "block":
@@ -150,7 +153,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           loggingMiddleware(handler),
+		Handler:           loggingMiddleware(handler, ipRes),
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -168,7 +171,7 @@ func main() {
 			}
 			tlsLn := tls.NewListener(ln, cfg)
 			srvTLS := &http.Server{
-				Handler:           loggingMiddleware(handler),
+				Handler:           loggingMiddleware(handler, ipRes),
 				ReadHeaderTimeout: 3 * time.Second,
 			}
 			n := len(tlsStore.Current().Entries)
@@ -210,7 +213,7 @@ func subscribePolicyUpdates(db *sql.DB, rdb *redis.Client, store *policy.Store) 
 	}
 }
 
-func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engine.Decision, effectiveAction string) {
+func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engine.Decision, effectiveAction string, ipRes *clientip.Resolver) {
 	if decision.RuleID == "" {
 		return
 	}
@@ -225,20 +228,28 @@ func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engi
 		"effective":      effectiveAction,
 		"originalAction": decision.Action,
 	})
+	srcIP := ipRes.ClientHost(r)
+	if srcIP == "" {
+		srcIP = r.RemoteAddr
+	}
 	_, err := db.ExecContext(ctx, `
 INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, details)
 VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)`,
-		requestID, decision.PolicyID, decision.RuleID, effectiveAction, r.RemoteAddr, r.Method, r.URL.Path, string(details))
+		requestID, decision.PolicyID, decision.RuleID, effectiveAction, srcIP, r.Method, r.URL.Path, string(details))
 	if err != nil {
 		log.Printf("failed to write waf log: %v", err)
 	}
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
+func loggingMiddleware(next http.Handler, ipRes *clientip.Resolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		log.Printf("method=%s path=%s remote=%s latency=%s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start))
+		client := ipRes.ClientHost(r)
+		if client == "" {
+			client = r.RemoteAddr
+		}
+		log.Printf("method=%s path=%s client=%s remote=%s latency=%s", r.Method, r.URL.Path, client, r.RemoteAddr, time.Since(start))
 	})
 }
 

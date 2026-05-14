@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	"fence/pkg/clientip"
 	"fence/pkg/routing"
 	"fence/pkg/tlssites"
 	"github.com/redis/go-redis/v9"
@@ -99,7 +101,7 @@ func (t *backendTLSPickTransport) RoundTrip(req *http.Request) (*http.Response, 
 	return t.secure.RoundTrip(req)
 }
 
-func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store) *httputil.ReverseProxy {
+func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRes *clientip.Resolver) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			host := req.Host
@@ -117,6 +119,14 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store) *htt
 			req.URL.Host = target.Host
 			req.Host = target.Host
 			req.URL.User = target.User
+
+			if ipRes != nil && strings.TrimSpace(req.Header.Get("X-Forwarded-For")) == "" {
+				ch := ipRes.ClientHost(req)
+				peer := clientip.PeerHost(req)
+				if ch != "" && peer != "" && ch != peer {
+					req.Header.Set("X-Forwarded-For", ch)
+				}
+			}
 		},
 		Transport: backendProxyTransport(),
 	}
