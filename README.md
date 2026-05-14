@@ -121,6 +121,13 @@ API:
 - `GET/PUT /api/v1/settings/malware`
 - `GET /api/v1/settings/malware/freshclam-snippet`
 
+**ClamAV / compose logs (often mistaken for a crash)**
+
+- **`LibClamAV Warning: The virus database is older than 7 days`** — это предупреждение, не остановка движка. Базы в образе могут быть старыми; для продакшена обновляйте сигнатуры (`freshclam` или свой mirror, см. `GET /api/v1/settings/malware/freshclam-snippet`). В логах после него обычно идёт **`INFO: Starting c-icap`** — значит цепочка freshclam → clamd → c-icap отработала.
+- **`Redis ... vm.overcommit_memory`** — рекомендация ядру Linux на хосте; на десктопе чаще всего можно игнорировать или выполнить `sysctl vm.overcommit_memory=1` (см. [Redis warning](https://redis.io/docs/management/admin/)).
+- **`Exception in thread ... compose ... KeyError: 'id'`** — известный сбой **устаревшего** бинаря `docker-compose` (v1, Python) при подписке на события движка. Используйте **Compose V2**: `docker compose up` (с пробелом), а не `docker-compose`.
+- Первый запуск **`clamav-icap`** может долго ждать загрузку баз; в `deploy/docker-compose.yml` для сервиса задан **healthcheck** на порт **1344**, а `policy-api` / `waf-gateway` стартуют после `service_healthy`, чтобы ICAP уже принимал соединения.
+
 **Sites & backends (reverse proxy)**
 
 - `GET/POST /api/v1/sites` — virtual hosts: `host_pattern` exact (`api.example.com`), wildcard (`*.example.com`), or catch-all `*`; lower `priority` is tried first. Optional **`policy_id`**: if set, the gateway evaluates **only that enabled policy** for traffic matching the site; empty / omitted = **all** enabled policies (legacy).

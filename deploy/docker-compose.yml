@@ -68,13 +68,20 @@ services:
       redis:
         condition: service_healthy
       clamav-icap:
-        condition: service_started
+        condition: service_healthy
 
   clamav-icap:
     image: opencloudeu/clamav-icap:latest
     ports:
       - "1344:1344"
     restart: unless-stopped
+    # ICAP слушает 1344 только после freshclam + clamd + c-icap; первый старт может занять минуты.
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/1344"]
+      interval: 10s
+      timeout: 5s
+      retries: 36
+      start_period: 300s
 
   waf-gateway:
     build:
@@ -99,7 +106,7 @@ services:
       redis:
         condition: service_healthy
       clamav-icap:
-        condition: service_started
+        condition: service_healthy
 
   httpbin:
     image: mccutchen/go-httpbin:latest

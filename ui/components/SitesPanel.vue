@@ -8,7 +8,7 @@
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 class="text-lg font-semibold text-white">Список сайтов</h2>
-          <p class="mt-1 text-sm text-slate-400">Выберите строку для редактирования, бэкендов и TLS.</p>
+          <p class="mt-1 text-sm text-slate-400">Клик по строке выделяет сайт. «Редактировать» открывает окно с параметрами, TLS и бэкендами.</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <button
@@ -34,12 +34,13 @@
               <th class="py-2 pr-3">Приоритет</th>
               <th class="py-2 pr-3">Вкл.</th>
               <th class="py-2 pr-3">Политика WAF</th>
-              <th class="py-2">HTTPS</th>
+              <th class="py-2 pr-3">HTTPS</th>
+              <th class="py-2 text-right">Действия</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!sites.length && !busy">
-              <td colspan="6" class="py-10 text-center text-slate-500">Нет сайтов — нажмите «Добавить сайт».</td>
+              <td colspan="7" class="py-10 text-center text-slate-500">Нет сайтов — нажмите «Добавить сайт».</td>
             </tr>
             <tr
               v-for="s in sites"
@@ -57,9 +58,19 @@
               <td class="max-w-[180px] truncate py-2.5 pr-3 text-xs text-slate-400" :title="policyLabel(s.policy_id)">
                 {{ policyLabel(s.policy_id) }}
               </td>
-              <td class="py-2.5">
+              <td class="py-2.5 pr-3">
                 <span v-if="s.tls_enabled && s.tls_has_certificate" class="text-emerald-400" title="TLS настроен">🔒</span>
                 <span v-else class="text-slate-600">—</span>
+              </td>
+              <td class="py-2.5 text-right">
+                <button
+                  type="button"
+                  class="rounded-md border border-slate-600 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:border-teal-500/50 hover:bg-slate-700 hover:text-white"
+                  :disabled="busy"
+                  @click.stop="openEditModal(s)"
+                >
+                  Редактировать
+                </button>
               </td>
             </tr>
           </tbody>
@@ -67,290 +78,315 @@
       </div>
     </section>
 
-    <!-- Мастер создания (только после «Добавить сайт») -->
-    <section v-if="showWizard" class="rounded-2xl border border-teal-500/20 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 class="text-lg font-semibold text-white">Новый сайт — по шагам</h2>
-          <p class="mt-1 text-sm text-slate-400">
-            Виртуальный хост, бэкенд и при необходимости TLS (SNI по шаблону хоста).
-          </p>
-        </div>
-        <button
-          type="button"
-          class="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
-          :disabled="busy"
-          @click="cancelWizard"
+    <Teleport to="body">
+      <div
+        v-if="sitePanelOpen"
+        class="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm sm:p-8"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="sitePanelMode === 'create' ? 'site-panel-title-create' : 'site-panel-title-edit'"
+        @click.self="closeSitePanel"
+      >
+        <div
+          class="relative mt-0 w-full max-w-4xl rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/40 sm:mt-8"
         >
-          Закрыть
-        </button>
-      </div>
-
-      <div class="mt-5 flex flex-wrap gap-2" role="navigation" aria-label="Шаги мастера">
-        <button
-          v-for="(label, idx) in stepLabels"
-          :key="idx"
-          type="button"
-          class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-          :class="
-            wizardStep === idx + 1
-              ? 'bg-teal-600 text-white'
-              : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-          "
-          @click="goWizardStep(idx + 1)"
-        >
-          {{ idx + 1 }}. {{ label }}
-        </button>
-      </div>
-
-      <div class="mt-6 border-t border-slate-800 pt-6">
-        <!-- Шаг 1 -->
-        <div v-show="wizardStep === 1" class="space-y-3">
-          <h3 class="text-sm font-medium text-slate-300">Сайт и политика</h3>
-          <input
-            v-model="wizard.name"
-            placeholder="Название (например, API production)"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
-          <input
-            v-model="wizard.host_pattern"
-            placeholder="Шаблон Host: *.example.com или app.example.com"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
-          <input
-            v-model.number="wizard.priority"
-            type="number"
-            placeholder="Приоритет (по умолчанию 100, меньше — раньше в списке)"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
-          <label class="flex items-center gap-2 text-sm text-slate-400">
-            <input v-model="wizard.enabled" type="checkbox" class="rounded border-slate-600" />
-            Сайт включён
-          </label>
-          <div>
-            <label class="text-xs text-slate-500">Политика WAF (необязательно)</label>
-            <select v-model="wizard.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
-              <option value="">Все включённые политики (по умолчанию)</option>
-              <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Шаг 2 -->
-        <div v-show="wizardStep === 2" class="space-y-3">
-          <h3 class="text-sm font-medium text-slate-300">Бэкенд (upstream)</h3>
-          <p class="text-xs text-slate-500">
-            Шлюз отправляет трафик на первый включённый бэкенд с наименьшим приоритетом.
-          </p>
-          <input
-            v-model="wizard.backend_name"
-            placeholder="Имя бэкенда"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
-          <input
-            v-model="wizard.backend_url"
-            placeholder="Базовый URL, например http://app:3000 или https://upstream:443"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-xs"
-          />
-          <input
-            v-model.number="wizard.backend_priority"
-            type="number"
-            placeholder="Приоритет бэкенда (100 по умолчанию)"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <!-- Шаг 3 -->
-        <div v-show="wizardStep === 3" class="space-y-3">
-          <h3 class="text-sm font-medium text-slate-300">HTTPS (необязательно)</h3>
-          <p class="text-xs text-slate-500">
-            Терминация TLS на waf-gateway по SNI. Сертификат должен покрывать тот же хост, что и шаблон сайта. Порты см. README
-            (HTTP <code class="text-slate-400">WAF_LISTEN_ADDR</code>, HTTPS <code class="text-slate-400">WAF_TLS_LISTEN_ADDR</code>).
-          </p>
-          <label class="flex items-center gap-2 text-sm text-slate-400">
-            <input v-model="wizard.tls_enabled" type="checkbox" class="rounded border-slate-600" />
-            Включить HTTPS для этого сайта после создания
-          </label>
-          <textarea
-            v-model="wizard.tls_cert_pem"
-            rows="6"
-            placeholder="-----BEGIN CERTIFICATE----- ... (полная цепочка PEM)"
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-          />
-          <textarea
-            v-model="wizard.tls_key_pem"
-            rows="4"
-            placeholder="-----BEGIN PRIVATE KEY----- ..."
-            class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-          />
-        </div>
-
-        <div class="mt-6 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-            :disabled="busy || wizardStep === 1"
-            @click="wizardStep--"
-          >
-            Назад
-          </button>
-          <button
-            v-if="wizardStep < 3"
-            type="button"
-            class="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-500"
-            :disabled="busy"
-            @click="wizardNext"
-          >
-            Далее
-          </button>
-          <button
-            v-else
-            type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500"
-            :disabled="busy"
-            @click="finalizeWizard"
-          >
-            Создать сайт
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section v-if="selected" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-white">Редактирование: {{ selected.name }}</h2>
-      <p class="mt-1 font-mono text-xs text-slate-500">{{ selected.host_pattern }}</p>
-
-      <div class="mt-8 space-y-8">
-        <div class="grid gap-8 lg:grid-cols-2">
-          <div>
-            <h3 class="text-sm font-medium text-slate-300">Параметры сайта</h3>
-            <div class="mt-2 space-y-2">
-              <input v-model="edit.name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <input v-model="edit.host_pattern" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <input v-model.number="edit.priority" type="number" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <label class="flex items-center gap-2 text-sm text-slate-400">
-                <input v-model="edit.enabled" type="checkbox" class="rounded border-slate-600" />
-                Включён
-              </label>
+          <!-- Создание -->
+          <div v-if="sitePanelMode === 'create'" class="p-6 sm:p-8">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <label class="text-xs text-slate-500">Политика WAF</label>
-                <select v-model="edit.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
-                  <option value="">Все включённые политики</option>
-                  <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
+                <h2 id="site-panel-title-create" class="text-lg font-semibold text-white">Новый сайт — по шагам</h2>
+                <p class="mt-1 text-sm text-slate-400">
+                  Виртуальный хост, бэкенд и при необходимости TLS (SNI по шаблону хоста).
+                </p>
               </div>
-              <div class="flex flex-wrap gap-2 pt-2">
-                <button type="button" class="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600" :disabled="busy" @click="saveSite">
-                  Сохранить сайт
-                </button>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+                :disabled="busy"
+                @click="closeSitePanel"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div class="mt-5 flex flex-wrap gap-2" role="navigation" aria-label="Шаги мастера">
+              <button
+                v-for="(label, idx) in stepLabels"
+                :key="idx"
+                type="button"
+                class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
+                :class="
+                  wizardStep === idx + 1
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                "
+                @click="goWizardStep(idx + 1)"
+              >
+                {{ idx + 1 }}. {{ label }}
+              </button>
+            </div>
+
+            <div class="mt-6 border-t border-slate-800 pt-6">
+              <div v-show="wizardStep === 1" class="space-y-3">
+                <h3 class="text-sm font-medium text-slate-300">Сайт и политика</h3>
+                <input
+                  v-model="wizard.name"
+                  placeholder="Название (например, API production)"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                />
+                <input
+                  v-model="wizard.host_pattern"
+                  placeholder="Шаблон Host: *.example.com или app.example.com"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                />
+                <input
+                  v-model.number="wizard.priority"
+                  type="number"
+                  placeholder="Приоритет (по умолчанию 100, меньше — раньше в списке)"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                />
+                <label class="flex items-center gap-2 text-sm text-slate-400">
+                  <input v-model="wizard.enabled" type="checkbox" class="rounded border-slate-600" />
+                  Сайт включён
+                </label>
+                <div>
+                  <label class="text-xs text-slate-500">Политика WAF (необязательно)</label>
+                  <select v-model="wizard.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                    <option value="">Все включённые политики (по умолчанию)</option>
+                    <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div v-show="wizardStep === 2" class="space-y-3">
+                <h3 class="text-sm font-medium text-slate-300">Бэкенд (upstream)</h3>
+                <p class="text-xs text-slate-500">
+                  Шлюз отправляет трафик на первый включённый бэкенд с наименьшим приоритетом.
+                </p>
+                <input
+                  v-model="wizard.backend_name"
+                  placeholder="Имя бэкенда"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                />
+                <input
+                  v-model="wizard.backend_url"
+                  placeholder="Базовый URL, например http://app:3000 или https://upstream:443"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-xs"
+                />
+                <input
+                  v-model.number="wizard.backend_priority"
+                  type="number"
+                  placeholder="Приоритет бэкенда (100 по умолчанию)"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div v-show="wizardStep === 3" class="space-y-3">
+                <h3 class="text-sm font-medium text-slate-300">HTTPS (необязательно)</h3>
+                <p class="text-xs text-slate-500">
+                  Терминация TLS на waf-gateway по SNI. Сертификат должен покрывать тот же хост, что и шаблон сайта. Порты см. README
+                  (HTTP <code class="text-slate-400">WAF_LISTEN_ADDR</code>, HTTPS <code class="text-slate-400">WAF_TLS_LISTEN_ADDR</code>).
+                </p>
+                <label class="flex items-center gap-2 text-sm text-slate-400">
+                  <input v-model="wizard.tls_enabled" type="checkbox" class="rounded border-slate-600" />
+                  Включить HTTPS для этого сайта после создания
+                </label>
+                <textarea
+                  v-model="wizard.tls_cert_pem"
+                  rows="6"
+                  placeholder="-----BEGIN CERTIFICATE----- ... (полная цепочка PEM)"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                />
+                <textarea
+                  v-model="wizard.tls_key_pem"
+                  rows="4"
+                  placeholder="-----BEGIN PRIVATE KEY----- ..."
+                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                />
+              </div>
+
+              <div class="mt-6 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  class="rounded-lg border border-rose-800 px-3 py-2 text-sm text-rose-300 hover:bg-rose-950/50"
-                  :disabled="busy"
-                  @click="deleteSite"
+                  class="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+                  :disabled="busy || wizardStep === 1"
+                  @click="wizardStep--"
                 >
-                  Удалить сайт
+                  Назад
+                </button>
+                <button
+                  v-if="wizardStep < 3"
+                  type="button"
+                  class="rounded-lg bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-500"
+                  :disabled="busy"
+                  @click="wizardNext"
+                >
+                  Далее
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500"
+                  :disabled="busy"
+                  @click="finalizeWizard"
+                >
+                  Создать сайт
                 </button>
               </div>
             </div>
           </div>
 
-          <div class="rounded-xl border border-white/5 bg-slate-950/40 p-4">
-            <h3 class="text-sm font-medium text-slate-300">HTTPS (TLS на шлюзе)</h3>
-            <p class="mt-1 text-xs text-slate-500">
-              Ключ и сертификат хранятся в БД; при сохранении шлюз подхватывает их без перезапуска. Содержимое сертификата по API не
-              отдаётся — при замене вставьте PEM заново.
-            </p>
-            <div class="mt-4 space-y-3">
-              <p class="text-xs text-slate-500">
-                Состояние:
-                <span v-if="tlsMeta.tls_has_certificate" class="text-emerald-400">сертификат загружен</span>
-                <span v-else class="text-amber-400/90">сертификат не задан</span>
-              </p>
-              <label class="flex items-center gap-2 text-sm text-slate-400">
-                <input v-model="tlsForm.enabled" type="checkbox" class="rounded border-slate-600" />
-                TLS включён для этого сайта
-              </label>
-              <textarea
-                v-model="tlsForm.cert_pem"
-                rows="5"
-                placeholder="PEM сертификата (цепочка), вставьте чтобы задать или обновить"
-                class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-              />
-              <textarea
-                v-model="tlsForm.key_pem"
-                rows="3"
-                placeholder="Приватный ключ PEM (пусто = не менять существующий ключ)"
-                class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-              />
-              <button type="button" class="rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600" :disabled="busy" @click="saveTls">
-                Сохранить TLS
+          <!-- Редактирование -->
+          <div v-else-if="sitePanelMode === 'edit' && selected" class="max-h-[min(85vh,calc(100vh-4rem))] overflow-y-auto p-6 sm:p-8">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <h2 id="site-panel-title-edit" class="truncate text-lg font-semibold text-white">Редактирование: {{ selected.name }}</h2>
+                <p class="mt-1 font-mono text-xs text-slate-500">{{ selected.host_pattern }}</p>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+                :disabled="busy"
+                @click="closeSitePanel"
+              >
+                Закрыть
               </button>
             </div>
-          </div>
-        </div>
 
-        <div>
-          <h3 class="text-sm font-medium text-slate-300">Бэкенды</h3>
-          <p class="mt-1 text-sm text-slate-400">
-            Upstream для выбранного сайта: используется первый включённый бэкенд с наименьшим приоритетом.
-          </p>
+            <div class="mt-8 space-y-8">
+              <div class="grid gap-8 lg:grid-cols-2">
+                <div>
+                  <h3 class="text-sm font-medium text-slate-300">Параметры сайта</h3>
+                  <div class="mt-2 space-y-2">
+                    <input v-model="edit.name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    <input v-model="edit.host_pattern" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    <input v-model.number="edit.priority" type="number" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    <label class="flex items-center gap-2 text-sm text-slate-400">
+                      <input v-model="edit.enabled" type="checkbox" class="rounded border-slate-600" />
+                      Включён
+                    </label>
+                    <div>
+                      <label class="text-xs text-slate-500">Политика WAF</label>
+                      <select v-model="edit.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                        <option value="">Все включённые политики</option>
+                        <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
+                      </select>
+                    </div>
+                    <div class="flex flex-wrap gap-2 pt-2">
+                      <button type="button" class="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600" :disabled="busy" @click="saveSite">
+                        Сохранить сайт
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-lg border border-rose-800 px-3 py-2 text-sm text-rose-300 hover:bg-rose-950/50"
+                        :disabled="busy"
+                        @click="deleteSite"
+                      >
+                        Удалить сайт
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full text-left text-sm">
-              <thead>
-                <tr class="border-b border-slate-800 text-slate-500">
-                  <th class="py-2 pr-4">Имя</th>
-                  <th class="py-2 pr-4">Base URL</th>
-                  <th class="py-2 pr-4">Приоритет</th>
-                  <th class="py-2">Вкл.</th>
-                  <th class="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!backends.length">
-                  <td colspan="5" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
-                </tr>
-                <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
-                  <td class="py-2 pr-4">
-                    <input v-model="b.name" class="w-full min-w-[100px] rounded border border-slate-700 bg-slate-950 px-2 py-1" />
-                  </td>
-                  <td class="py-2 pr-4">
-                    <input v-model="b.base_url" class="w-full min-w-[180px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs" />
-                  </td>
-                  <td class="py-2 pr-4">
-                    <input v-model.number="b.priority" type="number" class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1" />
-                  </td>
-                  <td class="py-2">
-                    <input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" />
-                  </td>
-                  <td class="py-2">
-                    <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
-                    <button type="button" class="ml-2 text-rose-400 hover:underline" @click="removeBackend(b)">Удалить</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                <div class="rounded-xl border border-white/5 bg-slate-950/40 p-4">
+                  <h3 class="text-sm font-medium text-slate-300">HTTPS (TLS на шлюзе)</h3>
+                  <p class="mt-1 text-xs text-slate-500">
+                    Ключ и сертификат хранятся в БД; при сохранении шлюз подхватывает их без перезапуска. Содержимое сертификата по API не
+                    отдаётся — при замене вставьте PEM заново.
+                  </p>
+                  <div class="mt-4 space-y-3">
+                    <p class="text-xs text-slate-500">
+                      Состояние:
+                      <span v-if="tlsMeta.tls_has_certificate" class="text-emerald-400">сертификат загружен</span>
+                      <span v-else class="text-amber-400/90">сертификат не задан</span>
+                    </p>
+                    <label class="flex items-center gap-2 text-sm text-slate-400">
+                      <input v-model="tlsForm.enabled" type="checkbox" class="rounded border-slate-600" />
+                      TLS включён для этого сайта
+                    </label>
+                    <textarea
+                      v-model="tlsForm.cert_pem"
+                      rows="5"
+                      placeholder="PEM сертификата (цепочка), вставьте чтобы задать или обновить"
+                      class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                    />
+                    <textarea
+                      v-model="tlsForm.key_pem"
+                      rows="3"
+                      placeholder="Приватный ключ PEM (пусто = не менять существующий ключ)"
+                      class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                    />
+                    <button type="button" class="rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600" :disabled="busy" @click="saveTls">
+                      Сохранить TLS
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-          <div class="mt-6 border-t border-slate-800 pt-6">
-            <h4 class="text-sm font-medium text-slate-300">Новый бэкенд</h4>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <input v-model="newBackend.name" placeholder="Имя" class="min-w-[120px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <input
-                v-model="newBackend.base_url"
-                placeholder="http://upstream:8080"
-                class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
-              />
-              <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
-                Добавить
-              </button>
+              <div>
+                <h3 class="text-sm font-medium text-slate-300">Бэкенды</h3>
+                <p class="mt-1 text-sm text-slate-400">
+                  Upstream для выбранного сайта: используется первый включённый бэкенд с наименьшим приоритетом.
+                </p>
+
+                <div class="mt-4 overflow-x-auto">
+                  <table class="w-full text-left text-sm">
+                    <thead>
+                      <tr class="border-b border-slate-800 text-slate-500">
+                        <th class="py-2 pr-4">Имя</th>
+                        <th class="py-2 pr-4">Base URL</th>
+                        <th class="py-2 pr-4">Приоритет</th>
+                        <th class="py-2">Вкл.</th>
+                        <th class="py-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-if="!backends.length">
+                        <td colspan="5" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
+                      </tr>
+                      <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
+                        <td class="py-2 pr-4">
+                          <input v-model="b.name" class="w-full min-w-[100px] rounded border border-slate-700 bg-slate-950 px-2 py-1" />
+                        </td>
+                        <td class="py-2 pr-4">
+                          <input v-model="b.base_url" class="w-full min-w-[180px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs" />
+                        </td>
+                        <td class="py-2 pr-4">
+                          <input v-model.number="b.priority" type="number" class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1" />
+                        </td>
+                        <td class="py-2">
+                          <input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" />
+                        </td>
+                        <td class="py-2">
+                          <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
+                          <button type="button" class="ml-2 text-rose-400 hover:underline" @click="removeBackend(b)">Удалить</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="mt-6 border-t border-slate-800 pt-6">
+                  <h4 class="text-sm font-medium text-slate-300">Новый бэкенд</h4>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <input v-model="newBackend.name" placeholder="Имя" class="min-w-[120px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    <input
+                      v-model="newBackend.base_url"
+                      placeholder="http://upstream:8080"
+                      class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
+                    />
+                    <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
+                      Добавить
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </section>
+    </Teleport>
   </div>
 </template>
 
@@ -376,7 +412,8 @@ const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
 const err = ref('')
 const ok = ref('')
 const busy = ref(false)
-const showWizard = ref(false)
+const sitePanelOpen = ref(false)
+const sitePanelMode = ref<'create' | 'edit'>('create')
 const sites = ref<Site[]>([])
 const selectedId = ref('')
 const selected = computed(() => sites.value.find((s) => s.id === selectedId.value) ?? null)
@@ -449,11 +486,19 @@ function policyLabel(policyId: string) {
 
 function openAddWizard() {
   resetWizard()
-  showWizard.value = true
+  sitePanelMode.value = 'create'
+  sitePanelOpen.value = true
 }
 
-function cancelWizard() {
-  showWizard.value = false
+function openEditModal(s: Site) {
+  applySelection(s.id)
+  sitePanelMode.value = 'edit'
+  sitePanelOpen.value = true
+}
+
+function closeSitePanel() {
+  sitePanelOpen.value = false
+  resetWizard()
 }
 
 function resetWizard() {
@@ -545,7 +590,7 @@ async function finalizeWizard() {
       })
     }
     resetWizard()
-    showWizard.value = false
+    sitePanelOpen.value = false
     await loadSites()
     if (siteId) applySelection(siteId)
     flashOk('Сайт и бэкенд созданы' + (withTls ? ', TLS включён' : ''))
@@ -626,7 +671,7 @@ function applySelection(siteId: string) {
 }
 
 function selectSite(s: Site) {
-  showWizard.value = false
+  sitePanelOpen.value = false
   applySelection(s.id)
 }
 
@@ -663,6 +708,7 @@ async function deleteSite() {
     await $fetch(apiUrl(`/sites/${selected.value.id}`), { method: 'DELETE' })
     selectedId.value = ''
     backends.value = []
+    sitePanelOpen.value = false
     await loadSites()
     flashOk('Сайт удалён')
   } catch (e) {
@@ -784,5 +830,21 @@ async function addBackend() {
 onMounted(() => {
   loadPolicies().catch(flashErr)
   loadSites().catch(flashErr)
+})
+
+function onSitePanelEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !sitePanelOpen.value) return
+  e.preventDefault()
+  closeSitePanel()
+}
+
+watch(sitePanelOpen, (open) => {
+  if (typeof window === 'undefined') return
+  if (open) window.addEventListener('keydown', onSitePanelEscape)
+  else window.removeEventListener('keydown', onSitePanelEscape)
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') window.removeEventListener('keydown', onSitePanelEscape)
 })
 </script>
