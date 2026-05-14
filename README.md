@@ -145,6 +145,14 @@ Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **
 
 On first deploy after adding `db/002_malware_settings.sql`, existing Postgres volumes need the migration applied once (re-create volume or run the SQL manually). Same for `db/003_sites_backends.sql`, `db/004_site_policy.sql`, `db/005_proxy_access_logs.sql`, and newer numbered files under `db/` (e.g. `008_backend_tls_skip_verify.sql` for per-backend `tls_skip_verify`).
 
+**If the UI shows `column "tls_skip_verify" does not exist`:** your database predates `db/008_backend_tls_skip_verify.sql`. Apply it once from the repo root (stack running, same compose file as usual):
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T postgres psql -U fence -d fence -c "ALTER TABLE backends ADD COLUMN IF NOT EXISTS tls_skip_verify BOOLEAN NOT NULL DEFAULT FALSE;"
+```
+
+Or pipe the full file (includes `COMMENT`): `docker compose -f deploy/docker-compose.yml exec -T postgres psql -U fence -d fence -f - < db/008_backend_tls_skip_verify.sql` (paths relative to repo root).
+
 ## Multi-platform Docker (arm64 / amd64)
 
 - **Go services** (`policy-api`, `waf-gateway`): Dockerfiles use BuildKit’s `TARGETARCH` (with a `uname -m` fallback) so the binary matches the image architecture (native **arm64** on Apple Silicon, **amd64** on typical servers).
