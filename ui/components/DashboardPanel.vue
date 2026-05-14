@@ -11,38 +11,37 @@
     </section>
 
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+        <div class="min-w-0 flex-1">
           <h2 class="text-lg font-semibold text-white">Дашборд трафика и защиты</h2>
-          <p class="mt-1 text-sm text-slate-400">
+          <p class="mt-1 max-w-2xl text-sm leading-relaxed text-slate-400">
             Агрегаты по журналу соединений и срабатываниям WAF за выбранный период. Данные можно подгружать автоматически (по умолчанию раз в минуту; интервал настраивается и сохраняется в браузере).
           </p>
         </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <label class="flex items-center gap-2 text-sm text-slate-300">
-            <span>Период</span>
-            <select
-              v-model.number="hours"
-              class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-            >
-              <option :value="6">6 ч</option>
-              <option :value="24">24 ч</option>
-              <option :value="72">3 суток</option>
-              <option :value="168">7 суток</option>
-            </select>
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-300">
-            <span>Автообновление</span>
-            <select
-              v-model.number="autoRefreshSec"
-              class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-            >
-              <option v-for="o in refreshOptions" :key="o.sec" :value="o.sec">{{ o.label }}</option>
-            </select>
-          </label>
+        <div
+          class="grid shrink-0 grid-cols-[auto_minmax(0,11rem)] grid-rows-[auto_auto_auto] items-center gap-x-3 gap-y-2.5 sm:min-w-[15rem]"
+          aria-label="Параметры дашборда"
+        >
+          <span class="justify-self-end self-center text-sm text-slate-300">Период</span>
+          <select
+            v-model.number="hours"
+            class="h-10 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+          >
+            <option :value="6">6 ч</option>
+            <option :value="24">24 ч</option>
+            <option :value="72">3 суток</option>
+            <option :value="168">7 суток</option>
+          </select>
+          <span class="justify-self-end self-center text-sm text-slate-300">Автообновление</span>
+          <select
+            v-model.number="autoRefreshSec"
+            class="h-10 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+          >
+            <option v-for="o in refreshOptions" :key="o.sec" :value="o.sec">{{ o.label }}</option>
+          </select>
           <button
             type="button"
-            class="rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-md hover:from-teal-500 hover:to-emerald-500 disabled:opacity-50"
+            class="col-start-2 row-start-3 h-10 w-full rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 px-4 text-sm font-medium text-white shadow-md hover:from-teal-500 hover:to-emerald-500 disabled:opacity-50"
             :disabled="busy"
             @click="load"
           >

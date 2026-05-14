@@ -5,6 +5,9 @@
       <h2 class="text-lg font-semibold text-white">Соединения к сайтам</h2>
       <p class="mt-1 text-sm text-slate-400">
         Запросы через WAF: виртуальный хост, выбранный бэкенд (первый по приоритету среди включённых), upstream URL, итог.
+        Колонка <strong class="text-slate-300">Host</strong> — имя из запроса (в Go это поле
+        <span class="font-mono text-slate-400">Host</span> / HTTP/2 <span class="font-mono text-slate-400">:authority</span>, не всегда дублируется в заголовке
+        <span class="font-mono text-slate-400">Host</span>).
         Колонка <strong class="text-slate-300">Клиент</strong> — эффективный IP (из
         <span class="font-mono text-slate-400">X-Forwarded-For</span> / Real-IP, если на шлюзе задан
         <span class="font-mono text-slate-400">WAF_TRUSTED_PROXIES</span>); <strong class="text-slate-300">TCP пир</strong> — кто
@@ -20,21 +23,34 @@
           Обновить
         </button>
       </div>
-      <div class="mt-4 overflow-x-auto">
-        <table class="w-full text-left text-sm">
+      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-800/80">
+        <table class="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+          <colgroup>
+            <col class="w-[11%]" />
+            <col class="w-[12%]" />
+            <col class="w-[6%]" />
+            <col class="w-[18%]" />
+            <col class="w-[8%]" />
+            <col class="w-[8%]" />
+            <col class="w-[9%]" />
+            <col class="w-[5%]" />
+            <col class="w-[5%]" />
+            <col class="w-[13%]" />
+            <col class="w-[5%]" />
+          </colgroup>
           <thead>
             <tr class="border-b border-slate-700 text-slate-500">
-              <th class="py-2 pr-3">Время</th>
-              <th class="py-2 pr-3">Host</th>
-              <th class="py-2 pr-3">Метод</th>
-              <th class="py-2 pr-3">Путь</th>
-              <th class="py-2 pr-3" title="После LB, если настроен WAF_TRUSTED_PROXIES">Клиент</th>
-              <th class="py-2 pr-3" title="TCP RemoteAddr (часто балансировщик)">TCP пир</th>
-              <th class="py-2 pr-3" title="Имя строки бэкенда (первый по приоритету)">Бэкенд</th>
-              <th class="py-2 pr-3">Протокол</th>
-              <th class="py-2 pr-3">Страна</th>
-              <th class="py-2 pr-3">Upstream URL</th>
-              <th class="py-2">Итог</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Время</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Host</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Метод</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Путь</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="После LB, если настроен WAF_TRUSTED_PROXIES">Клиент</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="TCP RemoteAddr (часто балансировщик)">TCP пир</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="Имя строки бэкенда (первый по приоритету)">Бэкенд</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Протокол</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Страна</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Upstream URL</th>
+              <th class="whitespace-nowrap px-2 py-2 text-left align-bottom">Итог</th>
             </tr>
           </thead>
           <tbody>
@@ -42,17 +58,17 @@
               <td colspan="11" class="py-8 text-center text-slate-500">Нет данных — сделайте несколько запросов через шлюз и нажмите «Обновить»</td>
             </tr>
             <tr v-for="it in items" :key="it.id" class="border-b border-slate-800/80">
-              <td class="whitespace-nowrap py-2 pr-3 font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
-              <td class="py-2 pr-3 font-mono text-xs">{{ it.host }}</td>
-              <td class="py-2 pr-3">{{ it.method }}</td>
-              <td class="max-w-[200px] truncate py-2 pr-3 font-mono text-xs" :title="it.path">{{ it.path }}</td>
-              <td class="py-2 pr-3 font-mono text-xs">{{ it.client_ip || '—' }}</td>
-              <td class="py-2 pr-3 font-mono text-xs text-slate-500">{{ it.tcp_peer || '—' }}</td>
-              <td class="py-2 pr-3 font-mono text-xs text-slate-300">{{ it.backend_name || '—' }}</td>
-              <td class="py-2 pr-3 font-mono text-xs uppercase">{{ it.protocol || '—' }}</td>
-              <td class="py-2 pr-3 font-mono text-xs">{{ it.country_code || '—' }}</td>
-              <td class="max-w-[220px] truncate py-2 pr-3 font-mono text-xs" :title="it.upstream_base">{{ it.upstream_base }}</td>
-              <td class="py-2">
+              <td class="whitespace-nowrap px-2 py-2 pr-1 align-top font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.host">{{ it.host || '—' }}</td>
+              <td class="whitespace-nowrap px-2 py-2 pr-1 align-top">{{ it.method }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.path">{{ it.path }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.client_ip || ''">{{ it.client_ip || '—' }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs text-slate-500" :title="it.tcp_peer || ''">{{ it.tcp_peer || '—' }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs text-slate-300" :title="it.backend_name || ''">{{ it.backend_name || '—' }}</td>
+              <td class="whitespace-nowrap px-2 py-2 pr-1 align-top font-mono text-xs uppercase">{{ it.protocol || '—' }}</td>
+              <td class="whitespace-nowrap px-2 py-2 pr-1 align-top font-mono text-xs">{{ it.country_code || '—' }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.upstream_base">{{ it.upstream_base }}</td>
+              <td class="px-2 py-2 align-top">
                 <span class="rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-200">{{ labelOutcome(it.outcome) }}</span>
               </td>
             </tr>
