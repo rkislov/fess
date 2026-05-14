@@ -7,9 +7,19 @@ import (
 
 func TestParseTrustedProxies_empty(t *testing.T) {
 	r := ParseTrustedProxies("")
+	if r.TrustsForwardedHeaders() {
+		t.Fatal("empty list should not trust forwarded headers")
+	}
 	req := mustReq("192.0.2.10:5555", "X-Forwarded-For", "198.51.100.1")
 	if got := r.ClientHost(req); got != "192.0.2.10" {
 		t.Fatalf("no trust: got %q want 192.0.2.10", got)
+	}
+}
+
+func TestTrustsForwardedHeaders_nonEmpty(t *testing.T) {
+	r := ParseTrustedProxies("10.0.0.0/8")
+	if !r.TrustsForwardedHeaders() {
+		t.Fatal("expected trust with CIDR configured")
 	}
 }
 

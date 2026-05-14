@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -120,13 +119,7 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 			req.Host = target.Host
 			req.URL.User = target.User
 
-			if ipRes != nil && strings.TrimSpace(req.Header.Get("X-Forwarded-For")) == "" {
-				ch := ipRes.ClientHost(req)
-				peer := clientip.PeerHost(req)
-				if ch != "" && peer != "" && ch != peer {
-					req.Header.Set("X-Forwarded-For", ch)
-				}
-			}
+			applyUpstreamClientHeaders(req, ipRes)
 		},
 		Transport: backendProxyTransport(),
 	}

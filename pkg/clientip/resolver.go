@@ -54,6 +54,15 @@ func ParseTrustedProxies(list string) *Resolver {
 	return &Resolver{trusted: nets}
 }
 
+// TrustsForwardedHeaders reports whether X-Forwarded-For / X-Real-IP may be honored
+// (trusted proxy CIDRs were configured).
+func (r *Resolver) TrustsForwardedHeaders() bool {
+	if r == nil {
+		return false
+	}
+	return !r.empty()
+}
+
 func (r *Resolver) empty() bool {
 	return r == nil || len(r.trusted) == 0
 }

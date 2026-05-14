@@ -65,6 +65,9 @@ func main() {
 	defer closeGeoIP()
 
 	ipRes := clientip.ParseTrustedProxies(getenv("WAF_TRUSTED_PROXIES", ""))
+	if !ipRes.TrustsForwardedHeaders() {
+		log.Printf("waf-gateway: WAF_TRUSTED_PROXIES is unset — logs/WAF use TCP peer as client IP; behind Nginx/LB set CIDR(s) of the hop that connects to this gateway (see README: Nginx before waf-gateway)")
+	}
 
 	store := policy.NewStore()
 	mwStore := newMalwareStore()

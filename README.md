@@ -174,7 +174,28 @@ docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Do
 - UI (Nginx + static Nuxt build): `http://localhost:5173`
 - WAF Gateway: `http://localhost:8080`
 - Policy API (direct): `http://localhost:8082`
-- **Real client IP behind a load balancer:** on `waf-gateway`, set **`WAF_TRUSTED_PROXIES`** to comma-separated **CIDRs of your LB / trusted hops** (e.g. `10.0.0.0/8,172.16.0.0/12`). Only then are `X-Forwarded-For` (first non-trusted IP left-to-right), `X-Real-IP`, `True-Client-IP`, and `CF-Connecting-IP` used for **`proxy_access_logs.client_ip`**, **`waf_logs.source_ip`**, GeoIP, and structured access logs. If the TCP peer is **not** in that list, headers are ignored (spoofing-safe). When trusted and inbound `X-Forwarded-For` is empty but the resolved client differs from the peer, the gateway sets **`X-Forwarded-For`** on the upstream request.
+- **Real client IP behind a load balancer:** on `waf-gateway`, set **`WAF_TRUSTED_PROXIES`** to comma-separated **CIDRs of the immediate TCP hop(s) to this gateway** (who you see as **TCP peer** in proxy access logs when this is unset). Only then are `X-Forwarded-For` (first non-trusted IP left-to-right), `X-Real-IP`, `True-Client-IP`, and `CF-Connecting-IP` used for **`proxy_access_logs.client_ip`**, **`waf_logs.source_ip`**, GeoIP, and structured access logs. If the TCP peer is **not** in that list, inbound forwarded headers are ignored for resolving the client (spoofing-safe). **Toward backends**, the gateway always sets **`X-Real-IP`** to that effective client; **`X-Forwarded-For`** is filled when empty, **replaced entirely** when `WAF_TRUSTED_PROXIES` is unset (so clients cannot inject a fake chain through Fence), and **left unchanged** when it was already set by a trusted hop. **`X-Forwarded-Proto`** is added when missing.
+
+### Nginx перед `waf-gateway` (частая путаница)
+
+В Nginx директивы **`set_real_ip_from`** / **`real_ip_header`** / **`real_ip_recursive`** меняют только **`$remote_addr` внутри Nginx** (чтобы Nginx «видел» клиента за своим верхним LB). **Fence этого не знает:** он не читает конфиг Nginx и по умолчанию считает клиентом **тот IP, с которого пришёл TCP к `waf-gateway`** (часто IP контейнера/хоста Nginx).
+
+Чтобы в логах Fence был реальный клиент:
+
+1. На **`waf-gateway`** задайте **`WAF_TRUSTED_PROXIES`** — CIDR **источника TCP к шлюзу** (обычно подсеть или IP **Nginx**, как он виден из контейнера `waf-gateway`). Это может отличаться от `set_real_ip_from` в Nginx: там перечисляют «кто перед Nginx», а для Fence нужен «кто непосредственно подключается к `waf-gateway`». Подсказка: временно оставьте `WAF_TRUSTED_PROXIES` пустым, сделайте запрос и посмотрите **«TCP пир»** в UI — в trusted нужно включить именно этот адрес (или его подсеть).
+2. В **`location`**, который проксирует на Fence, передавайте цепочку клиента, например:
+   ```nginx
+   proxy_set_header Host              $host;
+   proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   # при необходимости: proxy_set_header X-Real-IP $remote_addr;
+   ```
+   После `real_ip` в Nginx **`$remote_addr`** уже «настоящий» клиент, поэтому **`$proxy_add_x_forwarded_for`** допишет корректный хвост в `X-Forwarded-For` для Fence.
+
+Если Nginx и `waf-gateway` в одной Docker-сети, TCP-пир часто **`172.x.x.x`** — тогда в **`WAF_TRUSTED_PROXIES`** нужна эта подсеть (например `172.18.0.0/16`), а не только `10.20.30.0/28`.
+
+3. К **origin** (Nextcloud и т.д.) шлюз сам дописывает **`X-Real-IP`** и при необходимости **`X-Forwarded-For`** / **`X-Forwarded-Proto`** — см. описание в пункте про `WAF_TRUSTED_PROXIES` выше.
+
 - Demo upstream (`go-httpbin`, multi-arch / **arm64** friendly): `http://localhost:8081` → WAF uses `http://httpbin:8080` inside the stack.
 
 UI uses Nginx proxy and forwards `/api/*` to `policy-api`.
