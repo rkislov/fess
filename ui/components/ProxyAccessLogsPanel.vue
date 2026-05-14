@@ -26,23 +26,25 @@
       <div class="mt-4 overflow-x-auto rounded-lg border border-slate-800/80">
         <table class="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
           <colgroup>
+            <col class="w-[10%]" />
+            <col class="w-[10%]" />
+            <col class="w-[5%]" />
+            <col class="w-[14%]" />
+            <col class="w-[14%]" />
+            <col class="w-[7%]" />
+            <col class="w-[7%]" />
+            <col class="w-[8%]" />
+            <col class="w-[4%]" />
+            <col class="w-[4%]" />
             <col class="w-[11%]" />
-            <col class="w-[12%]" />
             <col class="w-[6%]" />
-            <col class="w-[18%]" />
-            <col class="w-[8%]" />
-            <col class="w-[8%]" />
-            <col class="w-[9%]" />
-            <col class="w-[5%]" />
-            <col class="w-[5%]" />
-            <col class="w-[13%]" />
-            <col class="w-[5%]" />
           </colgroup>
           <thead>
             <tr class="border-b border-slate-700 text-slate-500">
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Время</th>
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Host</th>
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Метод</th>
+              <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="HTTP User-Agent клиента">User-Agent</th>
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom">Путь</th>
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="После LB, если настроен WAF_TRUSTED_PROXIES">Клиент</th>
               <th class="whitespace-nowrap px-2 py-2 pr-1 text-left align-bottom" title="TCP RemoteAddr (часто балансировщик)">TCP пир</th>
@@ -55,12 +57,13 @@
           </thead>
           <tbody>
             <tr v-if="!items.length && !busy">
-              <td colspan="11" class="py-8 text-center text-slate-500">Нет данных — сделайте несколько запросов через шлюз и нажмите «Обновить»</td>
+              <td colspan="12" class="py-8 text-center text-slate-500">Нет данных — сделайте несколько запросов через шлюз и нажмите «Обновить»</td>
             </tr>
             <tr v-for="it in items" :key="it.id" class="border-b border-slate-800/80">
               <td class="whitespace-nowrap px-2 py-2 pr-1 align-top font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
               <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.host">{{ it.host || '—' }}</td>
               <td class="whitespace-nowrap px-2 py-2 pr-1 align-top">{{ it.method }}</td>
+              <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs text-slate-400" :title="it.user_agent || ''">{{ it.user_agent || '—' }}</td>
               <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.path">{{ it.path }}</td>
               <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs" :title="it.client_ip || ''">{{ it.client_ip || '—' }}</td>
               <td class="min-w-0 truncate px-2 py-2 pr-1 align-top font-mono text-xs text-slate-500" :title="it.tcp_peer || ''">{{ it.tcp_peer || '—' }}</td>
@@ -101,6 +104,7 @@ type Row = {
   backend_name?: string
   protocol?: string
   country_code?: string
+  user_agent?: string
   upstream_base: string
   outcome: string
   created_at: string

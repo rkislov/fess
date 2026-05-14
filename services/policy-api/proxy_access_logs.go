@@ -26,7 +26,7 @@ func proxyAccessLogsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) 
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id, host, method, path, COALESCE(client_ip,''), COALESCE(tcp_peer,''), COALESCE(backend_name,''),
        upstream_base, outcome,
-       COALESCE(protocol,'http'), COALESCE(country_code,''), created_at
+       COALESCE(protocol,'http'), COALESCE(country_code,''), COALESCE(user_agent,''), created_at
 FROM proxy_access_logs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2`, limit, offset)
@@ -48,12 +48,13 @@ LIMIT $1 OFFSET $2`, limit, offset)
 		Outcome      string    `json:"outcome"`
 		Protocol     string    `json:"protocol"`
 		CountryCode  string    `json:"country_code"`
+		UserAgent    string    `json:"user_agent"`
 		CreatedAt    time.Time `json:"created_at"`
 	}
 	var out []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.ID, &it.Host, &it.Method, &it.Path, &it.ClientIP, &it.TCPPeer, &it.BackendName, &it.UpstreamBase, &it.Outcome, &it.Protocol, &it.CountryCode, &it.CreatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Host, &it.Method, &it.Path, &it.ClientIP, &it.TCPPeer, &it.BackendName, &it.UpstreamBase, &it.Outcome, &it.Protocol, &it.CountryCode, &it.UserAgent, &it.CreatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

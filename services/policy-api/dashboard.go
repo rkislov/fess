@@ -163,6 +163,11 @@ func dashboardSummaryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	byUserAgent, err := querySimpleCounts(ctx, db, since, "user_agent")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	topWAFActions, err := queryWAFActions(ctx, db, since)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -187,6 +192,7 @@ func dashboardSummaryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		"by_protocol":         byProtocol,
 		"by_outcome":          byOutcome,
 		"by_country":          byCountry,
+		"by_user_agent":       byUserAgent,
 		"top_waf_actions":     topWAFActions,
 		"top_waf_rules":       topWAFRules,
 		"rps_series":          rpsSeries,
@@ -227,6 +233,8 @@ func querySimpleCounts(ctx context.Context, db *sql.DB, since time.Time, column 
 		q = `SELECT protocol, COUNT(*)::bigint AS c FROM proxy_access_logs WHERE created_at >= $1 GROUP BY protocol ORDER BY c DESC LIMIT 20`
 	case "outcome":
 		q = `SELECT outcome, COUNT(*)::bigint AS c FROM proxy_access_logs WHERE created_at >= $1 GROUP BY outcome ORDER BY c DESC LIMIT 20`
+	case "user_agent":
+		q = `SELECT user_agent, COUNT(*)::bigint AS c FROM proxy_access_logs WHERE created_at >= $1 AND user_agent <> '' GROUP BY user_agent ORDER BY c DESC LIMIT 20`
 	default:
 		return nil, fmt.Errorf("unknown aggregate column %q", column)
 	}

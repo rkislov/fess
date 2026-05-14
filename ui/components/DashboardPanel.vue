@@ -92,6 +92,13 @@
           <canvas ref="elOutcome"></canvas>
         </div>
       </div>
+      <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-4 shadow-inner lg:col-span-2">
+        <h3 class="mb-3 text-sm font-medium text-slate-300">Топ User-Agent</h3>
+        <p class="mb-2 text-xs text-slate-500">По заголовку <span class="font-mono text-slate-400">User-Agent</span> клиента; длинные строки сокращены на оси, полный текст — в подсказке.</p>
+        <div class="relative h-[28rem] w-full">
+          <canvas ref="elUA"></canvas>
+        </div>
+      </div>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
@@ -180,6 +187,7 @@ type Summary = {
   by_protocol: CountRow[]
   by_outcome: CountRow[]
   by_country: CountryRow[]
+  by_user_agent?: CountRow[]
   top_waf_actions: WafAction[]
   top_waf_rules: WafRule[]
   rps_series?: RpsPoint[]
@@ -238,6 +246,7 @@ const elHost = ref<HTMLCanvasElement | null>(null)
 const elMethod = ref<HTMLCanvasElement | null>(null)
 const elProto = ref<HTMLCanvasElement | null>(null)
 const elOutcome = ref<HTMLCanvasElement | null>(null)
+const elUA = ref<HTMLCanvasElement | null>(null)
 const elRps = ref<HTMLCanvasElement | null>(null)
 const elMap = ref<HTMLDivElement | null>(null)
 
@@ -245,6 +254,7 @@ let chartHost: ChartType | null = null
 let chartMethod: ChartType | null = null
 let chartProto: ChartType | null = null
 let chartOutcome: ChartType | null = null
+let chartUA: ChartType | null = null
 let chartRps: ChartType | null = null
 let mapInst: LeafMap | null = null
 const markers: CircleMarker[] = []
@@ -255,6 +265,13 @@ function dashboardByCountry(s: Summary | null): CountryRow[] {
   if (!s) return []
   const x = s as Summary & { byCountry?: CountryRow[] }
   const rows = x.by_country ?? x.byCountry
+  return Array.isArray(rows) ? rows : []
+}
+
+function dashboardByUserAgent(s: Summary | null): CountRow[] {
+  if (!s) return []
+  const x = s as Summary & { byUserAgent?: CountRow[] }
+  const rows = x.by_user_agent ?? x.byUserAgent
   return Array.isArray(rows) ? rows : []
 }
 
@@ -300,11 +317,13 @@ function destroyCharts() {
   chartMethod?.destroy()
   chartProto?.destroy()
   chartOutcome?.destroy()
+  chartUA?.destroy()
   chartRps?.destroy()
   chartHost = null
   chartMethod = null
   chartProto = null
   chartOutcome = null
+  chartUA = null
   chartRps = null
 }
 
@@ -350,9 +369,17 @@ async function ensureChartLib() {
   chartPrepared = true
 }
 
-async function buildBar(canvas: HTMLCanvasElement, labels: string[], data: number[], title: string) {
+async function buildBar(
+  canvas: HTMLCanvasElement,
+  labels: string[],
+  data: number[],
+  title: string,
+  tooltipTitles?: string[],
+) {
   await ensureChartLib()
   const { Chart } = await import('chart.js')
+  const tips =
+    tooltipTitles && tooltipTitles.length === labels.length ? tooltipTitles : labels
   return new Chart(canvas, {
     type: 'bar',
     data: {
@@ -370,7 +397,20 @@ async function buildBar(canvas: HTMLCanvasElement, labels: string[], data: numbe
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              const i = items[0]?.dataIndex ?? 0
+              return tips[i] ?? ''
+            },
+            label(item) {
+              return ` ${item.formattedValue}`
+            },
+          },
+        },
+      },
       scales: {
         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.12)' } },
         y: { ticks: { color: '#cbd5e1', maxRotation: 0 }, grid: { display: false } },
@@ -516,6 +556,18 @@ async function renderCharts(s: Summary) {
       s.by_outcome.map((x) => x.count),
     )
   }
+  const uaRows = s.by_user_agent
+  if (elUA.value && uaRows?.length) {
+    const full = uaRows.map((x) => (x.key || '').trim() || '—')
+    const labels = full.map((t) => (t.length > 56 ? `${t.slice(0, 56)}…` : t))
+    chartUA = await buildBar(
+      elUA.value,
+      labels,
+      uaRows.map((x) => Number(x.count) || 0),
+      'Запросы',
+      full,
+    )
+  }
 }
 
 async function renderMap(rows: CountryRow[]) {
@@ -557,6 +609,10 @@ async function renderMap(rows: CountryRow[]) {
   }
 
   const map = L.map(elMap.value, { scrollWheelZoom: false, worldCopyJump: true }).setView([20, 0], 2)
+  // Leaflet по умолчанию добавляет SVG-флаг в префикс атрибуции; оставляем только ссылку на leafletjs.com
+  map.attributionControl.setPrefix(
+    '<a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>',
+  )
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     subdomains: 'abcd',
@@ -601,7 +657,8 @@ async function load() {
     const q = new URLSearchParams({ hours: String(hours.value) })
     const data = await $fetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
     const byCountry = dashboardByCountry(data)
-    summary.value = { ...data, by_country: byCountry }
+    const byUserAgent = dashboardByUserAgent(data)
+    summary.value = { ...data, by_country: byCountry, by_user_agent: byUserAgent }
     await renderCharts(summary.value)
     await renderRpsChart(summary.value)
     await nextTick()

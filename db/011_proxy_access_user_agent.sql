@@ -1,0 +1,1 @@
+ALTER TABLE proxy_access_logs ADD COLUMN IF NOT EXISTS user_agent TEXT NOT NULL DEFAULT '';

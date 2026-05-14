@@ -14,7 +14,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - `db/schema.sql` - PostgreSQL schema
 - `db/003_sites_backends.sql` - sites + backends tables and seed
 - `db/007_site_tls.sql` - optional TLS PEM columns on `sites`
-- `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream)
+- `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
 - `docs/openapi.yaml` - REST API contract
 - `docs/blueprint.md` - architecture and rollout plan
 - `deploy/docker-compose.yml` - local stack for development
@@ -147,7 +147,7 @@ API:
 
 **Gateway & policy logs (read via policy-api)**
 
-- `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/009`). Пагинация: query **`limit`** (по умолчанию 100, максимум 200), **`offset`**; в JSON есть **`total`**, **`limit`**, **`offset`**.
+- `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, **user_agent**, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/011`). Пагинация: query **`limit`** (по умолчанию 100, максимум 200), **`offset`**; в JSON есть **`total`**, **`limit`**, **`offset`**.
 - `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …). Те же query **`limit`** / **`offset`** и поля **`total`** в ответе.
 
 Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **`UPSTREAM_URL`**.

@@ -20,6 +20,7 @@ services:
       - ../db/008_backend_tls_skip_verify.sql:/docker-entrypoint-initdb.d/008-backend-tls-skip.sql:ro
       - ../db/009_proxy_access_peer_backend.sql:/docker-entrypoint-initdb.d/009-proxy-access-peer.sql:ro
       - ../db/010_malware_geoip.sql:/docker-entrypoint-initdb.d/010-malware-geoip.sql:ro
+      - ../db/011_proxy_access_user_agent.sql:/docker-entrypoint-initdb.d/011-proxy-access-ua.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
