@@ -69,8 +69,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # ICAP первый раз может подниматься 10–20+ минут (freshclam). API и шлюз не обязаны ждать.
       clamav-icap:
-        condition: service_healthy
+        condition: service_started
 
   clamav-icap:
     image: opencloudeu/clamav-icap:latest
@@ -114,7 +115,7 @@ services:
       redis:
         condition: service_healthy
       clamav-icap:
-        condition: service_healthy
+        condition: service_started
 
   httpbin:
     image: mccutchen/go-httpbin:latest
