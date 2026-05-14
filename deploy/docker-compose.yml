@@ -18,6 +18,7 @@ services:
       - ../db/006_proxy_access_stats.sql:/docker-entrypoint-initdb.d/006-proxy-stats.sql:ro
       - ../db/007_site_tls.sql:/docker-entrypoint-initdb.d/007-site-tls.sql:ro
       - ../db/008_backend_tls_skip_verify.sql:/docker-entrypoint-initdb.d/008-backend-tls-skip.sql:ro
+      - ../db/009_proxy_access_peer_backend.sql:/docker-entrypoint-initdb.d/009-proxy-access-peer.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -48,8 +49,8 @@ services:
       POLICY_API_LISTEN_ADDR: ":8082"
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
-      # В opencloudeu/clamav-icap clamd слушает только Unix-сокет; TCP VERSION из policy-api недоступен — 0 отключает проверку.
-      CLAMAV_CLAMD_PORT: "0"
+      # clamd TCP 3310 включается entrypoint’ом clamav-icap (только сеть Docker); см. deploy/clamav-icap-entrypoint.sh
+      CLAMAV_CLAMD_PORT: "3310"
     ports:
       - "8082:8082"
     restart: unless-stopped
@@ -73,6 +74,9 @@ services:
 
   clamav-icap:
     image: opencloudeu/clamav-icap:latest
+    entrypoint: ["/bin/sh", "/fence/clamav-icap-entrypoint.sh"]
+    volumes:
+      - ./clamav-icap-entrypoint.sh:/fence/clamav-icap-entrypoint.sh:ro
     ports:
       - "1344:1344"
     restart: unless-stopped

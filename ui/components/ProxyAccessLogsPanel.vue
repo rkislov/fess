@@ -4,7 +4,11 @@
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">Соединения к сайтам</h2>
       <p class="mt-1 text-sm text-slate-400">
-        Запросы через WAF: виртуальный хост, upstream из маршрутизации и итог (прокси, блок WAF, редирект, антивирус).
+        Запросы через WAF: виртуальный хост, выбранный бэкенд (первый по приоритету среди включённых), upstream URL, итог.
+        Колонка <strong class="text-slate-300">Клиент</strong> — эффективный IP (из
+        <span class="font-mono text-slate-400">X-Forwarded-For</span> / Real-IP, если на шлюзе задан
+        <span class="font-mono text-slate-400">WAF_TRUSTED_PROXIES</span>); <strong class="text-slate-300">TCP пир</strong> — кто
+        реально подключился к шлюзу (часто IP балансировщика).
       </p>
       <div class="mt-4">
         <button
@@ -24,23 +28,27 @@
               <th class="py-2 pr-3">Host</th>
               <th class="py-2 pr-3">Метод</th>
               <th class="py-2 pr-3">Путь</th>
-              <th class="py-2 pr-3">Клиент</th>
+              <th class="py-2 pr-3" title="После LB, если настроен WAF_TRUSTED_PROXIES">Клиент</th>
+              <th class="py-2 pr-3" title="TCP RemoteAddr (часто балансировщик)">TCP пир</th>
+              <th class="py-2 pr-3" title="Имя строки бэкенда (первый по приоритету)">Бэкенд</th>
               <th class="py-2 pr-3">Протокол</th>
               <th class="py-2 pr-3">Страна</th>
-              <th class="py-2 pr-3">Upstream</th>
+              <th class="py-2 pr-3">Upstream URL</th>
               <th class="py-2">Итог</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!items.length && !busy">
-              <td colspan="9" class="py-8 text-center text-slate-500">Нет данных — сделайте несколько запросов через шлюз и нажмите «Обновить»</td>
+              <td colspan="11" class="py-8 text-center text-slate-500">Нет данных — сделайте несколько запросов через шлюз и нажмите «Обновить»</td>
             </tr>
             <tr v-for="it in items" :key="it.id" class="border-b border-slate-800/80">
               <td class="whitespace-nowrap py-2 pr-3 font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
               <td class="py-2 pr-3 font-mono text-xs">{{ it.host }}</td>
               <td class="py-2 pr-3">{{ it.method }}</td>
               <td class="max-w-[200px] truncate py-2 pr-3 font-mono text-xs" :title="it.path">{{ it.path }}</td>
-              <td class="py-2 pr-3 font-mono text-xs">{{ it.client_ip }}</td>
+              <td class="py-2 pr-3 font-mono text-xs">{{ it.client_ip || '—' }}</td>
+              <td class="py-2 pr-3 font-mono text-xs text-slate-500">{{ it.tcp_peer || '—' }}</td>
+              <td class="py-2 pr-3 font-mono text-xs text-slate-300">{{ it.backend_name || '—' }}</td>
               <td class="py-2 pr-3 font-mono text-xs uppercase">{{ it.protocol || '—' }}</td>
               <td class="py-2 pr-3 font-mono text-xs">{{ it.country_code || '—' }}</td>
               <td class="max-w-[220px] truncate py-2 pr-3 font-mono text-xs" :title="it.upstream_base">{{ it.upstream_base }}</td>
@@ -64,6 +72,8 @@ type Row = {
   method: string
   path: string
   client_ip: string
+  tcp_peer?: string
+  backend_name?: string
   protocol?: string
   country_code?: string
   upstream_base: string

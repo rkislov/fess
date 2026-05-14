@@ -34,6 +34,8 @@ type ResolvedSite struct {
 	HostPattern string
 	Priority    int
 	Backend     *url.URL
+	// BackendName is the `backends.name` of the chosen row (first enabled by priority).
+	BackendName string
 	// TLSSkipVerify: when true and Backend uses https, gateway skips TLS certificate verification.
 	TLSSkipVerify bool
 	// PolicyID is a published policy UUID, or empty string = run all enabled policies for this host.
@@ -43,6 +45,7 @@ type ResolvedSite struct {
 // MatchResult is the routing + policy scope for a request Host.
 type MatchResult struct {
 	Backend       *url.URL
+	BackendName   string
 	PolicyID      string
 	TLSSkipVerify bool
 }
@@ -57,7 +60,12 @@ func (s Snapshot) Match(hostHeader string) MatchResult {
 	for _, site := range s.Sites {
 		if HostMatch(site.HostPattern, h) {
 			if site.Backend != nil {
-				return MatchResult{Backend: site.Backend, PolicyID: site.PolicyID, TLSSkipVerify: site.TLSSkipVerify}
+				return MatchResult{
+					Backend:       site.Backend,
+					BackendName:   site.BackendName,
+					PolicyID:      site.PolicyID,
+					TLSSkipVerify: site.TLSSkipVerify,
+				}
 			}
 		}
 	}
@@ -85,10 +93,11 @@ func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Sn
 	out := Snapshot{Default: defaultUpstream}
 
 	rows, err := db.QueryContext(ctx, `
-SELECT s.host_pattern, s.priority, sub.base_url, sub.tls_skip_verify, COALESCE(s.policy_id::text, '')
+SELECT s.host_pattern, s.priority, sub.base_url, sub.tls_skip_verify, COALESCE(s.policy_id::text, ''),
+  COALESCE(NULLIF(trim(sub.name), ''), '')
 FROM sites s
 JOIN LATERAL (
-  SELECT base_url, tls_skip_verify
+  SELECT name, base_url, tls_skip_verify
   FROM backends
   WHERE site_id = s.id AND enabled = TRUE
   ORDER BY priority ASC, created_at ASC
@@ -107,7 +116,8 @@ ORDER BY s.priority ASC, s.created_at ASC`)
 		var base string
 		var tlsSkip bool
 		var policyID string
-		if err := rows.Scan(&hostPat, &pri, &base, &tlsSkip, &policyID); err != nil {
+		var backendName string
+		if err := rows.Scan(&hostPat, &pri, &base, &tlsSkip, &policyID, &backendName); err != nil {
 			return out, err
 		}
 		u, err := url.Parse(strings.TrimSpace(base))
@@ -118,6 +128,7 @@ ORDER BY s.priority ASC, s.created_at ASC`)
 			HostPattern:   hostPat,
 			Priority:      pri,
 			Backend:       u,
+			BackendName:   strings.TrimSpace(backendName),
 			TLSSkipVerify: tlsSkip,
 			PolicyID:      strings.TrimSpace(policyID),
 		})

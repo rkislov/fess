@@ -15,7 +15,7 @@
         <div>
           <h2 class="text-lg font-semibold text-white">Дашборд трафика и защиты</h2>
           <p class="mt-1 text-sm text-slate-400">
-            Агрегаты по журналу соединений и срабатываниям WAF за выбранный период.
+            Агрегаты по журналу соединений и срабатываниям WAF за выбранный период. Данные можно подгружать автоматически (по умолчанию раз в минуту; интервал настраивается и сохраняется в браузере).
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
@@ -29,6 +29,15 @@
               <option :value="24">24 ч</option>
               <option :value="72">3 суток</option>
               <option :value="168">7 суток</option>
+            </select>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-slate-300">
+            <span>Автообновление</span>
+            <select
+              v-model.number="autoRefreshSec"
+              class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+            >
+              <option v-for="o in refreshOptions" :key="o.sec" :value="o.sec">{{ o.label }}</option>
             </select>
           </label>
           <button
@@ -177,6 +186,48 @@ const hours = ref(24)
 const busy = ref(false)
 const err = ref('')
 const summary = ref<Summary | null>(null)
+
+const REFRESH_LS_KEY = 'fence_dashboard_refresh_sec'
+const refreshOptions = [
+  { sec: 0, label: 'Выкл' },
+  { sec: 30, label: '30 с' },
+  { sec: 60, label: '1 мин' },
+  { sec: 120, label: '2 мин' },
+  { sec: 300, label: '5 мин' },
+] as const
+const allowedRefresh = new Set<number>(refreshOptions.map((o) => o.sec))
+
+function readStoredRefreshSec(): number {
+  if (!import.meta.client) return 60
+  try {
+    const raw = localStorage.getItem(REFRESH_LS_KEY)
+    if (raw == null) return 60
+    const n = parseInt(raw, 10)
+    if (!Number.isNaN(n) && allowedRefresh.has(n)) return n
+  } catch {
+    /* ignore */
+  }
+  return 60
+}
+
+const autoRefreshSec = ref(60)
+
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+function clearRefreshTimer() {
+  if (refreshTimer != null) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+function startRefreshTimer() {
+  clearRefreshTimer()
+  if (!import.meta.client || autoRefreshSec.value <= 0) return
+  refreshTimer = setInterval(() => {
+    if (!busy.value) void load()
+  }, autoRefreshSec.value * 1000)
+}
 
 const elHost = ref<HTMLCanvasElement | null>(null)
 const elMethod = ref<HTMLCanvasElement | null>(null)
@@ -529,10 +580,25 @@ async function load() {
 }
 
 onMounted(() => {
-  if (import.meta.client) load()
+  if (!import.meta.client) return
+  autoRefreshSec.value = readStoredRefreshSec()
+  void load()
+  startRefreshTimer()
+})
+
+watch(autoRefreshSec, () => {
+  if (import.meta.client) {
+    try {
+      localStorage.setItem(REFRESH_LS_KEY, String(autoRefreshSec.value))
+    } catch {
+      /* ignore */
+    }
+  }
+  startRefreshTimer()
 })
 
 onBeforeUnmount(() => {
+  clearRefreshTimer()
   destroyCharts()
   mapInst?.remove()
   mapInst = null

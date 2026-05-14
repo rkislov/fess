@@ -16,6 +16,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	fencedb "fence/db"
 	"fence/internal/bootstrap"
 	"fence/pkg/owasp"
 )
@@ -70,6 +71,14 @@ func main() {
 		return db.Ping()
 	}); err != nil {
 		log.Fatalf("postgres: %v", err)
+	}
+
+	if getenv("FENCE_SKIP_DB_MIGRATE", "") != "1" {
+		if err := fencedb.ApplyMigrations(waitCtx, db); err != nil {
+			log.Fatalf("db migrations: %v", err)
+		}
+	} else {
+		log.Printf("db migrate: skipped (FENCE_SKIP_DB_MIGRATE is set)")
 	}
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})

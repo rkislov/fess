@@ -34,7 +34,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - HTTP listener: `WAF_LISTEN_ADDR` (default `:8080`). Optional TLS listener: `WAF_TLS_LISTEN_ADDR` (empty = disabled; in `deploy/docker-compose.yml` example it is `:8443`).
 - Typical host mapping for “standard” external ports: `- "80:8080"` and `- "443:8443"` on `waf-gateway` (the container process listens on high ports; binding 80/443 on the host is fine).
 - Per-site PEM (full chain + private key) is configured in the UI; the gateway picks a certificate by SNI using the same host patterns as routing.
-- If the DB volume was created before TLS support, apply `db/007_site_tls.sql` once (same way as `003_sites_backends.sql` in Quick Start).
+- If the DB volume was created before TLS support, restart **policy-api** so embedded SQL migrations apply (`db/007_site_tls.sql`), or run that file once manually if you use an old API binary without the migration embedded.
 
 ## Quick Start (Docker)
 
@@ -42,7 +42,16 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-**`relation "sites" does not exist`:** `db/003_sites_backends.sql` runs only when Postgres creates a **new** data volume. If the volume already existed from an older checkout, apply the migration once (from repo root):
+### Database migrations (automatic)
+
+After Postgres is reachable, **policy-api** applies SQL from `db/NNN_*.sql` (e.g. `002_…`, `009_…`) in numeric order. Files are **embedded in the policy-api binary** (`fence/db`); applied versions are recorded in **`fence_schema_migrations`**. Each file runs in a transaction; a session **advisory lock** avoids races if several API instances start together.
+
+- **New migration:** add `db/010_whatever.sql` (three-digit prefix + underscore + name) and **rebuild/redeploy policy-api** so the SQL is included in the image.
+- **Emergency skip:** set **`FENCE_SKIP_DB_MIGRATE=1`** (API starts without applying migrations; use only if you must bring the process up while fixing SQL).
+
+Compose still mounts `db/schema.sql` and numbered files into Postgres **initdb** for brand-new volumes; that is **idempotent** with automigrate (migrations typically use `IF NOT EXISTS` / `ON CONFLICT DO NOTHING`). You may later simplify initdb to `schema.sql` only and rely on policy-api for the rest.
+
+**`relation "sites" does not exist`:** usually means the data volume predates `sites` and nothing applied `003`. Start a current **policy-api** build so migrations run; if the volume is from an ancient checkout without `fence_schema_migrations`, the same applies. As a last resort, run `db/003_sites_backends.sql` once:
 
 ```bash
 docker compose -f deploy/docker-compose.yml exec -T postgres \
@@ -127,7 +136,7 @@ API:
 - **`Redis ... vm.overcommit_memory`** — рекомендация ядру Linux на хосте; на десктопе чаще всего можно игнорировать или выполнить `sysctl vm.overcommit_memory=1` (см. [Redis warning](https://redis.io/docs/management/admin/)).
 - **`Exception in thread ... compose ... KeyError: 'id'`** — известный сбой **устаревшего** бинаря `docker-compose` (v1, Python) при подписке на события движка. Используйте **Compose V2**: `docker compose up` (с пробелом), а не `docker-compose`.
 - Первый запуск **`clamav-icap`** может долго ждать загрузку баз; в `deploy/docker-compose.yml` для сервиса задан **healthcheck** на порт **1344**, а `policy-api` / `waf-gateway` стартуют после `service_healthy`, чтобы ICAP уже принимал соединения.
-- **`GET /api/v1/settings/malware/status` / `CLAMAV_CLAMD_PORT`**: в **`opencloudeu/clamav-icap`** clamd слушает **только Unix-сокет** внутри контейнера (TCP 3310 снаружи не открыт), поэтому проверка `VERSION` по TCP к `clamav-icap:3310` даёт `connection refused`. В compose для **`policy-api`** задано **`CLAMAV_CLAMD_PORT=0`**: TCP clamd в статусе не опрашивается, достаточно строки **ICAP**. Если clamd у вас слушает TCP на известном порту — задайте этот порт вместо `0`.
+- **`GET /api/v1/settings/malware/status` / `CLAMAV_CLAMD_PORT`**: в образе **`opencloudeu/clamav-icap`** по умолчанию clamd только на **Unix-сокете**. В нашем **`deploy/docker-compose.yml`** сервис **`clamav-icap`** запускается через **`deploy/clamav-icap-entrypoint.sh`**, который дописывает **`TCPSocket 3310`** (слушает **только внутри Docker-сети**, порт **3310 на хост не пробрасывается**). Тогда **`policy-api`** с **`CLAMAV_CLAMD_PORT=3310`** опрашивает **`VERSION`** и в UI видны **версия движка** и **ревизия сигнатур** (число после первого «/» в ответе clamd). Вне compose: либо откройте TCP clamd и укажите порт, либо задайте **`CLAMAV_CLAMD_PORT=0`**, чтобы не проверять TCP (останется только доступность **ICAP**).
 
 **Sites & backends (reverse proxy)**
 
@@ -138,20 +147,12 @@ API:
 
 **Gateway & policy logs (read via policy-api)**
 
-- `GET /api/v1/proxy-access-logs` — журнал соединений (host, upstream, исход: proxied / waf_block / redirect / malware_block); пишет **waf-gateway** в таблицу `proxy_access_logs` (см. `db/005_proxy_access_logs.sql`).
+- `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/009`).
 - `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …).
 
 Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **`UPSTREAM_URL`**.
 
-On first deploy after adding `db/002_malware_settings.sql`, existing Postgres volumes need the migration applied once (re-create volume or run the SQL manually). Same for `db/003_sites_backends.sql`, `db/004_site_policy.sql`, `db/005_proxy_access_logs.sql`, and newer numbered files under `db/` (e.g. `008_backend_tls_skip_verify.sql` for per-backend `tls_skip_verify`).
-
-**If the UI shows `column "tls_skip_verify" does not exist`:** your database predates `db/008_backend_tls_skip_verify.sql`. Apply it once from the repo root (stack running, same compose file as usual):
-
-```bash
-docker compose -f deploy/docker-compose.yml exec -T postgres psql -U fence -d fence -c "ALTER TABLE backends ADD COLUMN IF NOT EXISTS tls_skip_verify BOOLEAN NOT NULL DEFAULT FALSE;"
-```
-
-Or pipe the full file (includes `COMMENT`): `docker compose -f deploy/docker-compose.yml exec -T postgres psql -U fence -d fence -f - < db/008_backend_tls_skip_verify.sql` (paths relative to repo root).
+If the UI or API reports missing columns after `git pull`, **restart policy-api** (or redeploy the image) so automigrations run. Manual `psql` is only needed if you temporarily run an **old policy-api binary** that does not yet embed the new `db/NNN_*.sql` file.
 
 ## Multi-platform Docker (arm64 / amd64)
 
