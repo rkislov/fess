@@ -34,7 +34,14 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes", "--appendfilename", "appendonly.aof"]
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--appendfilename",
+        "appendonly.aof",
+      ]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -109,8 +116,9 @@ services:
       REDIS_ADDR: "redis:6379"
       GEOIP_MMDB_PATH: /var/lib/fence/geoip/GeoLite2-Country.mmdb
       # За балансировщиком / Nginx: CIDR тех, кто **TCP-подключается к waf-gateway** (см. колонку «TCP пир» в журнале соединений).
-      # Это не то же самое, что set_real_ip_from в Nginx (там — «кто перед Nginx»). Пример вашей подсети:
-      # WAF_TRUSTED_PROXIES: "10.20.30.0/28"
+      # Не то же самое, что set_real_ip_from в Nginx. Если пир не в списке — X-Forwarded-For не доверяется (client_ip = TCP-пир).
+      # Для локального compose: обычно 172.16/12; с хоста через Docker Desktop часто 192.168.x. В проде сузьте до подсети вашего LB/Nginx.
+      WAF_TRUSTED_PROXIES: "172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,10.0.0.0/8"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip:ro
     ports:
