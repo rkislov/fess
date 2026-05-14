@@ -7,6 +7,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - `services/waf-gateway` - reverse proxy and enforcement engine
 - `services/policy-api` - management API for policies/rules/logs/sites
 - `pkg/engine` - rule matching/evaluation primitives
+- `pkg/owasp` - embedded OWASP CRS–style rule packs (`data/crs_bundle_v1.json`, `crs_lite_v1.json`)
 - `pkg/policy` - active policy snapshot store (atomic swap)
 - `pkg/routing` - virtual host → upstream resolution for the gateway
 - `pkg/tlssites` - TLS keypairs per site (SNI) for HTTPS on the gateway
@@ -92,12 +93,18 @@ List embedded packs:
 curl -sS http://localhost:8082/api/v1/owasp/packs
 ```
 
-Import pack `crs-lite-v1` into a new policy and publish (so gateways reload immediately):
+Import the **full** embedded pack `crs-bundle-v1` (~80 rules) or the short `crs-lite-v1` (15 rules) into a new policy and publish (so gateways reload immediately):
 
 ```bash
 curl -sS -X POST http://localhost:8082/api/v1/owasp/import \
   -H 'content-type: application/json' \
-  -d '{"pack_id":"crs-lite-v1","policy_name":"OWASP CRS Lite","mode":"log","publish":true}'
+  -d '{"pack_id":"crs-bundle-v1","policy_name":"OWASP CRS","mode":"log","publish":true}'
+```
+
+Download the raw JSON for a pack (all rules, no truncation):
+
+```bash
+curl -sS -o owasp-pack.json 'http://localhost:8082/api/v1/owasp/pack?pack_id=crs-bundle-v1'
 ```
 
 This is **not** a full ModSecurity CRS port: rules are expressed in Fence’s `condition_json` schema (subset of CRS ideas). The canonical CRS lives at [coreruleset/coreruleset](https://github.com/coreruleset/coreruleset).
