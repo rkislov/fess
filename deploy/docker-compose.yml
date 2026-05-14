@@ -48,8 +48,8 @@ services:
       POLICY_API_LISTEN_ADDR: ":8082"
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
-      # Порт clamd внутри хоста ICAP (для VERSION / даты сигнатур в панели).
-      CLAMAV_CLAMD_PORT: "3310"
+      # В opencloudeu/clamav-icap clamd слушает только Unix-сокет; TCP VERSION из policy-api недоступен — 0 отключает проверку.
+      CLAMAV_CLAMD_PORT: "0"
     ports:
       - "8082:8082"
     restart: unless-stopped

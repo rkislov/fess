@@ -127,6 +127,7 @@ API:
 - **`Redis ... vm.overcommit_memory`** — рекомендация ядру Linux на хосте; на десктопе чаще всего можно игнорировать или выполнить `sysctl vm.overcommit_memory=1` (см. [Redis warning](https://redis.io/docs/management/admin/)).
 - **`Exception in thread ... compose ... KeyError: 'id'`** — известный сбой **устаревшего** бинаря `docker-compose` (v1, Python) при подписке на события движка. Используйте **Compose V2**: `docker compose up` (с пробелом), а не `docker-compose`.
 - Первый запуск **`clamav-icap`** может долго ждать загрузку баз; в `deploy/docker-compose.yml` для сервиса задан **healthcheck** на порт **1344**, а `policy-api` / `waf-gateway` стартуют после `service_healthy`, чтобы ICAP уже принимал соединения.
+- **`GET /api/v1/settings/malware/status` / `CLAMAV_CLAMD_PORT`**: в **`opencloudeu/clamav-icap`** clamd слушает **только Unix-сокет** внутри контейнера (TCP 3310 снаружи не открыт), поэтому проверка `VERSION` по TCP к `clamav-icap:3310` даёт `connection refused`. В compose для **`policy-api`** задано **`CLAMAV_CLAMD_PORT=0`**: TCP clamd в статусе не опрашивается, достаточно строки **ICAP**. Если clamd у вас слушает TCP на известном порту — задайте этот порт вместо `0`.
 
 **Sites & backends (reverse proxy)**
 
