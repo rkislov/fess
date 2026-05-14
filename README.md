@@ -51,7 +51,7 @@ docker compose -f deploy/docker-compose.yml exec -T postgres \
 
 Or with a local client: `psql "postgres://fence:fence@localhost:5432/fence?sslmode=disable" -f db/003_sites_backends.sql`.
 
-To wipe the DB and re-run all init scripts (destructive): `docker compose -f deploy/docker-compose.yml down -v` then `up -d` again.
+**Persistence:** `deploy/docker-compose.yml` mounts **named volumes** `postgres_data` (PostgreSQL cluster) and `redis_data` (Redis AOF under `/data`). Обычный перезапуск контейнеров (`docker compose restart` или `down` без `-v`) **не удаляет** эти данные. Чтобы полностью стереть БД и Redis и заново прогнать init-скрипты Postgres: `docker compose -f deploy/docker-compose.yml down -v`, затем `up -d` (флаг `-v` удаляет именованные тома проекта).
 
 Optional demo seed:
 
