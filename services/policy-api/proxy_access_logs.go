@@ -11,13 +11,25 @@ func proxyAccessLogsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) 
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	limit, offset, err := parseListPagination(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var total int64
+	if err := db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM proxy_access_logs`).Scan(&total); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id, host, method, path, COALESCE(client_ip,''), COALESCE(tcp_peer,''), COALESCE(backend_name,''),
        upstream_base, outcome,
        COALESCE(protocol,'http'), COALESCE(country_code,''), created_at
 FROM proxy_access_logs
 ORDER BY created_at DESC
-LIMIT 300`)
+LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -47,5 +59,5 @@ LIMIT 300`)
 		}
 		out = append(out, it)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "total": total, "limit": limit, "offset": offset})
 }

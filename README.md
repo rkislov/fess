@@ -136,7 +136,7 @@ API:
 - **`Redis ... vm.overcommit_memory`** — рекомендация ядру Linux на хосте; на десктопе чаще всего можно игнорировать или выполнить `sysctl vm.overcommit_memory=1` (см. [Redis warning](https://redis.io/docs/management/admin/)).
 - **`Exception in thread ... compose ... KeyError: 'id'`** — известный сбой **устаревшего** бинаря `docker-compose` (v1, Python) при подписке на события движка. Используйте **Compose V2**: `docker compose up` (с пробелом), а не `docker-compose`.
 - Первый запуск **`clamav-icap`** может долго поднимать **1344** (freshclam + clamd + c-icap). В compose **`policy-api`** и **`waf-gateway`** ждут только **`service_started`** у `clamav-icap`, а не `service_healthy`, чтобы стек не зависел от десятков минут первой загрузки баз; healthcheck на 1344 по-прежнему показывает готовность в `docker compose ps`. Пока ICAP недоступен, сканирование в шлюзе ведёт себя по **`fail_open`** в настройках malware.
-- **`GET /api/v1/settings/malware/status` / `CLAMAV_CLAMD_PORT`**: в образе **`opencloudeu/clamav-icap`** по умолчанию clamd только на **Unix-сокете**. В нашем **`deploy/docker-compose.yml`** сервис **`clamav-icap`** запускается через **`deploy/clamav-icap-entrypoint.sh`**, который дописывает **`TCPSocket 3310`** (слушает **только внутри Docker-сети**, порт **3310 на хост не пробрасывается**). Тогда **`policy-api`** с **`CLAMAV_CLAMD_PORT=3310`** опрашивает **`VERSION`** и в UI видны **версия движка** и **ревизия сигнатур** (число после первого «/» в ответе clamd). Вне compose: либо откройте TCP clamd и укажите порт, либо задайте **`CLAMAV_CLAMD_PORT=0`**, чтобы не проверять TCP (останется только доступность **ICAP**).
+- **`GET /api/v1/settings/malware/status` / `CLAMAV_CLAMD_PORT`**: в образе **`opencloudeu/clamav-icap`** по умолчанию clamd только на **Unix-сокете**, процесс идёт под **`clamav`** без записи в **`/etc/clamav`**. **`deploy/clamav-icap-entrypoint.sh`** копирует **`clamd.conf`** в **`/tmp`**, дописывает **`TCPSocket 3310`** / **`TCPAddr 0.0.0.0`** и запускает **`clamd -c …`** (порт **3310** только внутри Docker-сети, на хост не пробрасывается). Тогда **`policy-api`** с **`CLAMAV_CLAMD_PORT=3310`** опрашивает **`VERSION`** и в UI видны **версия движка** и **ревизия сигнатур** (число после первого «/» в ответе clamd). Вне compose: либо откройте TCP clamd и укажите порт, либо задайте **`CLAMAV_CLAMD_PORT=0`**, чтобы не проверять TCP (останется только доступность **ICAP**).
 
 **Sites & backends (reverse proxy)**
 
@@ -147,8 +147,8 @@ API:
 
 **Gateway & policy logs (read via policy-api)**
 
-- `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/009`).
-- `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …).
+- `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/009`). Пагинация: query **`limit`** (по умолчанию 100, максимум 200), **`offset`**; в JSON есть **`total`**, **`limit`**, **`offset`**.
+- `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …). Те же query **`limit`** / **`offset`** и поля **`total`** в ответе.
 
 Live reload: Redis `routing_updated`. If nothing matches `Host`, gateway uses **`UPSTREAM_URL`**.
 

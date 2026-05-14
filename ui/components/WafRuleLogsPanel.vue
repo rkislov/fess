@@ -6,7 +6,7 @@
       <p class="mt-1 text-sm text-slate-400">
         Записи из шлюза: сработала конкретная политика/правило, блокировка вредоносного ПО и эффективное действие.
       </p>
-      <div class="mt-4">
+      <div class="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
@@ -33,7 +33,7 @@
             <tr v-if="!items.length && !busy">
               <td colspan="7" class="py-8 text-center text-slate-500">Нет записей — правила пишутся при совпадении (и при блоке malware)</td>
             </tr>
-            <tr v-for="(it, idx) in items" :key="idx" class="border-b border-slate-800/80">
+            <tr v-for="(it, idx) in items" :key="rowKey(it, idx)" class="border-b border-slate-800/80">
               <td class="whitespace-nowrap py-2 pr-3 font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
               <td class="py-2 pr-3">
                 <span class="rounded-md bg-slate-800 px-2 py-0.5 text-xs">{{ it.action }}</span>
@@ -49,6 +49,15 @@
           </tbody>
         </table>
       </div>
+      <LogPaginationBar
+        class="mt-4"
+        :total="total"
+        :page="page"
+        :page-size="pageSize"
+        :busy="busy"
+        @update:page="onPage"
+        @update:page-size="onPageSize"
+      />
     </section>
   </div>
 </template>
@@ -71,6 +80,24 @@ type Row = {
 const items = ref<Row[]>([])
 const err = ref('')
 const busy = ref(false)
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(100)
+
+function rowKey(it: Row, idx: number) {
+  return `${it.request_id}:${it.created_at}:${idx}`
+}
+
+function onPage(p: number) {
+  page.value = p
+  void load()
+}
+
+function onPageSize(n: number) {
+  pageSize.value = n
+  page.value = 1
+  void load()
+}
 
 function fmt(iso: string) {
   try {
@@ -99,8 +126,15 @@ async function load() {
   busy.value = true
   err.value = ''
   try {
-    const data = await $fetch<{ items: Row[] }>(apiUrl('/logs'))
+    const offset = (page.value - 1) * pageSize.value
+    const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
+    const data = await $fetch<{ items: Row[]; total: number; limit: number; offset: number }>(
+      apiUrl(`/logs?${q.toString()}`),
+    )
     items.value = data.items || []
+    total.value = typeof data.total === 'number' ? data.total : 0
+    const pages = Math.max(1, Math.ceil(total.value / pageSize.value))
+    if (page.value > pages) page.value = pages
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }
     err.value = fe?.data?.error || fe?.message || String(e)

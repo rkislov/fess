@@ -250,7 +250,7 @@ func queryCountryCounts(ctx context.Context, db *sql.DB, since time.Time) ([]cou
 	rows, err := db.QueryContext(ctx, `
 SELECT country_code, COUNT(*)::bigint AS c
 FROM proxy_access_logs
-WHERE created_at >= $1 AND country_code <> ''
+WHERE created_at >= $1
 GROUP BY country_code
 ORDER BY c DESC
 LIMIT 40`, since)

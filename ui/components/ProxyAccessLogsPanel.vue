@@ -13,7 +13,7 @@
         <span class="font-mono text-slate-400">WAF_TRUSTED_PROXIES</span>); <strong class="text-slate-300">TCP пир</strong> — кто
         реально подключился к шлюзу (часто IP балансировщика).
       </p>
-      <div class="mt-4">
+      <div class="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
@@ -75,6 +75,15 @@
           </tbody>
         </table>
       </div>
+      <LogPaginationBar
+        class="mt-4"
+        :total="total"
+        :page="page"
+        :page-size="pageSize"
+        :busy="busy"
+        @update:page="onPage"
+        @update:page-size="onPageSize"
+      />
     </section>
   </div>
 </template>
@@ -100,6 +109,20 @@ type Row = {
 const items = ref<Row[]>([])
 const err = ref('')
 const busy = ref(false)
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(100)
+
+function onPage(p: number) {
+  page.value = p
+  void load()
+}
+
+function onPageSize(n: number) {
+  pageSize.value = n
+  page.value = 1
+  void load()
+}
 
 function labelOutcome(o: string) {
   const m: Record<string, string> = {
@@ -123,8 +146,13 @@ async function load() {
   busy.value = true
   err.value = ''
   try {
-    const data = await $fetch<{ items: Row[] }>(apiUrl('/proxy-access-logs'))
+    const offset = (page.value - 1) * pageSize.value
+    const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
+    const data = await $fetch<{ items: Row[]; total: number }>(apiUrl(`/proxy-access-logs?${q.toString()}`))
     items.value = data.items || []
+    total.value = typeof data.total === 'number' ? data.total : 0
+    const pages = Math.max(1, Math.ceil(total.value / pageSize.value))
+    if (page.value > pages) page.value = pages
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }
     err.value = fe?.data?.error || fe?.message || String(e)

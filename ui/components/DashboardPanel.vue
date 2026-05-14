@@ -140,10 +140,16 @@
           </thead>
           <tbody>
             <tr v-if="!countryRows.length">
-              <td colspan="2" class="py-6 text-center text-slate-500">Нет данных по странам за период</td>
+              <td colspan="2" class="py-6 text-center text-slate-500">
+                Нет записей в журнале соединений за выбранный период (или данные ещё не подгрузились).
+              </td>
             </tr>
-            <tr v-for="c in countryRows" :key="c.country_code" class="border-b border-slate-800/80">
-              <td class="py-2 pr-3 font-mono">{{ c.country_code }}</td>
+            <tr
+              v-for="(c, idx) in countryRows"
+              :key="c.country_code ? c.country_code : 'unknown-' + idx"
+              class="border-b border-slate-800/80"
+            >
+              <td class="py-2 pr-3 font-mono">{{ c.country_code ? c.country_code : '—' }}</td>
               <td class="py-2">{{ c.count }}</td>
             </tr>
           </tbody>
@@ -245,7 +251,14 @@ const markers: CircleMarker[] = []
 
 let chartPrepared = false
 
-const countryRows = computed(() => summary.value?.by_country || [])
+function dashboardByCountry(s: Summary | null): CountryRow[] {
+  if (!s) return []
+  const x = s as Summary & { byCountry?: CountryRow[] }
+  const rows = x.by_country ?? x.byCountry
+  return Array.isArray(rows) ? rows : []
+}
+
+const countryRows = computed(() => dashboardByCountry(summary.value))
 
 const rpsBucketHint = computed(() => {
   const raw = summary.value?.rps_bucket_interval || ''
@@ -507,8 +520,8 @@ async function renderCharts(s: Summary) {
 
 async function renderMap(rows: CountryRow[]) {
   if (!import.meta.client || !elMap.value) return
-  const L = (await import('leaflet')).default
   await import('leaflet/dist/leaflet.css')
+  const L = (await import('leaflet')).default
 
   for (const m of markers) {
     try {
@@ -518,13 +531,28 @@ async function renderMap(rows: CountryRow[]) {
     }
   }
   markers.length = 0
-  mapInst?.remove()
+  try {
+    mapInst?.remove()
+  } catch {
+    /* ignore */
+  }
   mapInst = null
 
-  const pts = rows.filter((r) => r.lat !== 0 || r.lon !== 0)
+  // Leaflet needs an empty container. A previous "no data" pass sets innerHTML — clear before L.map.
+  elMap.value.innerHTML = ''
+
+  const pts = rows
+    .map((r) => ({
+      ...r,
+      lat: Number(r.lat),
+      lon: Number(r.lon),
+      count: Number(r.count) || 0,
+    }))
+    .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon) && (r.lat !== 0 || r.lon !== 0))
+
   if (!pts.length) {
     elMap.value.innerHTML =
-      '<div class="flex h-full items-center justify-center text-sm text-slate-500">Нет координат для карты (нет кодов стран или неизвестные коды)</div>'
+      '<div class="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">Нет координат для карты: в логах нет кода страны (нужен GeoIP MMDB на шлюзе или заголовок CF-IPCountry) либо код страны не найден в справочнике центроидов.</div>'
     return
   }
 
@@ -558,6 +586,12 @@ async function renderMap(rows: CountryRow[]) {
   } catch {
     map.setView([pts[0].lat, pts[0].lon], 3)
   }
+
+  await nextTick()
+  requestAnimationFrame(() => {
+    map.invalidateSize()
+    requestAnimationFrame(() => map.invalidateSize())
+  })
 }
 
 async function load() {
@@ -566,10 +600,12 @@ async function load() {
   try {
     const q = new URLSearchParams({ hours: String(hours.value) })
     const data = await $fetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
-    summary.value = data
-    await renderCharts(data)
-    await renderRpsChart(data)
-    await renderMap(data.by_country || [])
+    const byCountry = dashboardByCountry(data)
+    summary.value = { ...data, by_country: byCountry }
+    await renderCharts(summary.value)
+    await renderRpsChart(summary.value)
+    await nextTick()
+    await renderMap(byCountry)
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }
     err.value = fe?.data?.error || fe?.message || String(e)
@@ -599,7 +635,11 @@ watch(autoRefreshSec, () => {
 onBeforeUnmount(() => {
   clearRefreshTimer()
   destroyCharts()
-  mapInst?.remove()
+  try {
+    mapInst?.remove()
+  } catch {
+    /* ignore */
+  }
   mapInst = null
   markers.length = 0
 })

@@ -37,12 +37,12 @@ type policyUpdateRequest struct {
 }
 
 type ruleCreateRequest struct {
-	Name       string          `json:"name"`
-	Action     string          `json:"action"`
-	Priority   int             `json:"priority"`
-	Condition  json.RawMessage `json:"condition_json"`
-	Transform  json.RawMessage `json:"transform_json"`
-	Enabled    *bool           `json:"enabled"`
+	Name      string          `json:"name"`
+	Action    string          `json:"action"`
+	Priority  int             `json:"priority"`
+	Condition json.RawMessage `json:"condition_json"`
+	Transform json.RawMessage `json:"transform_json"`
+	Enabled   *bool           `json:"enabled"`
 }
 
 type importOWASPRequest struct {
@@ -297,21 +297,37 @@ func logsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
+	limit, offset, err := parseListPagination(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var total int64
+	if action == "" {
+		err = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM waf_logs`).Scan(&total)
+	} else {
+		err = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM waf_logs WHERE action = $1`, action).Scan(&total)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	var rows *sql.Rows
-	var err error
 	if action == "" {
 		rows, err = db.QueryContext(r.Context(), `
 SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
 FROM waf_logs
 ORDER BY created_at DESC
-LIMIT 200`)
+LIMIT $1 OFFSET $2`, limit, offset)
 	} else {
 		rows, err = db.QueryContext(r.Context(), `
 SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
 FROM waf_logs
 WHERE action = $1
 ORDER BY created_at DESC
-LIMIT 200`, action)
+LIMIT $2 OFFSET $3`, action, limit, offset)
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -339,7 +355,7 @@ LIMIT 200`, action)
 		}
 		out = append(out, it)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": out, "total": total, "limit": limit, "offset": offset})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -643,10 +659,10 @@ VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::jsonb, $7::jsonb, TRUE)`,
 	})
 
 	resp := map[string]any{
-		"policy_id":  policyID,
-		"pack_id":    pack.PackID,
-		"rules":      ruleCount,
-		"published":  false,
+		"policy_id":       policyID,
+		"pack_id":         pack.PackID,
+		"rules":           ruleCount,
+		"published":       false,
 		"publish_version": nil,
 	}
 
