@@ -113,6 +113,15 @@
               Отключить правило
             </button>
             <button
+              v-if="detail.rule.enabled && detail.rule.action !== 'block'"
+              type="button"
+              class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50"
+              :disabled="ruleBusy"
+              @click="ruleAction('block')"
+            >
+              Включить блокировку
+            </button>
+            <button
               v-if="detail.rule.enabled && detail.rule.action !== 'log'"
               type="button"
               class="rounded-lg border border-amber-600/50 bg-amber-950/40 px-4 py-2 text-sm text-amber-100 hover:bg-amber-900/40 disabled:opacity-50"
@@ -249,7 +258,7 @@ async function runAi() {
   }
 }
 
-async function ruleAction(action: 'enable' | 'disable' | 'log_only') {
+async function ruleAction(action: 'enable' | 'disable' | 'log_only' | 'block') {
   if (!detail.value?.rule?.id) return
   ruleBusy.value = true
   actionMsg.value = ''
@@ -264,7 +273,9 @@ async function ruleAction(action: 'enable' | 'disable' | 'log_only') {
         ? 'Правило включено и политика опубликована на шлюз.'
         : action === 'disable'
           ? 'Правило отключено и политика опубликована.'
-          : 'Правило переведено в режим «только log» и политика опубликована.'
+          : action === 'block'
+            ? 'Правило переведено в режим block и политика опубликована.'
+            : 'Правило переведено в режим «только log» и политика опубликована.'
     await load()
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }

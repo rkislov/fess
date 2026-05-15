@@ -505,7 +505,7 @@ FROM waf_logs WHERE id = $1`, eventID).Scan(
 }
 
 type ruleQuickActionRequest struct {
-	Action string `json:"action"` // enable | disable | log_only
+	Action string `json:"action"` // enable | disable | log_only | block
 }
 
 func ruleQuickActionHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
@@ -531,9 +531,9 @@ func ruleQuickActionHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 	}
 	act := strings.TrimSpace(strings.ToLower(body.Action))
 	switch act {
-	case "enable", "disable", "log_only":
+	case "enable", "disable", "log_only", "block":
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be enable, disable, or log_only"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be enable, disable, log_only, or block"})
 		return
 	}
 
@@ -565,6 +565,9 @@ FROM rules WHERE id = $1::uuid`, id).Scan(&name, &curAction, &priority, &cond, &
 	case "log_only":
 		newEnabled = true
 		newAction = "log"
+	case "block":
+		newEnabled = true
+		newAction = "block"
 	}
 
 	res, err := db.ExecContext(ctx, `
