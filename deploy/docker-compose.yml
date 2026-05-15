@@ -64,7 +64,7 @@ services:
       CLAMAV_CLAMD_PORT: "3310"
       # Вкладка «ИИ» в UI: анализ логов через внешний OpenAI-compatible API (ключ только здесь / в секретах, не в браузере).
       FENCE_AI_API_KEY: "gpustack_2ff1005cf5899ce1_1eef56a616edc42c91b42a58fdfdd0af"
-      FENCE_AI_BASE_URL: "http://http://gpustack.ai.cit.st/v1"
+      FENCE_AI_BASE_URL: "http://gpustack.ai.cit.st/v1"
       FENCE_AI_MODEL: "deepseek-r1-0528-qwen3-8b-TEST"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
