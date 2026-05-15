@@ -12,6 +12,20 @@ set -e
 
 # Match deploy default body_scan.max_bytes (20 MiB) with headroom for ICAP overhead.
 FENCE_MAX_OBJECT_BYTES=33554432
+CLAMD_SOCKET=/var/run/clamav/clamd.ctl
+
+wait_clamd_ready() {
+  n=0
+  while [ "$n" -lt 90 ]; do
+    if [ -S "$CLAMD_SOCKET" ]; then
+      return 0
+    fi
+    n=$((n + 1))
+    sleep 2
+  done
+  echo "WARN: clamd socket $CLAMD_SOCKET not ready after 180s; starting c-icap anyway"
+  return 0
+}
 
 CLAMD_CFG=/etc/clamav/clamd.conf
 if ! grep -qE '^[[:space:]]*TCPSocket[[:space:]]' "$CLAMD_CFG" 2>/dev/null; then
@@ -23,11 +37,13 @@ if ! grep -qE '^[[:space:]]*StreamMaxLength[[:space:]]' "$CLAMD_CFG" 2>/dev/null
   printf '\n# fence: allow scanning bodies up to waf-gateway body_scan.max_bytes\nStreamMaxLength 32M\nMaxFileSize 32M\n' >> "$CLAMD_CFG"
 fi
 
-echo "INFO: Starting freshclam"
-freshclam -d -c 6
+# Do not block ICAP on a full freshclam run (can take 15+ minutes on first boot).
+echo "INFO: Starting freshclam (background; ICAP will start with bundled DB)"
+freshclam -d -c 6 &
 
 echo "INFO: Starting clamd (config $CLAMD_CFG)"
 clamd -c "$CLAMD_CFG"
+wait_clamd_ready
 
 CICAP_CFG=/tmp/c-icap-fence.conf
 cp /etc/c-icap/c-icap.conf "$CICAP_CFG"
@@ -35,22 +51,8 @@ cp /etc/c-icap/c-icap.conf "$CICAP_CFG"
   echo ""
   echo "# fence: default c-icap MaxObjectSize is 5MB — Nextcloud uploads exceed that without this"
   echo "MaxObjectSize ${FENCE_MAX_OBJECT_BYTES}"
+  echo "clamav_mod.MaxScanSize ${FENCE_MAX_OBJECT_BYTES}"
 } >> "$CICAP_CFG"
-
-if [ -f /etc/c-icap/c-icap_modules.conf ]; then
-  CICAP_MOD=/tmp/c-icap-modules-fence.conf
-  cp /etc/c-icap/c-icap_modules.conf "$CICAP_MOD"
-  if ! grep -q 'clamav_mod.MaxScanSize' "$CICAP_MOD" 2>/dev/null; then
-    {
-      echo ""
-      echo "# fence"
-      echo "clamav_mod.MaxScanSize ${FENCE_MAX_OBJECT_BYTES}"
-    } >> "$CICAP_MOD"
-  fi
-  if ! grep -q 'Include.*c-icap-modules-fence' "$CICAP_CFG" 2>/dev/null; then
-    echo "Include $CICAP_MOD" >> "$CICAP_CFG"
-  fi
-fi
 
 echo "INFO: Starting c-icap (config $CICAP_CFG, MaxObjectSize=${FENCE_MAX_OBJECT_BYTES})"
 exec c-icap -f "$CICAP_CFG" -D -N
