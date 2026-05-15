@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const icapWriteChunk = 256 << 10 // 256 KiB per write to the ICAP socket
+
 // ScanREQMOD sends encapsulated HTTP request+body to icap://host:port/service and interprets the ICAP response.
 func ScanREQMOD(ctx context.Context, host string, port int, service, method, requestURI, httpHost, contentType string, body []byte, timeout time.Duration) (clean bool, detail string, err error) {
 	if port <= 0 {
@@ -26,15 +28,6 @@ func ScanREQMOD(ctx context.Context, host string, port int, service, method, req
 
 	encap, reqBodyOffset := buildEncapsulatedHTTP(method, requestURI, httpHost, contentType, body)
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "REQMOD icap://%s:%d/%s ICAP/1.0\r\n", host, port, service)
-	fmt.Fprintf(&sb, "Host: %s:%d\r\n", host, port)
-	sb.WriteString("User-Agent: Fence-WAF/1.0\r\n")
-	sb.WriteString("Allow: 204\r\n")
-	fmt.Fprintf(&sb, "Encapsulated: req-hdr=0, req-body=%d\r\n", reqBodyOffset)
-	sb.WriteString("\r\n")
-	sb.Write(encap)
-
 	d := net.Dialer{Timeout: timeout}
 	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -47,7 +40,7 @@ func ScanREQMOD(ctx context.Context, host string, port int, service, method, req
 	}
 	_ = conn.SetDeadline(deadline)
 
-	if _, err := conn.Write([]byte(sb.String())); err != nil {
+	if err := writeICAPREQMOD(conn, host, port, service, encap, reqBodyOffset); err != nil {
 		return false, "", err
 	}
 
@@ -103,7 +96,35 @@ func ScanREQMOD(ctx context.Context, host string, port int, service, method, req
 	return false, firstLine, fmt.Errorf("icap: unexpected response")
 }
 
+// writeICAPREQMOD sends REQMOD with ICAP-level Content-Length (RFC 3507) and streams the encapsulated body.
+func writeICAPREQMOD(w io.Writer, host string, port int, service string, encap []byte, reqBodyOffset int) error {
+	icapHdr := fmt.Sprintf(
+		"REQMOD icap://%s:%d/%s ICAP/1.0\r\n"+
+			"Host: %s:%d\r\n"+
+			"User-Agent: Fence-WAF/1.0\r\n"+
+			"Allow: 204\r\n"+
+			"Encapsulated: req-hdr=0, req-body=%d\r\n"+
+			"Content-Length: %d\r\n\r\n",
+		host, port, service, host, port, reqBodyOffset, len(encap))
+	if _, err := io.WriteString(w, icapHdr); err != nil {
+		return err
+	}
+	for off := 0; off < len(encap); off += icapWriteChunk {
+		end := off + icapWriteChunk
+		if end > len(encap) {
+			end = len(encap)
+		}
+		if _, err := w.Write(encap[off:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func buildEncapsulatedHTTP(method, requestURI, host, contentType string, body []byte) (encap []byte, reqBodyOffset int) {
+	if !strings.HasPrefix(requestURI, "/") {
+		requestURI = "/" + requestURI
+	}
 	hdr := fmt.Sprintf("%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
 		method, requestURI, host, contentType, len(body))
 	b := make([]byte, 0, len(hdr)+len(body))
