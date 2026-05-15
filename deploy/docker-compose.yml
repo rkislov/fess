@@ -23,7 +23,7 @@ services:
       - ../db/011_proxy_access_user_agent.sql:/docker-entrypoint-initdb.d/011-proxy-access-ua.sql:ro
       - ../db/012_waf_logs_host_ai.sql:/docker-entrypoint-initdb.d/012-waf-logs-host-ai.sql:ro
       - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
-      - ../db/014_malware_scan_result.sql:/docker-entrypoint-initdb.d/014-malware-scan-result.sql:ro
+      - ../db/015_malware_thor_default.sql:/docker-entrypoint-initdb.d/015-malware-thor.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -62,8 +62,8 @@ services:
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
       FENCE_GEOIP_DATA_DIR: /var/lib/fence/geoip
-      # clamd TCP 3310 включается entrypoint’ом clamav-icap (только сеть Docker); см. deploy/clamav-icap-entrypoint.sh
-      CLAMAV_CLAMD_PORT: "3310"
+      # При ICAP+ClamAV на другом хосте укажите порт TCP clamd для VERSION в UI; для THOR Lite в compose используйте 0.
+      CLAMAV_CLAMD_PORT: "0"
       # Вкладка «ИИ» в UI: анализ логов через внешний OpenAI-compatible API (ключ только здесь / в секретах, не в браузере).
       FENCE_AI_API_KEY: "gpustack_2ff1005cf5899ce1_1eef56a616edc42c91b42a58fdfdd0af"
       FENCE_AI_BASE_URL: "http://gpustack.ai.cit.st/v1"
@@ -88,26 +88,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # ICAP первый раз может подниматься 10–20+ минут (freshclam). API и шлюз не обязаны ждать.
-      clamav-icap:
+      # THOR Lite HTTP wrapper (см. deploy/thor-lite — распакуйте официальный bundle).
+      thor-scan:
         condition: service_started
 
-  clamav-icap:
-    image: opencloudeu/clamav-icap:latest
-    entrypoint: ["/bin/sh", "/fence/clamav-icap-entrypoint.sh"]
+  thor-scan:
+    build:
+      context: ..
+      dockerfile: services/thor-scan/Dockerfile
+    image: fence/thor-scan:local
+    environment:
+      THOR_DIR: /opt/thor
+      THOR_BIN: /opt/thor/thor64
+      THOR_SCAN_TIMEOUT_SEC: "120"
     volumes:
-      - ./clamav-icap-entrypoint.sh:/fence/clamav-icap-entrypoint.sh:ro
+      - ./thor-lite:/opt/thor:ro
     ports:
-      - "1344:1344"
+      - "8830:8830"
     restart: unless-stopped
-    # ICAP на 1344 после clamd + c-icap (freshclam в фоне). Первый healthy часто 1–3 мин;
-    # при медленной сети до ~15 мин — см. README / docker-compose logs clamav-icap.
     healthcheck:
-      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/1344'"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O- http://127.0.0.1:8830/healthz >/dev/null 2>&1 || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 60
-      start_period: 900s
+      start_period: 60s
 
   waf-gateway:
     build:
@@ -138,7 +146,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      clamav-icap:
+      thor-scan:
         condition: service_started
 
   httpbin:

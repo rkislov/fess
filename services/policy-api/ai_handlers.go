@@ -273,7 +273,7 @@ LIMIT $1`, limit)
 		if err := rows.Scan(&ts, &action, &pol, &rule, &sip, &meth, &path, &det); err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&b, "%s | %s | policy=%s rule=%s | %s %s | details=%s\n",
+		fmt.Fprintf(&b, "%s | %s | policy=%s rule=%s | %s | %s %s | details=%s\n",
 			ts.UTC().Format(time.RFC3339), action, pol, rule, sip, meth, truncateRunes(path, aiMaxPathRunes), truncateRunes(det, 800))
 	}
 	if err := rows.Err(); err != nil {

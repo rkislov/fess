@@ -1,0 +1,4 @@
+# Ignore extracted THOR Lite binaries (download from Nextron; do not commit).
+*
+!.gitignore
+!.gitkeep
