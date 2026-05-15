@@ -21,7 +21,14 @@ func TestWriteICAPREQMODIncludesContentLength(t *testing.T) {
 	if !strings.Contains(out, "Encapsulated: req-hdr=0, req-body=") {
 		t.Fatal("missing Encapsulated")
 	}
-	if !strings.HasSuffix(out, "abc") {
-		t.Fatal("body not appended")
+	if !strings.HasSuffix(out, "3\r\nabc\r\n0\r\n\r\n") {
+		t.Fatalf("expected RFC3507 chunked encapsulation suffix, got tail %q", out[len(out)-40:])
+	}
+}
+
+func TestBuildEncapsulatedHTTPReqBodyOffset(t *testing.T) {
+	encap, off := buildEncapsulatedHTTP("PUT", "/f.pdf", "cloud.example", "application/pdf", []byte{1, 2})
+	if string(encap[off:]) != "2\r\n\x01\x02\r\n0\r\n\r\n" {
+		t.Fatalf("req-body section: %q", encap[off:])
 	}
 }

@@ -122,15 +122,21 @@ func writeICAPREQMOD(w io.Writer, host string, port int, service string, encap [
 }
 
 func buildEncapsulatedHTTP(method, requestURI, host, contentType string, body []byte) (encap []byte, reqBodyOffset int) {
-	if !strings.HasPrefix(requestURI, "/") {
+	if !strings.HasPrefix(requestURI, "/") && !strings.HasPrefix(requestURI, "http://") && !strings.HasPrefix(requestURI, "https://") {
 		requestURI = "/" + requestURI
 	}
-	hdr := fmt.Sprintf("%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
-		method, requestURI, host, contentType, len(body))
-	b := make([]byte, 0, len(hdr)+len(body))
-	b = append(b, hdr...)
-	b = append(b, body...)
-	return b, len(hdr)
+	// RFC 3507 §4.4: at req-body offset the payload MUST be HTTP chunked (hex size line + data + "0\r\n\r\n").
+	// Raw body after headers makes c-icap close the connection (reset by peer on read response).
+	hdr := fmt.Sprintf("%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: %s\r\n\r\n",
+		method, requestURI, host, contentType)
+	reqBodyOffset = len(hdr)
+	var b strings.Builder
+	b.Grow(len(hdr) + len(body) + 32)
+	b.WriteString(hdr)
+	fmt.Fprintf(&b, "%x\r\n", len(body))
+	b.Write(body)
+	b.WriteString("\r\n0\r\n\r\n")
+	return []byte(b.String()), reqBodyOffset
 }
 
 func headerValueCI(block, name string) string {
