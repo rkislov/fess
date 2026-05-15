@@ -70,6 +70,16 @@ func parsePlain(body []byte) ([]ParsedRow, error) {
 		if i := strings.IndexByte(line, '#'); i >= 0 {
 			line = strings.TrimSpace(line[:i])
 		}
+		// Q-Feeds / other vendors diff lines: +add / -remove (full replace ingest: ignore removals).
+		if strings.HasPrefix(line, "-") {
+			continue
+		}
+		if strings.HasPrefix(line, "+") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "+"))
+		}
+		if line == "" {
+			continue
+		}
 		out = append(out, ParsedRow{Indicator: line, Source: ""})
 	}
 	return out, nil
@@ -181,8 +191,9 @@ func ParseCSV(body []byte, indicatorCol, sourceCol string) ([]ParsedRow, error) 
 	return out, nil
 }
 
-// FilterBySources keeps rows whose Source is in allow (case-insensitive), or rows with unknown source
-// when allow is empty. When allow is non-empty, plain rows without a source tag are skipped.
+// FilterBySources keeps rows whose Source is in allow (case-insensitive).
+// Rows with an empty Source are always kept: plain IP lists (e.g. Q-Feeds) do not carry a source tag;
+// allowlist then only applies to formats that populate Source (CSV/NDJSON).
 func FilterBySources(rows []ParsedRow, allow map[string]struct{}) []ParsedRow {
 	if allow == nil || len(allow) == 0 {
 		return rows
@@ -190,9 +201,12 @@ func FilterBySources(rows []ParsedRow, allow map[string]struct{}) []ParsedRow {
 	var out []ParsedRow
 	for _, row := range rows {
 		tag := strings.ToLower(strings.TrimSpace(row.Source))
-		if _, ok := allow[tag]; ok {
+		if tag == "" {
 			out = append(out, row)
 			continue
+		}
+		if _, ok := allow[tag]; ok {
+			out = append(out, row)
 		}
 	}
 	return out

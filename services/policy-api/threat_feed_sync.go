@@ -58,8 +58,12 @@ UPDATE threat_feed_sync_state SET last_attempt_at = $1 WHERE singleton = 'global
 	rawInd := threatfeed.UniqueIndicators(filtered)
 	inds := threatfeed.ValidIPCIDR(rawInd)
 	if len(inds) == 0 {
-		recordThreatFeedFail(ctx, db, "no valid IP/CIDR indicators after filtering")
-		return errors.New("no valid indicators parsed")
+		detail := fmt.Sprintf(
+			"no valid IP/CIDR after pipeline: parsed_rows=%d after_source_filter=%d unique=%d (plain feeds like Q-Feeds have no source column — leave «sources» empty; use full IP feed not diff-only)",
+			len(rows), len(filtered), len(rawInd),
+		)
+		recordThreatFeedFail(ctx, db, detail)
+		return fmt.Errorf("%s", detail)
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

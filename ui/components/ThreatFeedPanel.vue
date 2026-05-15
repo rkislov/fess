@@ -118,8 +118,13 @@
         <input v-model="cfg.csv_source_column" placeholder="CSV: колонка source (фильтр)" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
 
         <label class="text-sm text-slate-400 sm:col-span-2">
-          Разрешённые значения source (по строке; пусто = все)
-          <textarea v-model="sourcesStr" rows="4" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-200" />
+          Фильтр по полю source (только CSV/NDJSON с заполненным source)
+          <textarea
+            v-model="sourcesStr"
+            rows="4"
+            placeholder="Пусто — не фильтровать. Текстовый список IP (Q-Feeds) игнорирует этот блок."
+            class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-200"
+          />
         </label>
 
         <input v-model="cfg.api_key_header" placeholder="Заголовок ключа API" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono" />

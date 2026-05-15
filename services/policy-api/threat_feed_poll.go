@@ -29,7 +29,7 @@ func runThreatFeedPoller(ctx context.Context, db *sql.DB, rdb *redis.Client) {
 }
 
 func tickThreatFeedPoll(parent context.Context, db *sql.DB, rdb *redis.Client) {
-	ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, 45*time.Minute)
 	defer cancel()
 
 	threatFeedPollerMu.Lock()

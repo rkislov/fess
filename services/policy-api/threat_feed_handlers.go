@@ -153,7 +153,9 @@ func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	switch err := syncThreatFeedFromConfig(r.Context(), db, cfg); err {
+	syncCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	defer cancel()
+	switch err := syncThreatFeedFromConfig(syncCtx, db, cfg); err {
 	case nil:
 		if err := rdb.Publish(r.Context(), "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
