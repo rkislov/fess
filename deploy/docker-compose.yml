@@ -24,6 +24,7 @@ services:
       - ../db/012_waf_logs_host_ai.sql:/docker-entrypoint-initdb.d/012-waf-logs-host-ai.sql:ro
       - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
       - ../db/015_malware_thor_default.sql:/docker-entrypoint-initdb.d/015-malware-thor.sql:ro
+      - ../db/016_malware_thor_ui_settings.sql:/docker-entrypoint-initdb.d/016-malware-thor-ui.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
