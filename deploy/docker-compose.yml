@@ -23,6 +23,7 @@ services:
       - ../db/011_proxy_access_user_agent.sql:/docker-entrypoint-initdb.d/011-proxy-access-ua.sql:ro
       - ../db/012_waf_logs_host_ai.sql:/docker-entrypoint-initdb.d/012-waf-logs-host-ai.sql:ro
       - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
+      - ../db/014_malware_scan_result.sql:/docker-entrypoint-initdb.d/014-malware-scan-result.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
