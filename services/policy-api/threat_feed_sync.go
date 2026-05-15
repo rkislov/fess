@@ -99,7 +99,60 @@ WHERE singleton = 'global'
 	return nil
 }
 
+// normalizeAPIQFeedsURL fixes common portal typos/mirrors so sync works against the real endpoint.
+//
+//	api.qfeeds.com/feeds → /api.php (documented integrations use api.php; /feeds often returns HTML 404).
+//	Query typo "limit100000" instead of limit=100000 → limit=100000.
+func normalizeAPIQFeedsURL(urlStr string) string {
+	urlStr = strings.TrimSpace(urlStr)
+	u, err := url.Parse(urlStr)
+	if err != nil || u.Hostname() == "" {
+		return urlStr
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host != "api.qfeeds.com" {
+		return urlStr
+	}
+	pathTrim := strings.Trim(strings.ToLower(u.Path), "/")
+	if pathTrim == "feeds" {
+		u.Path = "/api.php"
+	}
+	q := u.Query()
+	hasExplicitLimit := strings.TrimSpace(q.Get("limit")) != ""
+	var badLimitKeys []string
+	var typoLimitDigits string
+	for k := range q {
+		kl := strings.ToLower(strings.TrimSpace(k))
+		if kl == "limit" {
+			continue
+		}
+		if !strings.HasPrefix(kl, "limit") {
+			continue
+		}
+		digits := kl[len("limit"):]
+		if digits == "" {
+			continue
+		}
+		if _, err := strconv.Atoi(digits); err != nil {
+			continue
+		}
+		badLimitKeys = append(badLimitKeys, k)
+		if typoLimitDigits == "" {
+			typoLimitDigits = digits
+		}
+	}
+	for _, k := range badLimitKeys {
+		q.Del(k)
+	}
+	if !hasExplicitLimit && typoLimitDigits != "" {
+		q.Set("limit", typoLimitDigits)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 func fetchThreatFeedHTTP(ctx context.Context, urlStr string, cfg threatfeed.Config, reqTimeout time.Duration) ([]byte, error) {
+	urlStr = normalizeAPIQFeedsURL(urlStr)
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err

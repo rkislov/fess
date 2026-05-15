@@ -79,9 +79,14 @@
           class="sm:col-span-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
         />
         <p class="sm:col-span-2 text-xs text-slate-500">
-          <strong class="font-medium text-slate-400">Q-Feeds:</strong> нужен именно скрипт
-          <span class="font-mono text-slate-400">/api.php</span> (официальные интеграции), путь
-          <span class="font-mono text-slate-400">/feeds</span> даёт 404/HTML. Дополнительно можно задать токен в поле ниже заголовком, без дубля в URL.
+          <strong class="font-medium text-slate-400">Q-Feeds:</strong> рабочий путь —
+          <span class="font-mono text-slate-400">/api.php</span>
+          ; ссылку вида
+          <span class="font-mono text-slate-400">/feeds</span>
+          синк переводит на
+          <span class="font-mono text-slate-400">api.php</span>
+          автоматически. Параметры пишите с равно:
+          <span class="font-mono text-slate-400">limit=100000</span>, а не «limit100000».
         </p>
 
         <input
