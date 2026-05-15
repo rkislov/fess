@@ -23,8 +23,8 @@ services:
       - ../db/011_proxy_access_user_agent.sql:/docker-entrypoint-initdb.d/011-proxy-access-ua.sql:ro
       - ../db/012_waf_logs_host_ai.sql:/docker-entrypoint-initdb.d/012-waf-logs-host-ai.sql:ro
       - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
-      - ../db/015_malware_thor_default.sql:/docker-entrypoint-initdb.d/015-malware-thor.sql:ro
-      - ../db/016_malware_thor_ui_settings.sql:/docker-entrypoint-initdb.d/016-malware-thor-ui.sql:ro
+      - ../db/014_malware_scan_result.sql:/docker-entrypoint-initdb.d/014-malware-scan-result.sql:ro
+      - ../db/017_malware_clamav_restore.sql:/docker-entrypoint-initdb.d/017-malware-clamav.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -63,7 +63,7 @@ services:
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
       FENCE_GEOIP_DATA_DIR: /var/lib/fence/geoip
-      # При ICAP+ClamAV на другом хосте укажите порт TCP clamd для VERSION в UI; для THOR Lite в compose используйте 0.
+      # Порт TCP clamd для probes VERSION в UI (policy-api). 0 — не проверять (часто clamd только локально к c-icap).
       CLAMAV_CLAMD_PORT: "0"
       # Вкладка «ИИ» в UI: анализ логов через внешний OpenAI-compatible API (ключ только здесь / в секретах, не в браузере).
       FENCE_AI_API_KEY: "gpustack_2ff1005cf5899ce1_1eef56a616edc42c91b42a58fdfdd0af"
@@ -89,34 +89,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # THOR Lite HTTP wrapper (см. deploy/thor-lite — распакуйте официальный bundle).
-      thor-scan:
+      clamav-icap:
         condition: service_started
 
-  thor-scan:
-    build:
-      context: ..
-      dockerfile: services/thor-scan/Dockerfile
-    image: fence/thor-scan:local
-    environment:
-      THOR_DIR: /opt/thor
-      THOR_BIN: /opt/thor/thor64
-      THOR_SCAN_TIMEOUT_SEC: "120"
-    volumes:
-      - ./thor-lite:/opt/thor:ro
-    ports:
-      - "8830:8830"
+  # ClamAV + c-icap (REQMOD для waf-gateway). Первый старт может занять несколько минут (загрузка сигнатур).
+  clamav-icap:
+    image: opencloudeu/clamav-icap:latest
     restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O- http://127.0.0.1:8830/healthz >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 60
-      start_period: 60s
+    volumes:
+      - clamav_defs:/var/lib/clamav
+    ports:
+      - "1344:1344"
 
   waf-gateway:
     build:
@@ -147,7 +130,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      thor-scan:
+      clamav-icap:
         condition: service_started
 
   httpbin:
@@ -175,3 +158,4 @@ volumes:
   postgres_data:
   redis_data:
   fence_geoip_data:
+  clamav_defs:

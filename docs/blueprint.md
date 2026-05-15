@@ -39,7 +39,8 @@ Order:
 
 Conditions:
 - method
-- path exact/regex
+- path exact / **`path_prefix`** (starts with) / contains / regex
+- **`client_ip_in`**, **`client_ip_not_in`** (CIDR/IP lists evaluated against effective client IP; see engine)
 - headers
 - query params
 - body selectors (json/xml/form-urlencoded)

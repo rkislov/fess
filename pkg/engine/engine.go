@@ -3,6 +3,7 @@ package engine
 import (
 	"io"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"fence/pkg/policy"
@@ -23,9 +24,8 @@ func NewEvaluator() *Evaluator {
 	return &Evaluator{}
 }
 
-// Evaluate runs the WAF rule chain. If sitePolicyID is non-empty, only that policy id is considered
-// (per-virtual-host binding). Empty sitePolicyID keeps legacy behavior: all enabled policies by priority.
-func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePolicyID string) Decision {
+// Evaluate runs the WAF rule chain. clientHost is the resolved client IP string (no port), same as used in logs.
+func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePolicyID, clientHost string) Decision {
 	body := readBodySafely(r)
 	path := r.URL.Path
 	query := r.URL.Query()
@@ -37,6 +37,9 @@ func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePoli
 			continue
 		}
 		for _, rule := range p.Rules {
+			if !clientIPMatchesRule(rule, clientHost) {
+				continue
+			}
 			if rule.Method != "" && !strings.EqualFold(rule.Method, r.Method) {
 				continue
 			}
@@ -44,6 +47,9 @@ func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePoli
 				continue
 			}
 			if rule.PathExact != "" && rule.PathExact != path {
+				continue
+			}
+			if rule.PathPrefix != "" && !strings.HasPrefix(path, rule.PathPrefix) {
 				continue
 			}
 			if rule.PathContains != "" && !strings.Contains(path, rule.PathContains) {
@@ -102,6 +108,48 @@ func matchHeaders(expect map[string]string, actual http.Header) bool {
 		if got == "" || !strings.Contains(strings.ToLower(got), strings.ToLower(v)) {
 			return false
 		}
+	}
+	return true
+}
+
+func parseEffectiveClient(host string) (netip.Addr, bool) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return netip.Addr{}, false
+	}
+	a, err := netip.ParseAddr(host)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	a = a.Unmap()
+	if !a.IsValid() {
+		return netip.Addr{}, false
+	}
+	return a, true
+}
+
+func prefixListContains(list []netip.Prefix, addr netip.Addr) bool {
+	for _, p := range list {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func clientIPMatchesRule(rule policy.CompiledRule, clientHost string) bool {
+	hasConstraint := len(rule.ClientIPIn) > 0 || len(rule.ClientIPNotIn) > 0
+	addr, ok := parseEffectiveClient(clientHost)
+	if hasConstraint && !ok {
+		return false
+	}
+	if len(rule.ClientIPIn) > 0 {
+		if !prefixListContains(rule.ClientIPIn, addr) {
+			return false
+		}
+	}
+	if len(rule.ClientIPNotIn) > 0 && prefixListContains(rule.ClientIPNotIn, addr) {
+		return false
 	}
 	return true
 }

@@ -117,7 +117,11 @@ func main() {
 		}
 
 		snapshot := store.Current()
-		decision := evaluator.Evaluate(r, snapshot, mr.PolicyID)
+		clientHost := ipRes.ClientHost(r)
+		if strings.TrimSpace(clientHost) == "" {
+			clientHost = clientip.PeerHost(r)
+		}
+		decision := evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
 		effectiveAction := decision.Action
 		if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
 			effectiveAction = "log"

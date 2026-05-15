@@ -161,7 +161,11 @@
       <div class="mt-6 border-t border-slate-800 pt-6">
         <h3 class="text-sm font-medium text-slate-300">Конструктор условия</h3>
         <p class="mt-1 text-xs text-slate-500">
-          Соберите <code class="text-slate-400">condition_json</code> в том же формате, что и правила OWASP-паков.
+          Условия: <span class="font-mono text-slate-400">path_exact</span>, <span class="font-mono">path_contains</span>,
+          <span class="font-mono">path_prefix</span>, <span class="font-mono">path_regex</span>,
+          <span class="font-mono">client_ip_in</span> (разрешённые IP/CIDR для срабатывания правила),
+          <span class="font-mono">client_ip_not_in</span> — правило <strong class="text-slate-400">пропускается</strong>, если клиент входит в
+          одну из перечисленных сетей (удобная пара с <span class="font-mono">block</span>: доверенные сети не попадают под блокировку этого правила).
         </p>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <div>
@@ -169,6 +173,9 @@
             <select v-model="ctor.kind" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
               <option value="path_contains">path_contains</option>
               <option value="path_exact">path_exact</option>
+              <option value="path_prefix">path_prefix (starts with)</option>
+              <option value="path_and_ip_allow">path_prefix + только эти клиентские IP/CIDR</option>
+              <option value="path_and_trusted_subnets">path_prefix + доверенные сети (остальные блок — см. текст)</option>
               <option value="body_contains">body_contains</option>
               <option value="request_uri_contains">request_uri_contains</option>
               <option value="path_regex">path_regex</option>
@@ -208,6 +215,31 @@
             <div>
               <label class="text-xs text-slate-500">Значение</label>
               <input v-model="ctor.qVal" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
+            </div>
+          </template>
+          <template v-else-if="ctor.kind === 'path_and_ip_allow' || ctor.kind === 'path_and_trusted_subnets'">
+            <div class="md:col-span-2">
+              <label class="text-xs text-slate-500">Префикс пути (path_prefix)</label>
+              <input
+                v-model="ctor.pathValue"
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-sm"
+                placeholder="/api/private/"
+              />
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-xs text-slate-500">
+                {{
+                  ctor.kind === 'path_and_ip_allow'
+                    ? 'IP/CIDR, с которых правило действует (по одному в строке или через запятую)'
+                    : 'Доверенные IP/CIDR: для них правило не срабатывает; действие block применится к клиентам вне этого списка'
+                }}
+              </label>
+              <textarea
+                v-model="ctor.ipLines"
+                rows="5"
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                placeholder="10.0.0.0/8&#10;192.168.1.42"
+              />
             </div>
           </template>
           <div v-else class="md:col-span-2">
@@ -347,6 +379,8 @@ const newRule = reactive({
 const ctor = reactive({
   kind: 'path_contains',
   value: '',
+  pathValue: '',
+  ipLines: '',
   method: 'GET',
   hdrKey: 'User-Agent',
   hdrVal: '',
@@ -391,6 +425,14 @@ async function loadPacks() {
   owasp.packId = prefer?.id || packs.value[0]?.id || ''
 }
 
+function parseIPCIDRMultiline(raw: string): string[] {
+  const parts = raw
+    .split(/[\s,;\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return [...new Set(parts)]
+}
+
 function buildCtorCondition(): Record<string, unknown> {
   const k = ctor.kind
   if (k === 'method') {
@@ -406,6 +448,15 @@ function buildCtorCondition(): Record<string, unknown> {
     if (!qk) return {}
     return { query_equals: { [qk]: ctor.qVal } }
   }
+  if (k === 'path_and_ip_allow' || k === 'path_and_trusted_subnets') {
+    const p = ctor.pathValue.trim()
+    const ips = parseIPCIDRMultiline(ctor.ipLines)
+    if (!p || !ips.length) return {}
+    if (k === 'path_and_ip_allow') {
+      return { path_prefix: p, client_ip_in: ips }
+    }
+    return { path_prefix: p, client_ip_not_in: ips }
+  }
   const v = typeof ctor.value === 'string' ? ctor.value.trim() : ''
   if (!v) return {}
   switch (k) {
@@ -413,6 +464,8 @@ function buildCtorCondition(): Record<string, unknown> {
       return { path_contains: v }
     case 'path_exact':
       return { path_exact: v }
+    case 'path_prefix':
+      return { path_prefix: v }
     case 'body_contains':
       return { body_contains: v }
     case 'request_uri_contains':

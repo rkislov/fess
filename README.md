@@ -6,7 +6,6 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 
 - `services/waf-gateway` - reverse proxy and enforcement engine
 - `services/policy-api` - management API for policies/rules/logs/sites
-- `services/thor-scan` - HTTP wrapper for **Nextron THOR Lite** (multipart `upload` → JSON `clean`); used as `external_scanner` in the default compose stack
 - `pkg/engine` - rule matching/evaluation primitives
 - `pkg/owasp` - embedded OWASP CRS–style rule packs (`data/crs_bundle_v1.json`, `crs_lite_v1.json`)
 - `pkg/policy` - active policy snapshot store (atomic swap)
@@ -117,34 +116,39 @@ Download the raw JSON for a pack (all rules, no truncation):
 curl -sS -o owasp-pack.json 'http://localhost:8082/api/v1/owasp/pack?pack_id=crs-bundle-v1'
 ```
 
-This is **not** a full ModSecurity CRS port: rules are expressed in Fence’s `condition_json` schema (subset of CRS ideas). The canonical CRS lives at [coreruleset/coreruleset](https://github.com/coreruleset/coreruleset).
+This is **not** a full ModSecurity CRS port: rules are expressed in Fence’s `condition_json` schema (subset of CRS ideas). The canonical CRS lives at [coreruleset/coreruleset](https://github.com/coreruleset/coreruleset). Дополнительно: `path_prefix` (совпадение по префиксу пути), `client_ip_in` / `client_ip_not_in` (массивы IP или CIDR: эффективный клиентский IP совпадает с тем же разрешением, что и в журналах за прокси; для `client_ip_not_in` правило **не срабатывает**, если клиент попадает в одну из перечисленных сетей).
 
-## Malware scanning (THOR Lite by default; optional external ICAP)
+## Malware scanning (ClamAV ICAP by default; optional HTTP scanner)
 
-**Default in `deploy/docker-compose.yml`:** service **`thor-scan`** exposes **`http://thor-scan:8830/scan`**. **`waf-gateway`** sends request bodies there via **`external_scanner`** (multipart field **`upload`**, JSON **`{"clean":true}`** / **`{"clean":false,"reason":"..."}`**).
+**Default in `deploy/docker-compose.yml`:** сервис **`clamav-icap`** (**`opencloudeu/clamav-icap`**) слушает **TCP 1344**, сервис ICAP **`avscan`**. В записи **`malware_settings`** по умолчанию **`icap.enabled`:** **`true`**, **`host`:** **`clamav-icap`**. **`waf-gateway`** отправляет REQMOD по RFC 3507 **до** опционального шага **`external_scanner`** (можно оставить **`url`** пустым).
 
-**ICAP REQMOD (внешние серверы):** в настройках malware включите **`icap`**, укажите **`host`** (имя или IP **любого** ICAP-сервера, доступного **из контейнера `waf-gateway`**: свой c-icap, коммерческий шлюз, облачный ICAP и т.д.), **`port`** (часто **1344**), **`service`** (часто **`avscan`** / **`srv_clamav`** для ClamAV). Шлюз выполняет REQMOD по RFC 3507; порядок цепочки: **сначала ICAP**, при «чистом» ответе — **`external_scanner`**, затем sandbox. ICAP и HTTP-сканер независимы: можно отключить один из них.
+**Внешний HTTP-сканер:** второй необязательный слой на **`external_scanner.url`** — multipart **`upload`** + **`meta`** с **`content_type`**; ответ **`{"clean":…,"reason":…}`**.
 
-- **THOR Lite bundle**: not redistributed — download Linux binaries + license from [Nextron](https://www.nextron-systems.com/thor-lite/). Unpack under **`deploy/thor-lite`** (mounted read-only into the container at **`/opt/thor`**). Set **`THOR_BIN`** / **`THOR_EXTRA_ARGS`** in compose if your binary name is not **`thor64`**.
-- **`GET /healthz`** on `thor-scan` succeeds only when **`THOR_BIN`** exists (`503` otherwise). **`policy-api`** `GET …/malware/status` derives **`GET …/healthz`** from your **`external_scanner.url`** (`…/scan` → `…/healthz`).
-- **ClamAV mirror / freshclam snippet**: **`clamav_mirror.database_mirror`** remains in settings for hosts that still use ClamAV outside compose.
+**ICAP:** можно указать **любой** ICAP-сервер (не только compose), доступный из **`waf-gateway`** — **`host`**, **`port`** (часто **1344**), **`service`** (**`avscan`** или **`srv_clamav`** для этого образа).
+
+**ClamAV mirror / freshclam snippet**: **`clamav_mirror.database_mirror`** задаёт строку для сниппета freshclam на хостах с ClamAV.
+
+Первый запуск **`clamav-icap`** может занять несколько минут (**загрузка сигнатур**). Пока демоны не готовы, REQMOD может отдавать ошибку при **`fail_open`** **`false`**; в дефолтном конфиге включён **`fail_open`** **`true`** (пропуск при сбое ICAP).
+
+**Про HTTP /health у внешнего сканера:** **`policy-api`** `GET …/malware/status` дергает **`GET …/healthz`** только если **`external_scanner.url`** не пустой (`…/scan` → `…/healthz`).
+
 - **Live reload**: saving settings publishes **`malware_settings_updated`** on Redis; **`waf-gateway`** reloads without restart.
 
 API:
 
 - `GET/PUT /api/v1/settings/malware`
-- `GET /api/v1/settings/malware/freshclam-snippet` (only if you use freshclam elsewhere)
+- `GET /api/v1/settings/malware/freshclam-snippet`
 - `GET /api/v1/settings/malware/status` — ICAP/clamd/external probe summary
 
 ### Docker compose notes
 
 - **`Exception in thread ... compose ... KeyError: 'id'`** — bug in obsolete **`docker-compose` v1**. Prefer **`docker compose`** (Compose V2).
 - **`Redis ... vm.overcommit_memory`** — host kernel tuning; often ignorable locally.
-- **`CLAMAV_CLAMD_PORT`** in **`policy-api`**: **`0`** in the default Thor stack skips clamd **`VERSION`** over TCP (UI shows clamd skipped). Set a port when probing clamd alongside ICAP elsewhere.
+- **`CLAMAV_CLAMD_PORT`** in **`policy-api`**: **`0`** (по умолчанию в compose) отключает probe **`VERSION`** к clamd по TCP; ICAP на порту **1344** проверяется отдельно. Укажите **3310**, если clamd слушает TCP на том же хосте, что и ICAP, и вы хотите версию в UI.
 
-Legacy ClamAV-on-ICAP documentation (freshclam timelines, REQMOD chunked bodies, **`opencloudeu/clamav-icap`** on **1344**, **`MaxObjectSize`** in **`virus_scan.conf`**) applies only if you run that stack instead of Thor.
+Документация по телам REQMOD, **`MaxObjectSize`** в **`virus_scan.conf`** и зеркалам freshclam см. в материалах вокруг образа **`opencloudeu/clamav-icap`** при необходимости тонкой настройки.
 
-**Sites & backends (reverse proxy)**
+### Sites & backends (reverse proxy)
 
 - `GET/POST /api/v1/sites` — virtual hosts: `host_pattern` exact (`api.example.com`), wildcard (`*.example.com`), or catch-all `*`; lower `priority` is tried first. Optional **`policy_id`**: if set, the gateway evaluates **only that enabled policy** for traffic matching the site; empty / omitted = **all** enabled policies (legacy).
 - `PUT/DELETE /api/v1/sites/{id}`
@@ -168,7 +172,7 @@ If the UI or API reports missing columns after `git pull`, **restart policy-api*
 - **Go services** (`policy-api`, `waf-gateway`): Dockerfiles use BuildKit’s `TARGETARCH` (with a `uname -m` fallback) so the binary matches the image architecture (native **arm64** on Apple Silicon, **amd64** on typical servers).
 - **Demo upstream**: `mccutchen/go-httpbin` is multi-arch (replaces `kennethreitz/httpbin`).
 - **Base images** (`postgres`, `redis`, `golang`, `alpine`, `node`, `nginx`) are official multi-arch manifests.
-- **`thor-scan`**: runs **`thor64`** (THOR Lite) inside an **`amd64`** Debian userspace binary; official Linux builds target **amd64**. On **arm64** hosts without QEMU, prepare THOR externally or build only **`linux/amd64`** Gateways images for that node.
+- **`opencloudeu/clamav-icap`**: проверьте готовность архитектуры в [Docker Hub](https://hub.docker.com/r/opencloudeu/clamav-icap) (часто есть **amd64** и **arm64**).
 
 To build and push a multi-arch manifest for Fence images (optional):
 
