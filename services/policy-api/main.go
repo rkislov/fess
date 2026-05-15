@@ -102,7 +102,21 @@ func main() {
 		policyByIDHandler(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/rules/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/rules/")
+		if strings.HasSuffix(path, "/quick-action") {
+			ruleQuickActionHandler(w, r, db, rdb)
+			return
+		}
 		ruleByIDHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/waf-rule-hits", func(w http.ResponseWriter, r *http.Request) {
+		wafRuleHitsHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/waf-log-events", func(w http.ResponseWriter, r *http.Request) {
+		wafLogEventsPathRouter(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/waf-log-events/", func(w http.ResponseWriter, r *http.Request) {
+		wafLogEventsPathRouter(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/logs", func(w http.ResponseWriter, r *http.Request) {
 		logsHandler(w, r, db)
@@ -134,6 +148,10 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/settings/geoip/fetch", func(w http.ResponseWriter, r *http.Request) {
 		postGeoIPMMDBFetch(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/ai", aiSettingsHandler)
+	mux.HandleFunc("/api/v1/ai/analyze", func(w http.ResponseWriter, r *http.Request) {
+		aiAnalyzeHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/owasp/packs", func(w http.ResponseWriter, r *http.Request) {
 		owaspPacksHandler(w, r)
@@ -327,13 +345,15 @@ func logsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var rows *sql.Rows
 	if action == "" {
 		rows, err = db.QueryContext(r.Context(), `
-SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
+SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path,
+       COALESCE(host,''), COALESCE(details, '{}'::jsonb), created_at
 FROM waf_logs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2`, limit, offset)
 	} else {
 		rows, err = db.QueryContext(r.Context(), `
-SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path, COALESCE(details, '{}'::jsonb), created_at
+SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path,
+       COALESCE(host,''), COALESCE(details, '{}'::jsonb), created_at
 FROM waf_logs
 WHERE action = $1
 ORDER BY created_at DESC
@@ -346,6 +366,7 @@ LIMIT $2 OFFSET $3`, action, limit, offset)
 	defer rows.Close()
 
 	type item struct {
+		ID        int64           `json:"id"`
 		RequestID string          `json:"request_id"`
 		PolicyID  string          `json:"policy_id"`
 		RuleID    string          `json:"rule_id"`
@@ -353,13 +374,14 @@ LIMIT $2 OFFSET $3`, action, limit, offset)
 		SourceIP  string          `json:"source_ip"`
 		Method    string          `json:"method"`
 		Path      string          `json:"path"`
+		Host      string          `json:"host"`
 		Details   json.RawMessage `json:"details"`
 		CreatedAt time.Time       `json:"created_at"`
 	}
 	var out []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.RequestID, &it.PolicyID, &it.RuleID, &it.Action, &it.SourceIP, &it.Method, &it.Path, &it.Details, &it.CreatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.RequestID, &it.PolicyID, &it.RuleID, &it.Action, &it.SourceIP, &it.Method, &it.Path, &it.Host, &it.Details, &it.CreatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

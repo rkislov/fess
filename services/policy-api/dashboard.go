@@ -34,9 +34,13 @@ type wafActionRow struct {
 }
 
 type wafRuleRow struct {
-	RuleID string `json:"rule_id"`
-	Action string `json:"action"`
-	Count  int64  `json:"count"`
+	RuleID     string `json:"rule_id"`
+	RuleName   string `json:"rule_name"`
+	PolicyID   string `json:"policy_id"`
+	PolicyName string `json:"policy_name"`
+	Action     string `json:"action"`
+	Count      int64  `json:"count"`
+	LastHitAt  string `json:"last_hit_at"`
 }
 
 type rpsPoint struct {
@@ -308,12 +312,20 @@ LIMIT 15`, since)
 
 func queryWAFRules(ctx context.Context, db *sql.DB, since time.Time) ([]wafRuleRow, error) {
 	rows, err := db.QueryContext(ctx, `
-SELECT COALESCE(rule_id::text, ''), action, COUNT(*)::bigint AS c
-FROM waf_logs
-WHERE created_at >= $1
-GROUP BY rule_id, action
+SELECT COALESCE(MAX(wl.rule_id::text), '') AS rule_id,
+       wl.action,
+       COUNT(*)::bigint AS c,
+       MAX(wl.created_at) AS last_at,
+       MAX(COALESCE(r.name, '')) AS rule_name,
+       COALESCE(MAX(wl.policy_id::text), '') AS policy_id,
+       MAX(COALESCE(p.name, '')) AS policy_name
+FROM waf_logs wl
+LEFT JOIN rules r ON r.id = wl.rule_id
+LEFT JOIN policies p ON p.id = wl.policy_id
+WHERE wl.created_at >= $1 AND wl.rule_id IS NOT NULL
+GROUP BY wl.rule_id, wl.action
 ORDER BY c DESC
-LIMIT 20`, since)
+LIMIT 10`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -321,9 +333,11 @@ LIMIT 20`, since)
 	var out []wafRuleRow
 	for rows.Next() {
 		var w wafRuleRow
-		if err := rows.Scan(&w.RuleID, &w.Action, &w.Count); err != nil {
+		var last time.Time
+		if err := rows.Scan(&w.RuleID, &w.Action, &w.Count, &last, &w.RuleName, &w.PolicyID, &w.PolicyName); err != nil {
 			return nil, err
 		}
+		w.LastHitAt = last.UTC().Format(time.RFC3339Nano)
 		out = append(out, w)
 	}
 	return out, rows.Err()

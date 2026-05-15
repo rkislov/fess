@@ -233,14 +233,15 @@ func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engi
 		"effective":      effectiveAction,
 		"originalAction": decision.Action,
 	})
+	h := hostHeader(r)
 	srcIP := ipRes.ClientHost(r)
 	if srcIP == "" {
 		srcIP = r.RemoteAddr
 	}
 	_, err := db.ExecContext(ctx, `
-INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, details)
-VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb)`,
-		requestID, decision.PolicyID, decision.RuleID, effectiveAction, srcIP, r.Method, r.URL.Path, string(details))
+INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, host, details)
+VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::jsonb)`,
+		requestID, decision.PolicyID, decision.RuleID, effectiveAction, srcIP, r.Method, r.URL.Path, h, string(details))
 	if err != nil {
 		log.Printf("failed to write waf log: %v", err)
 	}

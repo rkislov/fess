@@ -68,7 +68,23 @@
       <PoliciesPanel v-else-if="tab === 'policies'" />
       <MalwarePanel v-else-if="tab === 'antivirus'" />
       <LoggingPanel v-else-if="tab === 'logging'" />
+      <AiAssistantPanel v-else-if="tab === 'ai'" />
     </main>
+
+    <WafEventsExplorerPanel
+      v-if="hashView === 'waf-events'"
+      :initial-hours="eventsParams.hours"
+      :rule-id="eventsParams.rule_id"
+      :action="eventsParams.action"
+      @close="closeOverlay"
+      @open-event="onOpenWafEvent"
+    />
+    <WafEventDetailPanel
+      v-else-if="hashView === 'waf-event' && eventId"
+      :event-id="eventId"
+      @back="backFromEventDetail"
+      @close="closeOverlay"
+    />
   </div>
 </template>
 
@@ -76,7 +92,20 @@
 const auth = useUiAuth()
 const { authed, ready, init, logout } = auth
 
-type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'logging'
+const {
+  view: hashView,
+  eventId,
+  eventsParams,
+  openWafEventDetail,
+  closeOverlay,
+  backFromEventDetail,
+} = useHashAppView()
+
+function onOpenWafEvent(id: number) {
+  openWafEventDetail(id, eventsParams.value)
+}
+
+type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'logging' | 'ai'
 
 const tab = ref<TabId>('dashboard')
 const tabs: { id: TabId; label: string; icon: string }[] = [
@@ -85,6 +114,7 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'policies', label: 'Политики', icon: '📋' },
   { id: 'antivirus', label: 'Антивирус', icon: '🦠' },
   { id: 'logging', label: 'Логирование', icon: '📝' },
+  { id: 'ai', label: 'ИИ', icon: '✨' },
 ]
 
 onMounted(() => {

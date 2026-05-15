@@ -33,7 +33,12 @@
             <tr v-if="!items.length && !busy">
               <td colspan="7" class="py-8 text-center text-slate-500">Нет записей — правила пишутся при совпадении (и при блоке malware)</td>
             </tr>
-            <tr v-for="(it, idx) in items" :key="rowKey(it, idx)" class="border-b border-slate-800/80">
+            <tr
+              v-for="(it, idx) in items"
+              :key="rowKey(it, idx)"
+              class="cursor-pointer border-b border-slate-800/80 transition hover:bg-slate-800/40"
+              @click="openDetail(it)"
+            >
               <td class="whitespace-nowrap py-2 pr-3 font-mono text-xs text-slate-400">{{ fmt(it.created_at) }}</td>
               <td class="py-2 pr-3">
                 <span class="rounded-md bg-slate-800 px-2 py-0.5 text-xs">{{ it.action }}</span>
@@ -64,8 +69,10 @@
 
 <script setup lang="ts">
 const { apiUrl } = useApi()
+const { openWafEventDetail } = useHashAppView()
 
 type Row = {
+  id?: number
   request_id: string
   policy_id: string
   rule_id: string
@@ -85,7 +92,13 @@ const page = ref(1)
 const pageSize = ref(100)
 
 function rowKey(it: Row, idx: number) {
-  return `${it.request_id}:${it.created_at}:${idx}`
+  return it.id ? String(it.id) : `${it.request_id}:${it.created_at}:${idx}`
+}
+
+function openDetail(it: Row) {
+  if (it.id && it.id > 0) {
+    openWafEventDetail(it.id)
+  }
 }
 
 function onPage(p: number) {

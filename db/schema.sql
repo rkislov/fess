@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS waf_logs (
   source_ip TEXT,
   method TEXT,
   path TEXT,
+  host TEXT NOT NULL DEFAULT '',
+  ai_analysis TEXT NOT NULL DEFAULT '',
   details JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

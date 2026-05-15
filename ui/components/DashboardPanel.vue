@@ -118,18 +118,38 @@
         </ul>
       </section>
       <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
-        <h3 class="text-sm font-semibold text-white">Топ срабатываний по правилу</h3>
-        <p class="mt-0.5 text-xs text-slate-500">rule_id + действие</p>
-        <ul class="mt-4 space-y-2 text-sm">
-          <li v-if="!summary?.top_waf_rules?.length" class="text-slate-500">Нет записей</li>
-          <li
-            v-for="(r, i) in summary?.top_waf_rules"
-            :key="'r' + i"
-            class="flex flex-col gap-0.5 rounded-lg bg-slate-800/60 px-3 py-2 font-mono text-xs sm:flex-row sm:items-center sm:justify-between"
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Топ срабатываний по правилу</h3>
+            <p class="mt-0.5 text-xs text-slate-500">Последние 10 за период · клик — все события по правилу</p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-lg border border-teal-600/40 bg-teal-950/40 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-900/50"
+            @click="openAllWafEvents"
           >
-            <span class="truncate text-slate-300" :title="r.rule_id || '—'">{{ r.rule_id || '—' }}</span>
+            Далее →
+          </button>
+        </div>
+        <ul class="mt-4 space-y-2 text-sm">
+          <li v-if="!topWafRules.length" class="text-slate-500">Нет записей</li>
+          <li
+            v-for="(r, i) in topWafRules"
+            :key="'r' + i"
+            class="flex cursor-pointer flex-col gap-1 rounded-lg bg-slate-800/60 px-3 py-2 text-xs transition hover:bg-slate-700/80 sm:flex-row sm:items-center sm:justify-between"
+            role="button"
+            tabindex="0"
+            @click="openRuleHits(r)"
+            @keydown.enter="openRuleHits(r)"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block truncate font-medium text-slate-200" :title="r.rule_name || r.rule_id">
+                {{ r.rule_name || '—' }}
+              </span>
+              <span class="mt-0.5 block truncate font-mono text-[10px] text-slate-500" :title="r.rule_id">{{ r.rule_id }}</span>
+            </span>
             <span class="text-teal-300/90">{{ labelWafAction(r.action) }}</span>
-            <span class="text-slate-400">{{ r.count }}</span>
+            <span class="font-mono text-slate-400">{{ r.count }}</span>
           </li>
         </ul>
       </section>
@@ -171,12 +191,21 @@ import type { Map as LeafMap, CircleMarker } from 'leaflet'
 import type { Chart as ChartType } from 'chart.js'
 
 const { apiUrl } = useApi()
+const { openWafEventsExplorer, openWafEventDetail } = useHashAppView()
 
 type CountRow = { key: string; count: number }
 type HostRow = { host: string; count: number }
 type CountryRow = { country_code: string; count: number; lat: number; lon: number }
 type WafAction = { action: string; count: number }
-type WafRule = { rule_id: string; action: string; count: number }
+type WafRule = {
+  rule_id: string
+  rule_name?: string
+  policy_id?: string
+  policy_name?: string
+  action: string
+  count: number
+  last_hit_at?: string
+}
 type RpsPoint = { bucket_start: string; bucket_seconds: number; count: number; rps: number }
 
 type Summary = {
@@ -276,6 +305,20 @@ function dashboardByUserAgent(s: Summary | null): CountRow[] {
 }
 
 const countryRows = computed(() => dashboardByCountry(summary.value))
+
+const topWafRules = computed(() => (summary.value?.top_waf_rules ?? []).slice(0, 10))
+
+function openAllWafEvents() {
+  openWafEventsExplorer({ hours: hours.value })
+}
+
+function openRuleHits(r: WafRule) {
+  if (!r.rule_id) {
+    openAllWafEvents()
+    return
+  }
+  openWafEventsExplorer({ hours: hours.value, rule_id: r.rule_id, action: r.action })
+}
 
 const rpsBucketHint = computed(() => {
   const raw = summary.value?.rps_bucket_interval || ''
