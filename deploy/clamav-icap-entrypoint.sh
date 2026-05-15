@@ -6,12 +6,10 @@
 # The image runs as USER clamav — /etc/clamav/clamd.conf is not writable. Use a copy under /tmp
 # and clamd --config-file=… instead of appending to /etc.
 #
-# c-icap default MaxObjectSize is ~5MB; Fence body_scan allows up to 20MB — raise limits here
-# or ICAP closes the TCP session (connection reset by peer) on larger uploads.
+# c-icap: do NOT append MaxObjectSize / clamav_mod.* to the main c-icap.conf (fatal parse error).
+# This image sets virus_scan MaxObjectSize in /etc/c-icap/virus_scan.conf (see c-icap startup logs).
 set -e
 
-# Match deploy default body_scan.max_bytes (20 MiB) with headroom for ICAP overhead.
-FENCE_MAX_OBJECT_BYTES=33554432
 CLAMD_SOCKET=/var/run/clamav/clamd.ctl
 
 wait_clamd_ready() {
@@ -45,14 +43,5 @@ echo "INFO: Starting clamd (config $CLAMD_CFG)"
 clamd -c "$CLAMD_CFG"
 wait_clamd_ready
 
-CICAP_CFG=/tmp/c-icap-fence.conf
-cp /etc/c-icap/c-icap.conf "$CICAP_CFG"
-{
-  echo ""
-  echo "# fence: default c-icap MaxObjectSize is 5MB — Nextcloud uploads exceed that without this"
-  echo "MaxObjectSize ${FENCE_MAX_OBJECT_BYTES}"
-  echo "clamav_mod.MaxScanSize ${FENCE_MAX_OBJECT_BYTES}"
-} >> "$CICAP_CFG"
-
-echo "INFO: Starting c-icap (config $CICAP_CFG, MaxObjectSize=${FENCE_MAX_OBJECT_BYTES})"
-exec c-icap -f "$CICAP_CFG" -D -N
+echo "INFO: Starting c-icap (stock /etc/c-icap/c-icap.conf; limits in virus_scan.conf)"
+exec c-icap -f /etc/c-icap/c-icap.conf -D -N
