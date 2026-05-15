@@ -25,6 +25,7 @@ services:
       - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
       - ../db/014_malware_scan_result.sql:/docker-entrypoint-initdb.d/014-malware-scan-result.sql:ro
       - ../db/017_malware_clamav_restore.sql:/docker-entrypoint-initdb.d/017-malware-clamav.sql:ro
+      - ../db/018_threat_feed.sql:/docker-entrypoint-initdb.d/018-threat-feed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s

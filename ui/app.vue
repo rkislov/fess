@@ -67,6 +67,7 @@
       <SitesPanel v-else-if="tab === 'sites'" />
       <PoliciesPanel v-else-if="tab === 'policies'" />
       <MalwarePanel v-else-if="tab === 'antivirus'" />
+      <ThreatFeedPanel v-else-if="tab === 'qfeed'" />
       <LoggingPanel v-else-if="tab === 'logging'" />
       <AiAssistantPanel v-else-if="tab === 'ai'" />
     </main>
@@ -105,7 +106,7 @@ function onOpenWafEvent(id: number) {
   openWafEventDetail(id, eventsParams.value)
 }
 
-type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'logging' | 'ai'
+type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'qfeed' | 'logging' | 'ai'
 
 const tab = ref<TabId>('dashboard')
 const tabs: { id: TabId; label: string; icon: string }[] = [
@@ -113,6 +114,7 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'sites', label: 'Сайты', icon: '🌐' },
   { id: 'policies', label: 'Политики', icon: '📋' },
   { id: 'antivirus', label: 'Антивирус', icon: '🦠' },
+  { id: 'qfeed', label: 'Q-feed', icon: '📡' },
   { id: 'logging', label: 'Логирование', icon: '📝' },
   { id: 'ai', label: 'ИИ', icon: '✨' },
 ]

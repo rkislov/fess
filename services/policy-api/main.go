@@ -93,6 +93,8 @@ func main() {
 		log.Fatalf("redis: %v", err)
 	}
 
+	go runThreatFeedPoller(context.Background(), db, rdb)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
 	mux.HandleFunc("/api/v1/policies", func(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +147,30 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/settings/malware/freshclam-snippet", func(w http.ResponseWriter, r *http.Request) {
 		freshclamSnippetHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/threat-feed/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		getThreatFeedStatus(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/threat-feed/sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		postThreatFeedSync(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/threat-feed", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			getThreatFeedSettings(w, r, db)
+		case http.MethodPut:
+			putThreatFeedSettings(w, r, db, rdb)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
 	})
 	mux.HandleFunc("/api/v1/settings/geoip/mmdb", func(w http.ResponseWriter, r *http.Request) {
 		postGeoIPMMDBUpload(w, r, db, rdb)

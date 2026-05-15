@@ -76,17 +76,26 @@ func main() {
 
 	routeStore := routing.NewStore(upstream)
 	tlsStore := &tlssites.Store{}
+	tfStore := newThreatFeedStore()
 	proxy := newDynamicReverseProxy(upstream, routeStore, ipRes)
 	reloadPolicySnapshot(db, store)
 	reloadMalwareConfig(db, mwStore)
+	reloadThreatFeed(db, tfStore)
 	reloadRoutingTable(db, upstream, routeStore)
 	reloadTLSTable(db, tlsStore)
 	go subscribePolicyUpdates(db, rdb, store)
 	go subscribeMalwareUpdates(db, rdb, mwStore)
+	go subscribeThreatFeedUpdates(db, rdb, tfStore)
 	go subscribeGeoIPUpdates(rdb, initGeoPath)
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mr := routeStore.Current().Match(hostHeader(r))
+		gateTF := applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
+		if gateTF.Responded {
+			return
+		}
+
 		mcfg := mwStore.Current()
 		maxRead := mcfg.BodyScan.MaxBytes
 		if maxRead <= 0 {
@@ -102,8 +111,6 @@ func main() {
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
-
-		mr := routeStore.Current().Match(hostHeader(r))
 
 		if mcfg.ShouldScanHTTPRequest(r.Method, r.Header.Get("Content-Type"), int64(len(body))) {
 			v := malware.Scan(r.Context(), mcfg, r.Method, r.URL.RequestURI(), hostHeader(r), r.Header.Get("Content-Type"), body)
@@ -134,6 +141,9 @@ func main() {
 			accessOutcome = "waf_block"
 		case "redirect":
 			accessOutcome = "redirect"
+		}
+		if accessOutcome == "proxied" && gateTF.ProxyOutcomeHint != "" {
+			accessOutcome = gateTF.ProxyOutcomeHint
 		}
 		writeProxyAccessLog(r.Context(), db, r, mr, accessOutcome, ipRes)
 
