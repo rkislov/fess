@@ -22,6 +22,7 @@ services:
       - ../db/010_malware_geoip.sql:/docker-entrypoint-initdb.d/010-malware-geoip.sql:ro
       - ../db/011_proxy_access_user_agent.sql:/docker-entrypoint-initdb.d/011-proxy-access-ua.sql:ro
       - ../db/012_waf_logs_host_ai.sql:/docker-entrypoint-initdb.d/012-waf-logs-host-ai.sql:ro
+      - ../db/013_malware_scan_logs.sql:/docker-entrypoint-initdb.d/013-malware-scan-logs.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s

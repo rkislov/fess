@@ -147,6 +147,7 @@ API:
 
 **Gateway & policy logs (read via policy-api)**
 
+- `GET /api/v1/malware-scan-logs` — журнал проверок тел запросов антивирусом (чистые и с угрозой; query **`clean`** = `0`/`1`, пагинация). Пишет **waf-gateway** при каждом сканировании по правилам ICAP/сканеров (`db/013_malware_scan_logs.sql`).
 - `GET /api/v1/proxy-access-logs` — журнал соединений (host, **client_ip** после LB при настройке **`WAF_TRUSTED_PROXIES`**, **tcp_peer** — прямой TCP к шлюзу, **backend_name** — имя выбранного бэкенда с минимальным приоритетом, **user_agent**, upstream URL, исход); пишет **waf-gateway** в `proxy_access_logs` (см. `db/005` … `db/011`). Пагинация: query **`limit`** (по умолчанию 100, максимум 200), **`offset`**; в JSON есть **`total`**, **`limit`**, **`offset`**.
 - `GET /api/v1/logs` — журнал срабатываний правил и malware в `waf_logs` (policy_id, rule_id, details, …). Те же query **`limit`** / **`offset`** и поля **`total`** в ответе.
 - **ИИ-помощник (вкладка «ИИ» в UI):** `GET /api/v1/settings/ai` — не раскрывает секреты: только признак наличия ключа, имя модели и базовый URL API. **`POST /api/v1/ai/analyze`** — собирает срез последних строк из `proxy_access_logs` и/или `waf_logs` и снимок политик/правил, отправляет во внешнюю модель (**OpenAI-совместимый** `/v1/chat/completions`). Обязательно задать **`FENCE_AI_API_KEY`** для процесса **`policy-api`**; необязательно **`FENCE_AI_BASE_URL`** (по умолчанию OpenAI), **`FENCE_AI_MODEL`** (по умолчанию **`gpt-4o-mini`**). Ответ модели не применяет правила автоматически — только рекомендации.

@@ -103,17 +103,35 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
       <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
-        <h3 class="text-sm font-semibold text-white">Топ действий WAF</h3>
-        <p class="mt-0.5 text-xs text-slate-500">По журналу правил за период</p>
-        <ul class="mt-4 space-y-2 text-sm">
-          <li v-if="!summary?.top_waf_actions?.length" class="text-slate-500">Нет записей</li>
-          <li
-            v-for="(r, i) in summary?.top_waf_actions"
-            :key="'a' + i"
-            class="flex justify-between gap-3 rounded-lg bg-slate-800/60 px-3 py-2 font-mono text-xs"
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Топ действий WAF</h3>
+            <p class="mt-0.5 text-xs text-slate-500">Топ‑10 за период · клик — все события с этим действием</p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-lg border border-teal-600/40 bg-teal-950/40 px-3 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-900/50"
+            @click="openAllWafEvents"
           >
-            <span class="text-teal-300/90">{{ labelWafAction(r.action) }}</span>
-            <span class="text-slate-300">{{ r.count }}</span>
+            Далее →
+          </button>
+        </div>
+        <ul class="mt-4 space-y-2 text-sm">
+          <li v-if="!topWafActions.length" class="text-slate-500">Нет записей</li>
+          <li
+            v-for="(a, i) in topWafActions"
+            :key="'a' + i"
+            class="flex cursor-pointer flex-col gap-1 rounded-lg bg-slate-800/60 px-3 py-2 text-xs transition hover:bg-slate-700/80 sm:flex-row sm:items-center sm:justify-between"
+            role="button"
+            tabindex="0"
+            @click="openActionHits(a)"
+            @keydown.enter="openActionHits(a)"
+          >
+            <span class="min-w-0 flex-1 font-medium text-slate-200" :title="a.action">
+              {{ labelWafAction(a.action) }}
+            </span>
+            <span class="font-mono text-[10px] text-slate-500" :title="a.action">{{ a.action }}</span>
+            <span class="font-mono text-slate-400">{{ a.count }}</span>
           </li>
         </ul>
       </section>
@@ -196,7 +214,7 @@ const { openWafEventsExplorer, openWafEventDetail } = useHashAppView()
 type CountRow = { key: string; count: number }
 type HostRow = { host: string; count: number }
 type CountryRow = { country_code: string; count: number; lat: number; lon: number }
-type WafAction = { action: string; count: number }
+type WafAction = { action: string; count: number; last_hit_at?: string }
 type WafRule = {
   rule_id: string
   rule_name?: string
@@ -306,10 +324,19 @@ function dashboardByUserAgent(s: Summary | null): CountRow[] {
 
 const countryRows = computed(() => dashboardByCountry(summary.value))
 
+const topWafActions = computed(() => (summary.value?.top_waf_actions ?? []).slice(0, 10))
 const topWafRules = computed(() => (summary.value?.top_waf_rules ?? []).slice(0, 10))
 
 function openAllWafEvents() {
   openWafEventsExplorer({ hours: hours.value })
+}
+
+function openActionHits(a: WafAction) {
+  if (!a.action) {
+    openAllWafEvents()
+    return
+  }
+  openWafEventsExplorer({ hours: hours.value, action: a.action })
 }
 
 function openRuleHits(r: WafRule) {
@@ -346,11 +373,13 @@ function fmtBucketLabel(iso: string) {
 
 function labelWafAction(a: string) {
   const m: Record<string, string> = {
-    allow: 'allow',
-    block: 'block',
-    log: 'log',
-    redirect: 'redirect',
-    replace: 'replace',
+    allow: 'Разрешить',
+    block: 'Блок WAF',
+    log: 'Только лог',
+    redirect: 'Редирект',
+    replace: 'Замена',
+    malware_block: 'Блок антивируса',
+    waf_block: 'Блок WAF',
   }
   return m[a] || a
 }

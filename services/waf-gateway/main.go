@@ -107,6 +107,7 @@ func main() {
 
 		if mcfg.ShouldScanHTTPRequest(r.Method, r.Header.Get("Content-Type"), int64(len(body))) {
 			v := malware.Scan(r.Context(), mcfg, r.Method, r.URL.RequestURI(), hostHeader(r), r.Header.Get("Content-Type"), body)
+			writeMalwareScanLog(r.Context(), db, r, v, int64(len(body)), ipRes)
 			if !v.Clean {
 				writeMalwareLog(r.Context(), db, r, v, ipRes)
 				writeProxyAccessLog(r.Context(), db, r, mr, "malware_block", ipRes)

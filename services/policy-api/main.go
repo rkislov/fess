@@ -124,6 +124,9 @@ func main() {
 	mux.HandleFunc("/api/v1/proxy-access-logs", func(w http.ResponseWriter, r *http.Request) {
 		proxyAccessLogsHandler(w, r, db)
 	})
+	mux.HandleFunc("/api/v1/malware-scan-logs", func(w http.ResponseWriter, r *http.Request) {
+		malwareScanLogsHandler(w, r, db)
+	})
 	mux.HandleFunc("/api/v1/dashboard/summary", func(w http.ResponseWriter, r *http.Request) {
 		dashboardSummaryHandler(w, r, db)
 	})

@@ -29,8 +29,9 @@ type countryPoint struct {
 }
 
 type wafActionRow struct {
-	Action string `json:"action"`
-	Count  int64  `json:"count"`
+	Action    string `json:"action"`
+	Count     int64  `json:"count"`
+	LastHitAt string `json:"last_hit_at"`
 }
 
 type wafRuleRow struct {
@@ -289,12 +290,12 @@ LIMIT 40`, since)
 
 func queryWAFActions(ctx context.Context, db *sql.DB, since time.Time) ([]wafActionRow, error) {
 	rows, err := db.QueryContext(ctx, `
-SELECT action, COUNT(*)::bigint AS c
+SELECT action, COUNT(*)::bigint AS c, MAX(created_at) AS last_at
 FROM waf_logs
 WHERE created_at >= $1
 GROUP BY action
 ORDER BY c DESC
-LIMIT 15`, since)
+LIMIT 10`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -302,9 +303,11 @@ LIMIT 15`, since)
 	var out []wafActionRow
 	for rows.Next() {
 		var w wafActionRow
-		if err := rows.Scan(&w.Action, &w.Count); err != nil {
+		var last time.Time
+		if err := rows.Scan(&w.Action, &w.Count, &last); err != nil {
 			return nil, err
 		}
+		w.LastHitAt = last.UTC().Format(time.RFC3339Nano)
 		out = append(out, w)
 	}
 	return out, rows.Err()

@@ -26,17 +26,19 @@
 
     <WafRuleLogsPanel v-if="sub === 'rules'" />
     <ProxyAccessLogsPanel v-else-if="sub === 'access'" />
+    <MalwareScanLogsPanel v-else-if="sub === 'antivirus'" />
     <PanelLoginLogPanel v-else-if="sub === 'loginlog'" />
   </div>
 </template>
 
 <script setup lang="ts">
-type LogSubId = 'rules' | 'access' | 'loginlog'
+type LogSubId = 'rules' | 'access' | 'antivirus' | 'loginlog'
 
 const sub = ref<LogSubId>('rules')
 const subs: { id: LogSubId; label: string; icon: string }[] = [
   { id: 'rules', label: 'Правила WAF', icon: '⚡' },
   { id: 'access', label: 'Соединения', icon: '📡' },
+  { id: 'antivirus', label: 'Антивирус', icon: '🦠' },
   { id: 'loginlog', label: 'Вход (журнал)', icon: '🔐' },
 ]
 </script>
