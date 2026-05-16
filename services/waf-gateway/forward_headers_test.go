@@ -56,6 +56,18 @@ func TestApplyUpstream_setsForwardedHostProtoAndPort(t *testing.T) {
 	if got := req.Header.Get("X-Forwarded-Proto"); got != "https" {
 		t.Fatalf("X-Forwarded-Proto: got %q want https", got)
 	}
+	if got := req.Header.Get("X-Forwarded-Ssl"); got != "on" {
+		t.Fatalf("X-Forwarded-Ssl: got %q want on", got)
+	}
+	if got := req.Header.Get("HTTPS"); got != "on" {
+		t.Fatalf("HTTPS: got %q want on", got)
+	}
+	if got := req.Header.Get("X-Url-Scheme"); got != "https" {
+		t.Fatalf("X-Url-Scheme: got %q want https", got)
+	}
+	if got := req.Header.Get("X-Forwarded-Server"); got != "public.example.com" {
+		t.Fatalf("X-Forwarded-Server: got %q want public.example.com", got)
+	}
 	if got := req.Header.Get("X-Forwarded-Port"); got != "8443" {
 		t.Fatalf("X-Forwarded-Port: got %q want 8443", got)
 	}

@@ -64,9 +64,22 @@ func applyUpstreamClientHeaders(req *http.Request, ipRes *clientip.Resolver, ori
 	if strings.TrimSpace(req.Header.Get("X-Forwarded-Proto")) == "" {
 		req.Header.Set("X-Forwarded-Proto", originalScheme)
 	}
+	// Compatibility for apps such as Nextcloud/OnlyOffice behind chained reverse proxies.
+	if originalScheme == "https" {
+		req.Header.Set("X-Forwarded-Ssl", "on")
+		req.Header.Set("HTTPS", "on")
+	} else {
+		req.Header.Set("X-Forwarded-Ssl", "off")
+	}
+	req.Header.Set("X-Url-Scheme", originalScheme)
 	if originalHost != "" {
 		req.Header.Set("X-Forwarded-Host", originalHost)
 		req.Header.Set("X-Original-Host", originalHost)
+		if h, _, err := net.SplitHostPort(originalHost); err == nil {
+			req.Header.Set("X-Forwarded-Server", h)
+		} else {
+			req.Header.Set("X-Forwarded-Server", originalHost)
+		}
 		if _, p, err := net.SplitHostPort(originalHost); err == nil {
 			req.Header.Set("X-Forwarded-Port", p)
 		} else if originalScheme == "https" {
