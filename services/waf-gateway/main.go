@@ -90,7 +90,7 @@ func main() {
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mr := routeStore.Current().Match(hostHeader(r), r.URL.Path)
+		mr := routeStore.Current().Match(publicHostHeader(r, ipRes), r.URL.Path)
 		gateTF := applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
 		if gateTF.Responded {
 			return
@@ -253,7 +253,7 @@ func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engi
 		"effective":      effectiveAction,
 		"originalAction": decision.Action,
 	})
-	h := hostHeader(r)
+	h := publicHostHeader(r, ipRes)
 	srcIP := ipRes.ClientHost(r)
 	if srcIP == "" {
 		srcIP = r.RemoteAddr

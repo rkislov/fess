@@ -150,7 +150,7 @@ func writeThreatFeedLog(ctx context.Context, db *sql.DB, r *http.Request, blocke
 		"source": "threat_feed",
 		"detail": "client IP matched synced threat feed blocklist",
 	})
-	h := hostHeader(r)
+	h := publicHostHeader(r, ipRes)
 	srcIP := ipRes.ClientHost(r)
 	if srcIP == "" {
 		srcIP = r.RemoteAddr

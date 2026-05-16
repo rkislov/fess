@@ -38,11 +38,17 @@ func TestClientHost_untrustedPeerIgnoresXFF(t *testing.T) {
 	if got := r.ClientHost(req); got != "198.51.100.99" {
 		t.Fatalf("got %q want 198.51.100.99 (ignore spoofed XFF)", got)
 	}
+	if r.TrustsRequest(req) {
+		t.Fatal("untrusted peer must not be trusted")
+	}
 }
 
 func TestClientHost_xRealIP(t *testing.T) {
 	r := ParseTrustedProxies("10.0.0.0/8")
 	req := mustReq("10.1.2.3:80", "X-Real-IP", "203.0.113.44")
+	if !r.TrustsRequest(req) {
+		t.Fatal("trusted peer should be trusted")
+	}
 	if got := r.ClientHost(req); got != "203.0.113.44" {
 		t.Fatalf("got %q want 203.0.113.44", got)
 	}

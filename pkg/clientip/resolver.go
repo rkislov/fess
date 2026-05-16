@@ -63,6 +63,16 @@ func (r *Resolver) TrustsForwardedHeaders() bool {
 	return !r.empty()
 }
 
+// TrustsRequest reports whether this request arrived from a configured trusted proxy.
+// Forwarded headers should only be honored when this is true.
+func (r *Resolver) TrustsRequest(req *http.Request) bool {
+	if r.empty() || req == nil {
+		return false
+	}
+	peer := peerIP(req)
+	return peer != nil && r.contains(peer)
+}
+
 func (r *Resolver) empty() bool {
 	return r == nil || len(r.trusted) == 0
 }
@@ -104,7 +114,7 @@ func peerIP(r *http.Request) net.IP {
 // Without trusted proxies, this is always the TCP peer.
 func (r *Resolver) ClientHost(req *http.Request) string {
 	peer := peerIP(req)
-	if r.empty() || peer == nil || !r.contains(peer) {
+	if !r.TrustsRequest(req) {
 		if peer != nil {
 			return peer.String()
 		}

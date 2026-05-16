@@ -104,11 +104,9 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 	return &httputil.ReverseProxy{
 		FlushInterval: 100 * time.Millisecond,
 		Director: func(req *http.Request) {
-			host := req.Host
-			if host == "" {
-				host = req.URL.Host
-			}
-			mr := store.Current().Match(host, req.URL.Path)
+			originalHost := publicHostHeader(req, ipRes)
+			originalScheme := requestScheme(req)
+			mr := store.Current().Match(originalHost, req.URL.Path)
 			target := mr.Backend
 			if target == nil {
 				target = defaultUpstream
@@ -117,14 +115,16 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 			*req = *req.WithContext(routing.WithTLSSkipVerify(req.Context(), skip))
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			req.Host = target.Host
+			// Preserve the public Host header. Many backends build CORS, redirects and absolute URLs
+			// from Host/X-Forwarded-Host; replacing it with the container/upstream host breaks them.
+			req.Host = originalHost
 			req.URL.User = target.User
 			if mr.MatchedPathPrefix != "" {
 				req.URL.Path = routing.StripPathPrefix(req.URL.Path, mr.MatchedPathPrefix)
 				req.URL.RawPath = ""
 			}
 
-			applyUpstreamClientHeaders(req, ipRes)
+			applyUpstreamClientHeaders(req, ipRes, originalHost, originalScheme)
 		},
 		Transport: backendProxyTransport(),
 	}
