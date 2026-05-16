@@ -165,6 +165,6 @@ func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 	case errThreatFeedMissingURL, errThreatFeedSkipped:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feed_url is empty"})
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": sanitizeThreatFeedError(err.Error())})
 	}
 }

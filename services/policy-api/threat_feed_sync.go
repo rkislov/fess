@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -106,7 +107,7 @@ WHERE singleton = 'global'
 
 // normalizeAPIQFeedsURL fixes common portal typos/mirrors so sync works against the real endpoint.
 //
-//	api.qfeeds.com/feeds → /api.php (documented integrations use api.php; /feeds often returns HTML 404).
+//	api.qfeeds.com/, /feeds → /api.php (documented integrations use api.php; /feeds often returns HTML 404).
 //	Query typo "limit100000" instead of limit=100000 → limit=100000.
 //	cfg.api_key → api_token query parameter when the URL does not already contain api_token.
 func normalizeAPIQFeedsURL(urlStr string, apiKey string) string {
@@ -120,12 +121,21 @@ func normalizeAPIQFeedsURL(urlStr string, apiKey string) string {
 		return urlStr
 	}
 	pathTrim := strings.Trim(strings.ToLower(u.Path), "/")
-	if pathTrim == "feeds" {
+	if pathTrim == "" || pathTrim == "feeds" {
 		u.Path = "/api.php"
 	}
 	q := u.Query()
 	if strings.TrimSpace(q.Get("api_token")) == "" && strings.TrimSpace(apiKey) != "" {
 		q.Set("api_token", strings.TrimSpace(apiKey))
+	}
+	if strings.TrimSpace(q.Get("feed_type")) == "" {
+		q.Set("feed_type", "malware_ip")
+	}
+	if strings.TrimSpace(q.Get("type")) == "" {
+		q.Set("type", "text")
+	}
+	if strings.TrimSpace(q.Get("ipv6")) == "" {
+		q.Set("ipv6", "0")
 	}
 	hasExplicitLimit := strings.TrimSpace(q.Get("limit")) != ""
 	var badLimitKeys []string
@@ -310,6 +320,7 @@ func feedHTTPStatusError(status int, body []byte) error {
 
 func recordThreatFeedFail(ctx context.Context, db *sql.DB, msg string) {
 	const maxErr = 2000
+	msg = sanitizeThreatFeedError(msg)
 	if len(msg) > maxErr {
 		msg = msg[:maxErr] + "…"
 	}
@@ -317,4 +328,10 @@ func recordThreatFeedFail(ctx context.Context, db *sql.DB, msg string) {
 	_, _ = db.ExecContext(ctx, `
 UPDATE threat_feed_sync_state SET last_error = $1 WHERE singleton = 'global'
 `, msg)
+}
+
+var threatFeedAPITokenRe = regexp.MustCompile(`(?i)(api_token=)[^&\s"']+`)
+
+func sanitizeThreatFeedError(msg string) string {
+	return threatFeedAPITokenRe.ReplaceAllString(msg, `${1}***`)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,30 @@ func TestNormalizeAPIQFeedsURLInjectsAPIKeyAndFixesPortalURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeAPIQFeedsURLRootDefaultsToMalwareIP(t *testing.T) {
+	got := normalizeAPIQFeedsURL("https://api.qfeeds.com/", "tip_secret")
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Path != "/api.php" {
+		t.Fatalf("path = %q, want /api.php", u.Path)
+	}
+	q := u.Query()
+	if q.Get("api_token") != "tip_secret" {
+		t.Fatalf("api_token = %q, want injected key", q.Get("api_token"))
+	}
+	if q.Get("feed_type") != "malware_ip" {
+		t.Fatalf("feed_type = %q, want malware_ip", q.Get("feed_type"))
+	}
+	if q.Get("type") != "text" {
+		t.Fatalf("type = %q, want text", q.Get("type"))
+	}
+	if q.Get("ipv6") != "0" {
+		t.Fatalf("ipv6 = %q, want 0", q.Get("ipv6"))
+	}
+}
+
 func TestNormalizeAPIQFeedsURLKeepsExplicitToken(t *testing.T) {
 	got := normalizeAPIQFeedsURL("https://api.qfeeds.com/api.php?feed_type=malware_ip&api_token=from_url", "from_field")
 	u, err := url.Parse(got)
@@ -43,5 +68,16 @@ func TestQFeedsDefaultAuthorizationHeaderIsSuppressed(t *testing.T) {
 	}
 	if got := qFeedsHeaderName("tip_secret", "X-API-Key"); got != "X-API-Key" {
 		t.Fatalf("header = %q, want X-API-Key", got)
+	}
+}
+
+func TestSanitizeThreatFeedErrorRedactsAPIToken(t *testing.T) {
+	in := `Get "https://api.qfeeds.com/api.php?feed_type=malware_ip&api_token=tip_secret&type=text": context deadline exceeded`
+	got := sanitizeThreatFeedError(in)
+	if strings.Contains(got, "tip_secret") {
+		t.Fatalf("secret leaked: %s", got)
+	}
+	if !strings.Contains(got, "api_token=***") {
+		t.Fatalf("missing redaction: %s", got)
 	}
 }

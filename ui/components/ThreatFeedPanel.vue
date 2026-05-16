@@ -220,6 +220,14 @@ function flashOk(msg: string) {
   }, 4000)
 }
 
+function currentSettingsBody() {
+  const sources = sourcesStr.value
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return { ...cfg.value, sources }
+}
+
 async function loadStatus() {
   feedStatus.value = await $fetch<ThreatFeedStatus>(apiUrl('/settings/threat-feed/status'))
 }
@@ -246,12 +254,7 @@ async function save() {
   busy.value = true
   err.value = ''
   try {
-    const sources = sourcesStr.value
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const body = { ...cfg.value, sources }
-    await $fetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body })
+    await $fetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await load()
     flashOk('Сохранено')
   } catch (e) {
@@ -265,11 +268,13 @@ async function syncNow() {
   busy.value = true
   err.value = ''
   try {
+    await $fetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await $fetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
-    await loadStatus().catch(flashErr)
-    flashOk('Синхронизация запущена')
+    await load()
+    flashOk('Настройки сохранены, синхронизация выполнена')
   } catch (e) {
     flashErr(e)
+    await loadStatus().catch(() => {})
   } finally {
     busy.value = false
   }
