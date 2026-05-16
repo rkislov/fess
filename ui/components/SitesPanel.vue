@@ -330,8 +330,10 @@
               <div>
                 <h3 class="text-sm font-medium text-slate-300">Бэкенды</h3>
                 <p class="mt-1 text-sm text-slate-400">
-                  Upstream для выбранного сайта: используется первый включённый бэкенд с наименьшим приоритетом. Для
-                  <span class="font-mono">https://</span> бэкенда можно отключить проверку сертификата (только если доверяете сети).
+                  Маршрут по префиксу пути: для запроса выбирается бэкенд с самым длинным совпадающим
+                  <span class="font-mono">path_prefix</span> (пустой = «по умолчанию» для остальных путей). Включите
+                  <span class="font-mono">WebSocket</span>, чтобы handshake проксировался без буфера тела и ICAP. Для
+                  <span class="font-mono">https://</span> upstream можно отключить проверку TLS.
                 </p>
 
                 <div class="mt-4 overflow-x-auto">
@@ -340,15 +342,17 @@
                       <tr class="border-b border-slate-800 text-slate-500">
                         <th class="py-2 pr-4">Имя</th>
                         <th class="py-2 pr-4">Base URL</th>
+                        <th class="py-2 pr-4">Префикс пути</th>
                         <th class="py-2 pr-4">Приоритет</th>
                         <th class="py-2">Вкл.</th>
                         <th class="py-2 pr-2 text-center" title="InsecureSkipVerify к upstream HTTPS">TLS</th>
+                        <th class="py-2 pr-2 text-center" title="Проксировать WebSocket upgrade">WS</th>
                         <th class="py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-if="!backends.length">
-                        <td colspan="6" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
+                        <td colspan="8" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
                       </tr>
                       <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
                         <td class="py-2 pr-4">
@@ -358,6 +362,13 @@
                           <input v-model="b.base_url" class="w-full min-w-[180px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs" />
                         </td>
                         <td class="py-2 pr-4">
+                          <input
+                            v-model="b.path_prefix"
+                            placeholder="/ws"
+                            class="w-full min-w-[88px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs"
+                          />
+                        </td>
+                        <td class="py-2 pr-4">
                           <input v-model.number="b.priority" type="number" class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1" />
                         </td>
                         <td class="py-2">
@@ -365,6 +376,9 @@
                         </td>
                         <td class="py-2 text-center">
                           <input v-model="b.tls_skip_verify" type="checkbox" class="rounded border-slate-600" title="Не проверять сертификат HTTPS upstream" />
+                        </td>
+                        <td class="py-2 text-center">
+                          <input v-model="b.websocket_enabled" type="checkbox" class="rounded border-slate-600" title="WebSocket upgrade" />
                         </td>
                         <td class="py-2">
                           <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
@@ -385,15 +399,26 @@
                         placeholder="https://upstream:443"
                         class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
                       />
+                      <input
+                        v-model="newBackend.path_prefix"
+                        placeholder="Префикс /ws"
+                        class="min-w-[120px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
+                      />
                       <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
                       <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
                         Добавить
                       </button>
                     </div>
-                    <label class="flex items-center gap-2 text-sm text-amber-200/90">
-                      <input v-model="newBackend.tls_skip_verify" type="checkbox" class="rounded border-slate-600" />
-                      Не проверять TLS upstream (только для https)
-                    </label>
+                    <div class="flex flex-wrap gap-4">
+                      <label class="flex items-center gap-2 text-sm text-amber-200/90">
+                        <input v-model="newBackend.tls_skip_verify" type="checkbox" class="rounded border-slate-600" />
+                        Не проверять TLS upstream (только для https)
+                      </label>
+                      <label class="flex items-center gap-2 text-sm text-teal-200/90">
+                        <input v-model="newBackend.websocket_enabled" type="checkbox" class="rounded border-slate-600" />
+                        WebSocket (upgrade)
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -420,7 +445,16 @@ type Site = {
   tls_enabled: boolean
   tls_has_certificate: boolean
 }
-type Backend = { id: string; name: string; base_url: string; priority: number; enabled: boolean; tls_skip_verify: boolean }
+type Backend = {
+  id: string
+  name: string
+  base_url: string
+  path_prefix: string
+  priority: number
+  enabled: boolean
+  tls_skip_verify: boolean
+  websocket_enabled: boolean
+}
 
 const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
 
@@ -455,7 +489,14 @@ const wizard = reactive({
 const tlsMeta = reactive({ tls_enabled: false, tls_has_certificate: false })
 const tlsForm = reactive({ enabled: false, cert_pem: '', key_pem: '' })
 
-const newBackend = reactive({ name: '', base_url: '', priority: 0, tls_skip_verify: false })
+const newBackend = reactive({
+  name: '',
+  base_url: '',
+  path_prefix: '',
+  priority: 0,
+  tls_skip_verify: false,
+  websocket_enabled: false,
+})
 
 function flashErr(e: unknown) {
   ok.value = ''
@@ -489,9 +530,11 @@ function normBackend(raw: Record<string, unknown>): Backend {
     id: String(raw.id ?? raw.ID),
     name: String(raw.name ?? raw.Name),
     base_url: String(raw.base_url ?? raw.BaseURL),
+    path_prefix: String(raw.path_prefix ?? raw.PathPrefix ?? ''),
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
     tls_skip_verify: Boolean(raw.tls_skip_verify ?? raw.tlsSkipVerify ?? raw.TLSSkipVerify ?? false),
+    websocket_enabled: Boolean(raw.websocket_enabled ?? raw.websocketEnabled ?? raw.WebSocketEnabled ?? false),
   }
 }
 
@@ -793,9 +836,11 @@ async function saveBackend(b: Backend) {
       body: {
         name: b.name,
         base_url: b.base_url,
+        path_prefix: b.path_prefix,
         priority: b.priority,
         enabled: b.enabled,
         tls_skip_verify: b.tls_skip_verify,
+        websocket_enabled: b.websocket_enabled,
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
@@ -832,14 +877,18 @@ async function addBackend() {
       body: {
         name: newBackend.name,
         base_url: newBackend.base_url,
+        path_prefix: newBackend.path_prefix,
         priority: newBackend.priority || undefined,
         enabled: true,
         tls_skip_verify: newBackend.tls_skip_verify,
+        websocket_enabled: newBackend.websocket_enabled,
       },
     })
     newBackend.name = ''
     newBackend.base_url = ''
+    newBackend.path_prefix = ''
     newBackend.tls_skip_verify = false
+    newBackend.websocket_enabled = false
     await loadBackends(selected.value.id)
     flashOk('Бэкенд добавлен')
   } catch (e) {

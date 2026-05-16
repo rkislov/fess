@@ -90,9 +90,14 @@ func main() {
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mr := routeStore.Current().Match(hostHeader(r))
+		mr := routeStore.Current().Match(hostHeader(r), r.URL.Path)
 		gateTF := applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
 		if gateTF.Responded {
+			return
+		}
+
+		if isWebSocketUpgrade(r) {
+			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes)
 			return
 		}
 

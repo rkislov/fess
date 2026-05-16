@@ -29,47 +29,106 @@ type Snapshot struct {
 	Sites   []ResolvedSite
 }
 
-// ResolvedSite is one enabled site with its primary backend and optional WAF policy scope.
+// ResolvedBackend is one upstream target for a site (path prefix + priority).
+type ResolvedBackend struct {
+	PathPrefix       string
+	Priority         int
+	Backend          *url.URL
+	BackendName      string
+	TLSSkipVerify    bool
+	WebSocketEnabled bool
+}
+
+// ResolvedSite is one enabled site with backends and optional WAF policy scope.
 type ResolvedSite struct {
 	HostPattern string
 	Priority    int
-	Backend     *url.URL
-	// BackendName is the `backends.name` of the chosen row (first enabled by priority).
-	BackendName string
-	// TLSSkipVerify: when true and Backend uses https, gateway skips TLS certificate verification.
-	TLSSkipVerify bool
-	// PolicyID is a published policy UUID, or empty string = run all enabled policies for this host.
-	PolicyID string
+	PolicyID    string
+	Backends    []ResolvedBackend
 }
 
-// MatchResult is the routing + policy scope for a request Host.
+// MatchResult is the routing + policy scope for a request Host and path.
 type MatchResult struct {
-	Backend       *url.URL
-	BackendName   string
-	PolicyID      string
-	TLSSkipVerify bool
+	Backend            *url.URL
+	BackendName        string
+	PolicyID           string
+	TLSSkipVerify      bool
+	WebSocketEnabled   bool
+	MatchedPathPrefix  string // normalized prefix used for this backend ("" = default)
 }
 
-// Match returns upstream URL and optional policy filter for the HTTP Host header (port stripped for matching).
-func (s Snapshot) Match(hostHeader string) MatchResult {
+// Match returns upstream URL and optional policy filter for the HTTP Host header and request path.
+func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 	h := strings.TrimSpace(strings.ToLower(hostHeader))
 	if h2, _, err := net.SplitHostPort(h); err == nil {
 		h = strings.ToLower(h2)
 	}
+	reqPath := RequestPath(requestPath)
 
 	for _, site := range s.Sites {
-		if HostMatch(site.HostPattern, h) {
-			if site.Backend != nil {
-				return MatchResult{
-					Backend:       site.Backend,
-					BackendName:   site.BackendName,
-					PolicyID:      site.PolicyID,
-					TLSSkipVerify: site.TLSSkipVerify,
-				}
+		if !HostMatch(site.HostPattern, h) {
+			continue
+		}
+		if br := site.pickBackend(reqPath); br != nil && br.Backend != nil {
+			return MatchResult{
+				Backend:           br.Backend,
+				BackendName:       br.BackendName,
+				PolicyID:          site.PolicyID,
+				TLSSkipVerify:     br.TLSSkipVerify,
+				WebSocketEnabled:  br.WebSocketEnabled,
+				MatchedPathPrefix: NormalizePathPrefix(br.PathPrefix),
 			}
 		}
 	}
 	return MatchResult{Backend: s.Default, PolicyID: ""}
+}
+
+func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {
+	if len(site.Backends) == 0 {
+		return nil
+	}
+	var best *ResolvedBackend
+	bestLen := -1
+	var defaults []*ResolvedBackend
+
+	for i := range site.Backends {
+		b := &site.Backends[i]
+		if b.Backend == nil {
+			continue
+		}
+		prefix := NormalizePathPrefix(b.PathPrefix)
+		if prefix == "" {
+			defaults = append(defaults, b)
+			continue
+		}
+		if !PathMatchesPrefix(reqPath, prefix) {
+			continue
+		}
+		plen := len(prefix)
+		if plen > bestLen {
+			best = b
+			bestLen = plen
+			continue
+		}
+		if plen == bestLen && best != nil {
+			if b.Priority < best.Priority {
+				best = b
+			}
+		}
+	}
+	if best != nil {
+		return best
+	}
+	if len(defaults) == 0 {
+		return nil
+	}
+	def := defaults[0]
+	for _, b := range defaults[1:] {
+		if b.Priority < def.Priority {
+			def = b
+		}
+	}
+	return def
 }
 
 // HostMatch reports whether reqHost matches pattern (same rules as gateway routing: *, exact, or *.example.com).
@@ -88,49 +147,63 @@ func HostMatch(pattern, reqHost string) bool {
 	return pat == reqHost
 }
 
-// LoadSnapshot reads enabled sites with their first enabled backend (by priority).
+// LoadSnapshot reads enabled sites and all enabled backends for path-aware matching.
 func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Snapshot, error) {
 	out := Snapshot{Default: defaultUpstream}
 
 	rows, err := db.QueryContext(ctx, `
-SELECT s.host_pattern, s.priority, sub.base_url, sub.tls_skip_verify, COALESCE(s.policy_id::text, ''),
-  COALESCE(NULLIF(trim(sub.name), ''), '')
+SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
+  b.name, b.base_url, b.priority, b.tls_skip_verify, COALESCE(b.path_prefix, ''), b.websocket_enabled
 FROM sites s
-JOIN LATERAL (
-  SELECT name, base_url, tls_skip_verify
-  FROM backends
-  WHERE site_id = s.id AND enabled = TRUE
-  ORDER BY priority ASC, created_at ASC
-  LIMIT 1
-) sub ON TRUE
+JOIN backends b ON b.site_id = s.id AND b.enabled = TRUE
 WHERE s.enabled = TRUE
-ORDER BY s.priority ASC, s.created_at ASC`)
+ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 	if err != nil {
 		return out, fmt.Errorf("routing query: %w", err)
 	}
 	defer rows.Close()
 
+	type siteKey struct {
+		host string
+		pri  int
+	}
+	siteIndex := make(map[siteKey]int)
+	var order []siteKey
+
 	for rows.Next() {
 		var hostPat string
-		var pri int
-		var base string
-		var tlsSkip bool
+		var sitePri int
 		var policyID string
-		var backendName string
-		if err := rows.Scan(&hostPat, &pri, &base, &tlsSkip, &policyID, &backendName); err != nil {
+		var backendName, base string
+		var backendPri int
+		var tlsSkip, wsEn bool
+		var pathPrefix string
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn); err != nil {
 			return out, err
 		}
 		u, err := url.Parse(strings.TrimSpace(base))
 		if err != nil || u.Scheme == "" || u.Host == "" {
 			continue
 		}
-		out.Sites = append(out.Sites, ResolvedSite{
-			HostPattern:   hostPat,
-			Priority:      pri,
-			Backend:       u,
-			BackendName:   strings.TrimSpace(backendName),
-			TLSSkipVerify: tlsSkip,
-			PolicyID:      strings.TrimSpace(policyID),
+		key := siteKey{host: hostPat, pri: sitePri}
+		idx, ok := siteIndex[key]
+		if !ok {
+			order = append(order, key)
+			idx = len(out.Sites)
+			siteIndex[key] = idx
+			out.Sites = append(out.Sites, ResolvedSite{
+				HostPattern: hostPat,
+				Priority:    sitePri,
+				PolicyID:    strings.TrimSpace(policyID),
+			})
+		}
+		out.Sites[idx].Backends = append(out.Sites[idx].Backends, ResolvedBackend{
+			PathPrefix:       NormalizePathPrefix(pathPrefix),
+			Priority:         backendPri,
+			Backend:          u,
+			BackendName:      strings.TrimSpace(backendName),
+			TLSSkipVerify:    tlsSkip,
+			WebSocketEnabled: wsEn,
 		})
 	}
 	if err := rows.Err(); err != nil {

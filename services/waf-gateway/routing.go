@@ -102,12 +102,13 @@ func (t *backendTLSPickTransport) RoundTrip(req *http.Request) (*http.Response, 
 
 func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRes *clientip.Resolver) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
+		FlushInterval: 100 * time.Millisecond,
 		Director: func(req *http.Request) {
 			host := req.Host
 			if host == "" {
 				host = req.URL.Host
 			}
-			mr := store.Current().Match(host)
+			mr := store.Current().Match(host, req.URL.Path)
 			target := mr.Backend
 			if target == nil {
 				target = defaultUpstream
@@ -118,6 +119,10 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 			req.URL.Host = target.Host
 			req.Host = target.Host
 			req.URL.User = target.User
+			if mr.MatchedPathPrefix != "" {
+				req.URL.Path = routing.StripPathPrefix(req.URL.Path, mr.MatchedPathPrefix)
+				req.URL.RawPath = ""
+			}
 
 			applyUpstreamClientHeaders(req, ipRes)
 		},

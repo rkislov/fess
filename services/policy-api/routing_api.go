@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"fence/pkg/routing"
 )
 
 type siteCreateRequest struct {
@@ -30,11 +33,13 @@ type siteUpdateRequest struct {
 }
 
 type backendCreateRequest struct {
-	Name            string `json:"name"`
-	BaseURL         string `json:"base_url"`
-	Priority        int    `json:"priority"`
-	Enabled         *bool  `json:"enabled"`
-	TLSSkipVerify   *bool  `json:"tls_skip_verify"`
+	Name              string `json:"name"`
+	BaseURL           string `json:"base_url"`
+	Priority          int    `json:"priority"`
+	Enabled           *bool  `json:"enabled"`
+	TLSSkipVerify     *bool  `json:"tls_skip_verify"`
+	PathPrefix        string `json:"path_prefix"`
+	WebSocketEnabled  *bool  `json:"websocket_enabled"`
 }
 
 func publishRoutingUpdate(ctx context.Context, rdb *redis.Client) error {
@@ -361,7 +366,8 @@ func deleteSite(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.C
 
 func listBackends(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
 	rows, err := db.QueryContext(r.Context(), `
-SELECT id::text, name, base_url, priority, enabled, tls_skip_verify, created_at, updated_at
+SELECT id::text, name, base_url, priority, enabled, tls_skip_verify,
+  COALESCE(path_prefix, ''), websocket_enabled, created_at, updated_at
 FROM backends
 WHERE site_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, siteID)
@@ -371,19 +377,22 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 	}
 	defer rows.Close()
 	type row struct {
-		ID              string    `json:"id"`
-		Name            string    `json:"name"`
-		BaseURL         string    `json:"base_url"`
-		Priority        int       `json:"priority"`
-		Enabled         bool      `json:"enabled"`
-		TLSSkipVerify   bool      `json:"tls_skip_verify"`
-		CreatedAt       time.Time `json:"created_at"`
-		UpdatedAt       time.Time `json:"updated_at"`
+		ID               string    `json:"id"`
+		Name             string    `json:"name"`
+		BaseURL          string    `json:"base_url"`
+		Priority         int       `json:"priority"`
+		Enabled          bool      `json:"enabled"`
+		TLSSkipVerify    bool      `json:"tls_skip_verify"`
+		PathPrefix       string    `json:"path_prefix"`
+		WebSocketEnabled bool      `json:"websocket_enabled"`
+		CreatedAt        time.Time `json:"created_at"`
+		UpdatedAt        time.Time `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
-		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify,
+			&it.PathPrefix, &it.WebSocketEnabled, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -412,11 +421,20 @@ func createBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.TLSSkipVerify != nil {
 		tlsSkip = *payload.TLSSkipVerify
 	}
+	pathPrefix, perr := normalizeBackendPathPrefix(payload.PathPrefix)
+	if perr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": perr.Error()})
+		return
+	}
+	wsEn := false
+	if payload.WebSocketEnabled != nil {
+		wsEn = *payload.WebSocketEnabled
+	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)`,
-		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip)
+INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify, path_prefix, websocket_enabled)
+VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)`,
+		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -449,9 +467,19 @@ func updateBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.TLSSkipVerify != nil {
 		tlsSkip = *payload.TLSSkipVerify
 	}
+	pathPrefix, perr := normalizeBackendPathPrefix(payload.PathPrefix)
+	if perr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": perr.Error()})
+		return
+	}
+	wsEn := false
+	if payload.WebSocketEnabled != nil {
+		wsEn = *payload.WebSocketEnabled
+	}
 	res, err := db.ExecContext(r.Context(), `
-UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip)
+UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6,
+  path_prefix=$7, websocket_enabled=$8, updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -489,6 +517,14 @@ func deleteBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 func isUniqueViolation(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique constraint")
+}
+
+func normalizeBackendPathPrefix(p string) (string, error) {
+	p = routing.NormalizePathPrefix(p)
+	if strings.ContainsAny(p, "?#*") {
+		return "", errors.New("path_prefix must be a simple path prefix (e.g. /api/ws)")
+	}
+	return p, nil
 }
 
 func validBaseURL(s string) bool {
