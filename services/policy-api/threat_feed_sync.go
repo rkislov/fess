@@ -17,6 +17,7 @@ import (
 )
 
 var errThreatFeedSkipped = errors.New("threat feed disabled or missing feed_url")
+var errThreatFeedMissingURL = errors.New("threat feed missing feed_url")
 
 const (
 	threatFeedMaxPageBytes   = 64 << 20
@@ -27,8 +28,8 @@ const (
 // syncThreatFeedFromConfig downloads the feed, applies source filtering, replaces indicators.
 func syncThreatFeedFromConfig(ctx context.Context, db *sql.DB, cfg threatfeed.Config) error {
 	urlStr := strings.TrimSpace(cfg.FeedURL)
-	if !cfg.Enabled || urlStr == "" {
-		return errThreatFeedSkipped
+	if urlStr == "" {
+		return errThreatFeedMissingURL
 	}
 
 	now := time.Now().UTC()
@@ -107,7 +108,8 @@ WHERE singleton = 'global'
 //
 //	api.qfeeds.com/feeds → /api.php (documented integrations use api.php; /feeds often returns HTML 404).
 //	Query typo "limit100000" instead of limit=100000 → limit=100000.
-func normalizeAPIQFeedsURL(urlStr string) string {
+//	cfg.api_key → api_token query parameter when the URL does not already contain api_token.
+func normalizeAPIQFeedsURL(urlStr string, apiKey string) string {
 	urlStr = strings.TrimSpace(urlStr)
 	u, err := url.Parse(urlStr)
 	if err != nil || u.Hostname() == "" {
@@ -122,6 +124,9 @@ func normalizeAPIQFeedsURL(urlStr string) string {
 		u.Path = "/api.php"
 	}
 	q := u.Query()
+	if strings.TrimSpace(q.Get("api_token")) == "" && strings.TrimSpace(apiKey) != "" {
+		q.Set("api_token", strings.TrimSpace(apiKey))
+	}
 	hasExplicitLimit := strings.TrimSpace(q.Get("limit")) != ""
 	var badLimitKeys []string
 	var typoLimitDigits string
@@ -156,15 +161,15 @@ func normalizeAPIQFeedsURL(urlStr string) string {
 }
 
 func fetchThreatFeedHTTP(ctx context.Context, urlStr string, cfg threatfeed.Config, reqTimeout time.Duration) ([]byte, error) {
-	urlStr = normalizeAPIQFeedsURL(urlStr)
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	urlStr = normalizeAPIQFeedsURL(urlStr, apiKey)
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
-	apiKey := strings.TrimSpace(cfg.APIKey)
 	hdr := strings.TrimSpace(cfg.APIKeyHeader)
 	if isQFeedsAPIPHP(u) {
-		return fetchQFeedsPaginated(ctx, urlStr, apiKey, hdr, reqTimeout)
+		return fetchQFeedsPaginated(ctx, urlStr, qFeedsHeaderAPIKey(apiKey, hdr), qFeedsHeaderName(apiKey, hdr), reqTimeout)
 	}
 	body, status, err := threatFeedHTTPGet(ctx, urlStr, apiKey, hdr, reqTimeout)
 	if err != nil {
@@ -183,6 +188,25 @@ func isQFeedsAPIPHP(u *url.URL) bool {
 	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
 	path := strings.ToLower(u.Path)
 	return host == "api.qfeeds.com" && strings.HasSuffix(path, "api.php")
+}
+
+func qFeedsHeaderName(apiKey, apiKeyHeader string) string {
+	if strings.TrimSpace(apiKey) == "" {
+		return ""
+	}
+	// Q-Feeds official integrations authenticate with api_token query parameter.
+	// Avoid sending a raw token as Authorization (the default UI header), which some CDNs/APIs reject.
+	if strings.EqualFold(strings.TrimSpace(apiKeyHeader), "Authorization") {
+		return ""
+	}
+	return strings.TrimSpace(apiKeyHeader)
+}
+
+func qFeedsHeaderAPIKey(apiKey, apiKeyHeader string) string {
+	if qFeedsHeaderName(apiKey, apiKeyHeader) == "" {
+		return ""
+	}
+	return strings.TrimSpace(apiKey)
 }
 
 // fetchQFeedsPaginated mirrors the official integrations (page + limit, up to thousands of IOCs).

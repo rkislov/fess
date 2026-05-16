@@ -20,13 +20,13 @@ type threatFeedResponse struct {
 }
 
 type threatFeedStatusResponse struct {
-	Enabled           bool                    `json:"enabled"`
-	Block             bool                    `json:"block"`
-	LastAttemptAtRFC  string                  `json:"last_attempt_at,omitempty"`
-	LastSuccessAtRFC  string                  `json:"last_success_at,omitempty"`
-	LastError         string                  `json:"last_error,omitempty"`
-	RowsLastIngested  int                     `json:"rows_last_ingested"`
-	IndicatorCount    int                     `json:"indicator_count"`
+	Enabled          bool   `json:"enabled"`
+	Block            bool   `json:"block"`
+	LastAttemptAtRFC string `json:"last_attempt_at,omitempty"`
+	LastSuccessAtRFC string `json:"last_success_at,omitempty"`
+	LastError        string `json:"last_error,omitempty"`
+	RowsLastIngested int    `json:"rows_last_ingested"`
+	IndicatorCount   int    `json:"indicator_count"`
 }
 
 func loadThreatFeedConfig(ctx context.Context, db *sql.DB) (threatfeed.Config, error) {
@@ -162,8 +162,8 @@ func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	case errThreatFeedSkipped:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feed_url is empty or feed is disabled"})
+	case errThreatFeedMissingURL, errThreatFeedSkipped:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feed_url is empty"})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
