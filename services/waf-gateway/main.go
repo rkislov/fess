@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -270,13 +271,55 @@ VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::jsonb)`,
 func loggingMiddleware(next http.Handler, ipRes *clientip.Resolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
+		lw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(lw, r)
 		client := ipRes.ClientHost(r)
 		if client == "" {
 			client = r.RemoteAddr
 		}
-		log.Printf("method=%s path=%s client=%s remote=%s latency=%s", r.Method, r.URL.Path, client, r.RemoteAddr, time.Since(start))
+		log.Printf(
+			"method=%s path=%s status=%d bytes=%d upgrade=%q client=%s remote=%s latency=%s",
+			r.Method,
+			r.URL.Path,
+			lw.status,
+			lw.bytes,
+			r.Header.Get("Upgrade"),
+			client,
+			r.RemoteAddr,
+			time.Since(start),
+		)
 	})
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (w *loggingResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *loggingResponseWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += n
+	return n, err
+}
+
+func (w *loggingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return h.Hijack()
 }
 
 func getenv(key, fallback string) string {
