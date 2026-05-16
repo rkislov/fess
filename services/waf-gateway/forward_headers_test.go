@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/url"
 	"testing"
@@ -129,6 +130,28 @@ func TestPublicHostHeaderIgnoresUntrustedForwardedHost(t *testing.T) {
 	if got := publicHostHeader(req, clientip.ParseTrustedProxies("198.51.100.5/32")); got != "10.78.3.61:80" {
 		t.Fatalf("got %q want direct host", got)
 	}
+}
+
+func TestBackendTransportUsesHTTP1ForWebSocket(t *testing.T) {
+	tr, ok := backendProxyTransport().(*backendTLSPickTransport)
+	if !ok {
+		t.Fatalf("unexpected transport type %T", backendProxyTransport())
+	}
+	secureWS, ok := tr.secureWS.(*http.Transport)
+	if !ok {
+		t.Fatalf("unexpected secureWS type %T", tr.secureWS)
+	}
+	if secureWS.ForceAttemptHTTP2 {
+		t.Fatal("websocket transport must not force HTTP/2")
+	}
+	if secureWS.TLSNextProto == nil {
+		t.Fatal("websocket transport should disable TLSNextProto HTTP/2 upgrades")
+	}
+	if _, ok := secureWS.TLSNextProto["h2"]; ok {
+		t.Fatal("websocket transport must not advertise h2")
+	}
+	// Keep crypto/tls imported in this test package alongside the production type assertion context.
+	_ = tls.VersionTLS12
 }
 
 func newTestReq(remoteAddr, xff, xfp string) *http.Request {

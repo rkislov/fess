@@ -77,23 +77,48 @@ func backendProxyTransport() http.RoundTripper {
 		}
 		secure := base.Clone()
 		insecure := base.Clone()
+		secureWS := base.Clone()
+		insecureWS := base.Clone()
+		secureWS.ForceAttemptHTTP2 = false
+		secureWS.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		insecureWS.ForceAttemptHTTP2 = false
+		insecureWS.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 		if insecure.TLSClientConfig == nil {
 			insecure.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		} else {
 			insecure.TLSClientConfig = insecure.TLSClientConfig.Clone()
 		}
 		insecure.TLSClientConfig.InsecureSkipVerify = true
-		backendHTTPTransports = &backendTLSPickTransport{secure: secure, insecure: insecure}
+		if insecureWS.TLSClientConfig == nil {
+			insecureWS.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		} else {
+			insecureWS.TLSClientConfig = insecureWS.TLSClientConfig.Clone()
+		}
+		insecureWS.TLSClientConfig.InsecureSkipVerify = true
+		backendHTTPTransports = &backendTLSPickTransport{
+			secure:     secure,
+			insecure:   insecure,
+			secureWS:   secureWS,
+			insecureWS: insecureWS,
+		}
 	})
 	return backendHTTPTransports
 }
 
 type backendTLSPickTransport struct {
-	secure   http.RoundTripper
-	insecure http.RoundTripper
+	secure     http.RoundTripper
+	insecure   http.RoundTripper
+	secureWS   http.RoundTripper
+	insecureWS http.RoundTripper
 }
 
 func (t *backendTLSPickTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if isWebSocketUpgrade(req) {
+		if routing.TLSSkipVerifyFromContext(req.Context()) {
+			return t.insecureWS.RoundTrip(req)
+		}
+		return t.secureWS.RoundTrip(req)
+	}
 	if routing.TLSSkipVerifyFromContext(req.Context()) {
 		return t.insecure.RoundTrip(req)
 	}
