@@ -27,6 +27,7 @@ services:
       - ../db/017_malware_clamav_restore.sql:/docker-entrypoint-initdb.d/017-malware-clamav.sql:ro
       - ../db/018_threat_feed.sql:/docker-entrypoint-initdb.d/018-threat-feed.sql:ro
       - ../db/019_backend_websocket.sql:/docker-entrypoint-initdb.d/019-backend-websocket.sql:ro
+      - ../db/020_backend_timeouts.sql:/docker-entrypoint-initdb.d/020-backend-timeouts.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s

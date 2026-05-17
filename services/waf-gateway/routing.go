@@ -96,6 +96,7 @@ func backendProxyTransport() http.RoundTripper {
 		}
 		insecureWS.TLSClientConfig.InsecureSkipVerify = true
 		backendHTTPTransports = &backendTLSPickTransport{
+			base:       base,
 			secure:     secure,
 			insecure:   insecure,
 			secureWS:   secureWS,
@@ -106,23 +107,74 @@ func backendProxyTransport() http.RoundTripper {
 }
 
 type backendTLSPickTransport struct {
+	base       *http.Transport
 	secure     http.RoundTripper
 	insecure   http.RoundTripper
 	secureWS   http.RoundTripper
 	insecureWS http.RoundTripper
+	custom     sync.Map // transportCacheKey -> http.RoundTripper
+}
+
+type transportCacheKey struct {
+	insecure    bool
+	websocket   bool
+	idleSeconds int
+}
+
+func (t *backendTLSPickTransport) transportFor(req *http.Request) http.RoundTripper {
+	insecure := routing.TLSSkipVerifyFromContext(req.Context())
+	ws := isWebSocketUpgrade(req)
+	idleSec := 0
+	if bt, ok := routing.BackendTimeoutsFromContext(req.Context()); ok && bt.IdleTimeout > 0 {
+		idleSec = int(bt.IdleTimeout / time.Second)
+	}
+	if idleSec == 0 {
+		if ws {
+			if insecure {
+				return t.insecureWS
+			}
+			return t.secureWS
+		}
+		if insecure {
+			return t.insecure
+		}
+		return t.secure
+	}
+	key := transportCacheKey{insecure: insecure, websocket: ws, idleSeconds: idleSec}
+	if v, ok := t.custom.Load(key); ok {
+		return v.(http.RoundTripper)
+	}
+	rt := t.cloneWithIdleTimeout(insecure, ws, time.Duration(idleSec)*time.Second)
+	actual, _ := t.custom.LoadOrStore(key, rt)
+	return actual.(http.RoundTripper)
+}
+
+func (t *backendTLSPickTransport) cloneWithIdleTimeout(insecure, ws bool, idle time.Duration) http.RoundTripper {
+	tr := t.base.Clone()
+	tr.IdleConnTimeout = idle
+	if ws {
+		tr.ForceAttemptHTTP2 = false
+		tr.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	}
+	if insecure {
+		if tr.TLSClientConfig == nil {
+			tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		} else {
+			tr.TLSClientConfig = tr.TLSClientConfig.Clone()
+		}
+		tr.TLSClientConfig.InsecureSkipVerify = true
+	}
+	return tr
 }
 
 func (t *backendTLSPickTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if isWebSocketUpgrade(req) {
-		if routing.TLSSkipVerifyFromContext(req.Context()) {
-			return t.insecureWS.RoundTrip(req)
-		}
-		return t.secureWS.RoundTrip(req)
+	rt := t.transportFor(req)
+	if bt, ok := routing.BackendTimeoutsFromContext(req.Context()); ok && bt.Timeout > 0 {
+		ctx, cancel := context.WithTimeout(req.Context(), bt.Timeout)
+		defer cancel()
+		req = req.WithContext(ctx)
 	}
-	if routing.TLSSkipVerifyFromContext(req.Context()) {
-		return t.insecure.RoundTrip(req)
-	}
-	return t.secure.RoundTrip(req)
+	return rt.RoundTrip(req)
 }
 
 func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRes *clientip.Resolver) *httputil.ReverseProxy {
@@ -137,7 +189,11 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 				target = defaultUpstream
 			}
 			skip := mr.TLSSkipVerify && target != nil && target.Scheme == "https"
-			*req = *req.WithContext(routing.WithTLSSkipVerify(req.Context(), skip))
+			ctx := routing.WithTLSSkipVerify(req.Context(), skip)
+			if mr.TimeoutSec > 0 || mr.IdleTimeoutSec > 0 {
+				ctx = routing.WithBackendTimeouts(ctx, routing.TimeoutsFromSeconds(mr.TimeoutSec, mr.IdleTimeoutSec))
+			}
+			*req = *req.WithContext(ctx)
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
 			// Preserve the public Host header. Many backends build CORS, redirects and absolute URLs

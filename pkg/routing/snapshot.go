@@ -37,6 +37,8 @@ type ResolvedBackend struct {
 	BackendName      string
 	TLSSkipVerify    bool
 	WebSocketEnabled bool
+	TimeoutSec       int // 0 = no limit
+	IdleTimeoutSec   int // 0 = transport default
 }
 
 // ResolvedSite is one enabled site with backends and optional WAF policy scope.
@@ -54,6 +56,8 @@ type MatchResult struct {
 	PolicyID           string
 	TLSSkipVerify      bool
 	WebSocketEnabled   bool
+	TimeoutSec         int
+	IdleTimeoutSec     int
 	MatchedPathPrefix  string // normalized prefix used for this backend ("" = default)
 }
 
@@ -76,6 +80,8 @@ func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 				PolicyID:          site.PolicyID,
 				TLSSkipVerify:     br.TLSSkipVerify,
 				WebSocketEnabled:  br.WebSocketEnabled,
+				TimeoutSec:        br.TimeoutSec,
+				IdleTimeoutSec:    br.IdleTimeoutSec,
 				MatchedPathPrefix: NormalizePathPrefix(br.PathPrefix),
 			}
 		}
@@ -153,7 +159,8 @@ func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Sn
 
 	rows, err := db.QueryContext(ctx, `
 SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
-  b.name, b.base_url, b.priority, b.tls_skip_verify, COALESCE(b.path_prefix, ''), b.websocket_enabled
+  b.name, b.base_url, b.priority, b.tls_skip_verify, COALESCE(b.path_prefix, ''), b.websocket_enabled,
+  b.timeout_sec, b.idle_timeout_sec
 FROM sites s
 JOIN backends b ON b.site_id = s.id AND b.enabled = TRUE
 WHERE s.enabled = TRUE
@@ -178,7 +185,8 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 		var backendPri int
 		var tlsSkip, wsEn bool
 		var pathPrefix string
-		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn); err != nil {
+		var timeoutSec, idleTimeoutSec int
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn, &timeoutSec, &idleTimeoutSec); err != nil {
 			return out, err
 		}
 		u, err := url.Parse(strings.TrimSpace(base))
@@ -204,6 +212,8 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 			BackendName:      strings.TrimSpace(backendName),
 			TLSSkipVerify:    tlsSkip,
 			WebSocketEnabled: wsEn,
+			TimeoutSec:       timeoutSec,
+			IdleTimeoutSec:   idleTimeoutSec,
 		})
 	}
 	if err := rows.Err(); err != nil {

@@ -33,13 +33,15 @@ type siteUpdateRequest struct {
 }
 
 type backendCreateRequest struct {
-	Name              string `json:"name"`
-	BaseURL           string `json:"base_url"`
-	Priority          int    `json:"priority"`
-	Enabled           *bool  `json:"enabled"`
-	TLSSkipVerify     *bool  `json:"tls_skip_verify"`
-	PathPrefix        string `json:"path_prefix"`
-	WebSocketEnabled  *bool  `json:"websocket_enabled"`
+	Name             string `json:"name"`
+	BaseURL          string `json:"base_url"`
+	Priority         int    `json:"priority"`
+	Enabled          *bool  `json:"enabled"`
+	TLSSkipVerify    *bool  `json:"tls_skip_verify"`
+	PathPrefix       string `json:"path_prefix"`
+	WebSocketEnabled *bool  `json:"websocket_enabled"`
+	Timeout          *int   `json:"timeout"`
+	IdleTimeout      *int   `json:"idle_timeout"`
 }
 
 func publishRoutingUpdate(ctx context.Context, rdb *redis.Client) error {
@@ -367,7 +369,8 @@ func deleteSite(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.C
 func listBackends(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id::text, name, base_url, priority, enabled, tls_skip_verify,
-  COALESCE(path_prefix, ''), websocket_enabled, created_at, updated_at
+  COALESCE(path_prefix, ''), websocket_enabled, timeout_sec, idle_timeout_sec,
+  created_at, updated_at
 FROM backends
 WHERE site_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, siteID)
@@ -385,6 +388,8 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 		TLSSkipVerify    bool      `json:"tls_skip_verify"`
 		PathPrefix       string    `json:"path_prefix"`
 		WebSocketEnabled bool      `json:"websocket_enabled"`
+		Timeout          int       `json:"timeout"`
+		IdleTimeout      int       `json:"idle_timeout"`
 		CreatedAt        time.Time `json:"created_at"`
 		UpdatedAt        time.Time `json:"updated_at"`
 	}
@@ -392,7 +397,7 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 	for rows.Next() {
 		var it row
 		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify,
-			&it.PathPrefix, &it.WebSocketEnabled, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.PathPrefix, &it.WebSocketEnabled, &it.Timeout, &it.IdleTimeout, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -430,11 +435,16 @@ func createBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.WebSocketEnabled != nil {
 		wsEn = *payload.WebSocketEnabled
 	}
+	timeoutSec, idleTimeoutSec, terr := backendTimeoutFields(payload.Timeout, payload.IdleTimeout)
+	if terr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": terr.Error()})
+		return
+	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify, path_prefix, websocket_enabled)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)`,
-		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn)
+INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify, path_prefix, websocket_enabled, timeout_sec, idle_timeout_sec)
+VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -476,10 +486,15 @@ func updateBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.WebSocketEnabled != nil {
 		wsEn = *payload.WebSocketEnabled
 	}
+	timeoutSec, idleTimeoutSec, terr := backendTimeoutFields(payload.Timeout, payload.IdleTimeout)
+	if terr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": terr.Error()})
+		return
+	}
 	res, err := db.ExecContext(r.Context(), `
 UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6,
-  path_prefix=$7, websocket_enabled=$8, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn)
+  path_prefix=$7, websocket_enabled=$8, timeout_sec=$9, idle_timeout_sec=$10, updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -517,6 +532,26 @@ func deleteBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 func isUniqueViolation(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique constraint")
+}
+
+const maxBackendTimeoutSec = 86400
+
+func backendTimeoutFields(timeout, idleTimeout *int) (int, int, error) {
+	t := 0
+	if timeout != nil {
+		if *timeout < 0 || *timeout > maxBackendTimeoutSec {
+			return 0, 0, errors.New("timeout must be between 0 and 86400 seconds")
+		}
+		t = *timeout
+	}
+	idle := 0
+	if idleTimeout != nil {
+		if *idleTimeout < 0 || *idleTimeout > maxBackendTimeoutSec {
+			return 0, 0, errors.New("idle_timeout must be between 0 and 86400 seconds")
+		}
+		idle = *idleTimeout
+	}
+	return t, idle, nil
 }
 
 func normalizeBackendPathPrefix(p string) (string, error) {

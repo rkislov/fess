@@ -347,12 +347,14 @@
                         <th class="py-2">Вкл.</th>
                         <th class="py-2 pr-2 text-center" title="InsecureSkipVerify к upstream HTTPS">TLS</th>
                         <th class="py-2 pr-2 text-center" title="Проксировать WebSocket upgrade">WS</th>
+                        <th class="py-2 pr-2" title="Лимит upstream, сек (0 = без лимита)">Timeout</th>
+                        <th class="py-2 pr-2" title="Idle keep-alive, сек (0 = по умолчанию)">Idle</th>
                         <th class="py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-if="!backends.length">
-                        <td colspan="8" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
+                        <td colspan="10" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
                       </tr>
                       <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
                         <td class="py-2 pr-4">
@@ -379,6 +381,26 @@
                         </td>
                         <td class="py-2 text-center">
                           <input v-model="b.websocket_enabled" type="checkbox" class="rounded border-slate-600" title="WebSocket upgrade" />
+                        </td>
+                        <td class="py-2 pr-2">
+                          <input
+                            v-model.number="b.timeout"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1"
+                            title="Макс. время ответа upstream, сек"
+                          />
+                        </td>
+                        <td class="py-2 pr-2">
+                          <input
+                            v-model.number="b.idle_timeout"
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1"
+                            title="Idle keep-alive к upstream, сек"
+                          />
                         </td>
                         <td class="py-2">
                           <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
@@ -418,6 +440,26 @@
                         <input v-model="newBackend.websocket_enabled" type="checkbox" class="rounded border-slate-600" />
                         WebSocket (upgrade)
                       </label>
+                      <label class="flex items-center gap-2 text-sm text-slate-300">
+                        Timeout, сек
+                        <input
+                          v-model.number="newBackend.timeout"
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <label class="flex items-center gap-2 text-sm text-slate-300">
+                        Idle timeout, сек
+                        <input
+                          v-model.number="newBackend.idle_timeout"
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -454,6 +496,8 @@ type Backend = {
   enabled: boolean
   tls_skip_verify: boolean
   websocket_enabled: boolean
+  timeout: number
+  idle_timeout: number
 }
 
 const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
@@ -496,6 +540,8 @@ const newBackend = reactive({
   priority: 0,
   tls_skip_verify: false,
   websocket_enabled: false,
+  timeout: 0,
+  idle_timeout: 0,
 })
 
 function flashErr(e: unknown) {
@@ -535,6 +581,8 @@ function normBackend(raw: Record<string, unknown>): Backend {
     enabled: Boolean(raw.enabled ?? raw.Enabled),
     tls_skip_verify: Boolean(raw.tls_skip_verify ?? raw.tlsSkipVerify ?? raw.TLSSkipVerify ?? false),
     websocket_enabled: Boolean(raw.websocket_enabled ?? raw.websocketEnabled ?? raw.WebSocketEnabled ?? false),
+    timeout: Number(raw.timeout ?? raw.Timeout ?? 0),
+    idle_timeout: Number(raw.idle_timeout ?? raw.idleTimeout ?? raw.IdleTimeout ?? 0),
   }
 }
 
@@ -841,6 +889,8 @@ async function saveBackend(b: Backend) {
         enabled: b.enabled,
         tls_skip_verify: b.tls_skip_verify,
         websocket_enabled: b.websocket_enabled,
+        timeout: b.timeout,
+        idle_timeout: b.idle_timeout,
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
@@ -882,6 +932,8 @@ async function addBackend() {
         enabled: true,
         tls_skip_verify: newBackend.tls_skip_verify,
         websocket_enabled: newBackend.websocket_enabled,
+        timeout: newBackend.timeout,
+        idle_timeout: newBackend.idle_timeout,
       },
     })
     newBackend.name = ''
@@ -889,6 +941,8 @@ async function addBackend() {
     newBackend.path_prefix = ''
     newBackend.tls_skip_verify = false
     newBackend.websocket_enabled = false
+    newBackend.timeout = 0
+    newBackend.idle_timeout = 0
     await loadBackends(selected.value.id)
     flashOk('Бэкенд добавлен')
   } catch (e) {
