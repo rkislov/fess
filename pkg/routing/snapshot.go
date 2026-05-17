@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -39,6 +41,8 @@ type ResolvedBackend struct {
 	WebSocketEnabled bool
 	TimeoutSec       int // 0 = no limit
 	IdleTimeoutSec   int // 0 = transport default
+	IPAllowMode      string
+	AllowedPrefixes  []netip.Prefix
 }
 
 // ResolvedSite is one enabled site with backends and optional WAF policy scope.
@@ -58,6 +62,8 @@ type MatchResult struct {
 	WebSocketEnabled   bool
 	TimeoutSec         int
 	IdleTimeoutSec     int
+	IPAllowMode        string
+	AllowedPrefixes    []netip.Prefix
 	MatchedPathPrefix  string // normalized prefix used for this backend ("" = default)
 }
 
@@ -82,6 +88,8 @@ func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 				WebSocketEnabled:  br.WebSocketEnabled,
 				TimeoutSec:        br.TimeoutSec,
 				IdleTimeoutSec:    br.IdleTimeoutSec,
+				IPAllowMode:       br.IPAllowMode,
+				AllowedPrefixes:   br.AllowedPrefixes,
 				MatchedPathPrefix: NormalizePathPrefix(br.PathPrefix),
 			}
 		}
@@ -160,7 +168,7 @@ func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Sn
 	rows, err := db.QueryContext(ctx, `
 SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
   b.name, b.base_url, b.priority, b.tls_skip_verify, COALESCE(b.path_prefix, ''), b.websocket_enabled,
-  b.timeout_sec, b.idle_timeout_sec
+  b.timeout_sec, b.idle_timeout_sec, b.ip_allow_mode, b.allowed_cidrs
 FROM sites s
 JOIN backends b ON b.site_id = s.id AND b.enabled = TRUE
 WHERE s.enabled = TRUE
@@ -186,7 +194,8 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 		var tlsSkip, wsEn bool
 		var pathPrefix string
 		var timeoutSec, idleTimeoutSec int
-		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn, &timeoutSec, &idleTimeoutSec); err != nil {
+		var ipAllowMode, allowedCIDRsJSON string
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON); err != nil {
 			return out, err
 		}
 		u, err := url.Parse(strings.TrimSpace(base))
@@ -205,6 +214,20 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 				PolicyID:    strings.TrimSpace(policyID),
 			})
 		}
+		ipMode := strings.TrimSpace(strings.ToLower(ipAllowMode))
+		if ipMode == "" {
+			ipMode = IPAllowNone
+		}
+		var allowed []netip.Prefix
+		if ipMode == IPAllowCustom {
+			parsed, perr := ParseAllowedCIDRsJSON(allowedCIDRsJSON)
+			if perr != nil {
+				log.Printf("routing: backend %q allowed_cidrs invalid: %v", backendName, perr)
+				ipMode = IPAllowNone
+			} else {
+				allowed = parsed
+			}
+		}
 		out.Sites[idx].Backends = append(out.Sites[idx].Backends, ResolvedBackend{
 			PathPrefix:       NormalizePathPrefix(pathPrefix),
 			Priority:         backendPri,
@@ -214,6 +237,8 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 			WebSocketEnabled: wsEn,
 			TimeoutSec:       timeoutSec,
 			IdleTimeoutSec:   idleTimeoutSec,
+			IPAllowMode:      ipMode,
+			AllowedPrefixes:  allowed,
 		})
 	}
 	if err := rows.Err(); err != nil {

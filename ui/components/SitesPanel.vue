@@ -334,6 +334,9 @@
                   <span class="font-mono">path_prefix</span> (пустой = «по умолчанию» для остальных путей). Включите
                   <span class="font-mono">WebSocket</span>, чтобы handshake проксировался без буфера тела и ICAP. Для
                   <span class="font-mono">https://</span> upstream можно отключить проверку TLS.
+                  Ограничение по IP действует только для запросов, попадающих в этот бэкенд по
+                  <span class="font-mono">path_prefix</span> (например <span class="font-mono">/admin</span> + «только приватные сети»).
+                  За балансировщиком задайте <span class="font-mono">WAF_TRUSTED_PROXIES</span>, чтобы видеть реальный клиентский IP.
                 </p>
 
                 <div class="mt-4 overflow-x-auto">
@@ -349,12 +352,13 @@
                         <th class="py-2 pr-2 text-center" title="Проксировать WebSocket upgrade">WS</th>
                         <th class="py-2 pr-2" title="Лимит upstream, сек (0 = без лимита)">Timeout</th>
                         <th class="py-2 pr-2" title="Idle keep-alive, сек (0 = по умолчанию)">Idle</th>
+                        <th class="py-2 pr-2" title="Кто может обращаться к этому path_prefix">IP</th>
                         <th class="py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-if="!backends.length">
-                        <td colspan="10" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
+                        <td colspan="11" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
                       </tr>
                       <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
                         <td class="py-2 pr-4">
@@ -400,6 +404,23 @@
                             placeholder="0"
                             class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1"
                             title="Idle keep-alive к upstream, сек"
+                          />
+                        </td>
+                        <td class="py-2 pr-2 align-top">
+                          <select
+                            v-model="b.ip_allow_mode"
+                            class="w-full min-w-[108px] rounded border border-slate-700 bg-slate-950 px-1 py-1 text-xs"
+                          >
+                            <option value="none">Любой IP</option>
+                            <option value="private">Приватные</option>
+                            <option value="custom">Свой список</option>
+                          </select>
+                          <textarea
+                            v-if="b.ip_allow_mode === 'custom'"
+                            v-model="b.allowed_cidrs_text"
+                            rows="2"
+                            placeholder="10.0.0.0/8"
+                            class="mt-1 w-full min-w-[120px] rounded border border-slate-700 bg-slate-950 px-1 py-1 font-mono text-xs"
                           />
                         </td>
                         <td class="py-2">
@@ -460,7 +481,24 @@
                           class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
                         />
                       </label>
+                      <label class="flex items-center gap-2 text-sm text-slate-300">
+                        Доступ по IP
+                        <select v-model="newBackend.ip_allow_mode" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm">
+                          <option value="none">Любой</option>
+                          <option value="private">Только приватные</option>
+                          <option value="custom">Список CIDR</option>
+                        </select>
+                      </label>
                     </div>
+                    <div v-if="newBackend.ip_allow_mode === 'custom'" class="mt-1">
+                      <textarea
+                        v-model="newBackend.allowed_cidrs_text"
+                        rows="3"
+                        placeholder="10.0.0.0/8&#10;192.168.0.0/16"
+                        class="w-full max-w-md rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -498,6 +536,8 @@ type Backend = {
   websocket_enabled: boolean
   timeout: number
   idle_timeout: number
+  ip_allow_mode: 'none' | 'private' | 'custom'
+  allowed_cidrs_text: string
 }
 
 const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
@@ -542,6 +582,8 @@ const newBackend = reactive({
   websocket_enabled: false,
   timeout: 0,
   idle_timeout: 0,
+  ip_allow_mode: 'none' as const,
+  allowed_cidrs_text: '',
 })
 
 function flashErr(e: unknown) {
@@ -571,7 +613,26 @@ function normSite(raw: Record<string, unknown>): Site {
   }
 }
 
+function parseIPCIDRMultiline(text: string): string[] {
+  return [...new Set(text.split(/[\s,;\n\r]+/).map((s) => s.trim()).filter(Boolean))]
+}
+
+function cidrsToText(list: unknown): string {
+  if (!Array.isArray(list)) return ''
+  return list.map((x) => String(x).trim()).filter(Boolean).join('\n')
+}
+
+function backendIPPayload(b: Pick<Backend, 'ip_allow_mode' | 'allowed_cidrs_text'>) {
+  const mode = b.ip_allow_mode || 'none'
+  return {
+    ip_allow_mode: mode,
+    allowed_cidrs: mode === 'custom' ? parseIPCIDRMultiline(b.allowed_cidrs_text) : [],
+  }
+}
+
 function normBackend(raw: Record<string, unknown>): Backend {
+  const mode = String(raw.ip_allow_mode ?? raw.IPAllowMode ?? 'none').toLowerCase()
+  const ipMode = mode === 'private' || mode === 'custom' ? mode : 'none'
   return {
     id: String(raw.id ?? raw.ID),
     name: String(raw.name ?? raw.Name),
@@ -583,6 +644,8 @@ function normBackend(raw: Record<string, unknown>): Backend {
     websocket_enabled: Boolean(raw.websocket_enabled ?? raw.websocketEnabled ?? raw.WebSocketEnabled ?? false),
     timeout: Number(raw.timeout ?? raw.Timeout ?? 0),
     idle_timeout: Number(raw.idle_timeout ?? raw.idleTimeout ?? raw.IdleTimeout ?? 0),
+    ip_allow_mode: ipMode as Backend['ip_allow_mode'],
+    allowed_cidrs_text: cidrsToText(raw.allowed_cidrs ?? raw.AllowedCIDRs),
   }
 }
 
@@ -891,6 +954,7 @@ async function saveBackend(b: Backend) {
         websocket_enabled: b.websocket_enabled,
         timeout: b.timeout,
         idle_timeout: b.idle_timeout,
+        ...backendIPPayload(b),
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
@@ -934,6 +998,7 @@ async function addBackend() {
         websocket_enabled: newBackend.websocket_enabled,
         timeout: newBackend.timeout,
         idle_timeout: newBackend.idle_timeout,
+        ...backendIPPayload(newBackend),
       },
     })
     newBackend.name = ''
@@ -943,6 +1008,8 @@ async function addBackend() {
     newBackend.websocket_enabled = false
     newBackend.timeout = 0
     newBackend.idle_timeout = 0
+    newBackend.ip_allow_mode = 'none'
+    newBackend.allowed_cidrs_text = ''
     await loadBackends(selected.value.id)
     flashOk('Бэкенд добавлен')
   } catch (e) {

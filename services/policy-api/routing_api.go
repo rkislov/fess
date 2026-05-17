@@ -40,8 +40,10 @@ type backendCreateRequest struct {
 	TLSSkipVerify    *bool  `json:"tls_skip_verify"`
 	PathPrefix       string `json:"path_prefix"`
 	WebSocketEnabled *bool  `json:"websocket_enabled"`
-	Timeout          *int   `json:"timeout"`
-	IdleTimeout      *int   `json:"idle_timeout"`
+	Timeout          *int     `json:"timeout"`
+	IdleTimeout      *int     `json:"idle_timeout"`
+	IPAllowMode      string   `json:"ip_allow_mode"`
+	AllowedCIDRs     []string `json:"allowed_cidrs"`
 }
 
 func publishRoutingUpdate(ctx context.Context, rdb *redis.Client) error {
@@ -370,7 +372,7 @@ func listBackends(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID str
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id::text, name, base_url, priority, enabled, tls_skip_verify,
   COALESCE(path_prefix, ''), websocket_enabled, timeout_sec, idle_timeout_sec,
-  created_at, updated_at
+  ip_allow_mode, allowed_cidrs, created_at, updated_at
 FROM backends
 WHERE site_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, siteID)
@@ -390,17 +392,22 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 		WebSocketEnabled bool      `json:"websocket_enabled"`
 		Timeout          int       `json:"timeout"`
 		IdleTimeout      int       `json:"idle_timeout"`
+		IPAllowMode      string    `json:"ip_allow_mode"`
+		AllowedCIDRs     []string  `json:"allowed_cidrs"`
 		CreatedAt        time.Time `json:"created_at"`
 		UpdatedAt        time.Time `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
+		var allowedJSON string
 		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify,
-			&it.PathPrefix, &it.WebSocketEnabled, &it.Timeout, &it.IdleTimeout, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.PathPrefix, &it.WebSocketEnabled, &it.Timeout, &it.IdleTimeout,
+			&it.IPAllowMode, &allowedJSON, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		it.AllowedCIDRs = decodeAllowedCIDRsJSON(allowedJSON)
 		items = append(items, it)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
@@ -440,11 +447,16 @@ func createBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": terr.Error()})
 		return
 	}
+	ipMode, allowedJSON, ierr := backendIPAllowFields(payload.IPAllowMode, payload.AllowedCIDRs)
+	if ierr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ierr.Error()})
+		return
+	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify, path_prefix, websocket_enabled, timeout_sec, idle_timeout_sec)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec)
+INSERT INTO backends(id, site_id, name, base_url, priority, enabled, tls_skip_verify, path_prefix, websocket_enabled, timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs)
+VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		id, siteID, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -491,10 +503,16 @@ func updateBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": terr.Error()})
 		return
 	}
+	ipMode, allowedJSON, ierr := backendIPAllowFields(payload.IPAllowMode, payload.AllowedCIDRs)
+	if ierr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ierr.Error()})
+		return
+	}
 	res, err := db.ExecContext(r.Context(), `
 UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6,
-  path_prefix=$7, websocket_enabled=$8, timeout_sec=$9, idle_timeout_sec=$10, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec)
+  path_prefix=$7, websocket_enabled=$8, timeout_sec=$9, idle_timeout_sec=$10,
+  ip_allow_mode=$11, allowed_cidrs=$12, updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, pathPrefix, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -535,6 +553,47 @@ func isUniqueViolation(err error) bool {
 }
 
 const maxBackendTimeoutSec = 86400
+
+func decodeAllowedCIDRsJSON(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func backendIPAllowFields(mode string, cidrs []string) (string, string, error) {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if mode == "" {
+		mode = routing.IPAllowNone
+	}
+	switch mode {
+	case routing.IPAllowNone, routing.IPAllowPrivate, routing.IPAllowCustom:
+	default:
+		return "", "", errors.New("ip_allow_mode must be none, private, or custom")
+	}
+	if mode != routing.IPAllowCustom {
+		return mode, "[]", nil
+	}
+	if _, err := routing.ParsePrefixList(cidrs); err != nil {
+		return "", "", err
+	}
+	if len(cidrs) == 0 {
+		return "", "", errors.New("allowed_cidrs required when ip_allow_mode is custom")
+	}
+	if len(cidrs) > 64 {
+		return "", "", errors.New("allowed_cidrs: at most 64 entries")
+	}
+	encoded, err := routing.EncodeAllowedCIDRsJSON(cidrs)
+	if err != nil {
+		return "", "", err
+	}
+	return mode, encoded, nil
+}
 
 func backendTimeoutFields(timeout, idleTimeout *int) (int, int, error) {
 	t := 0

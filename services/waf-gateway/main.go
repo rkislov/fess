@@ -92,6 +92,9 @@ func main() {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mr := routeStore.Current().Match(publicHostHeader(r, ipRes), r.URL.Path)
+		if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
+			return
+		}
 		gateTF := applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
 		if gateTF.Responded {
 			return

@@ -35,6 +35,9 @@ func serveWebSocketUpgrade(
 	gateTF threatFeedGateResult,
 	ipRes *clientip.Resolver,
 ) {
+	if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
+		return
+	}
 	if !mr.WebSocketEnabled {
 		writeProxyAccessLog(r.Context(), db, r, mr, "websocket_disabled", ipRes)
 		http.Error(w, "WebSocket is not enabled for this backend/path", http.StatusForbidden)
