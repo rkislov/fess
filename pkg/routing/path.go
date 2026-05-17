@@ -2,9 +2,18 @@ package routing
 
 import "strings"
 
-// NormalizePathPrefix returns a canonical path prefix ("" or "/foo" without trailing slash).
+// IsCatchAllPath reports whether prefix matches any request path (* or legacy empty).
+func IsCatchAllPath(p string) bool {
+	p = strings.TrimSpace(p)
+	return p == "" || p == "*" || p == "/"
+}
+
+// NormalizePathPrefix returns a canonical path prefix ("*", "" catch-all, or "/foo" without trailing slash).
 func NormalizePathPrefix(p string) string {
 	p = strings.TrimSpace(p)
+	if p == "*" {
+		return "*"
+	}
 	if p == "" || p == "/" {
 		return ""
 	}
@@ -32,8 +41,11 @@ func RequestPath(urlPath string) string {
 
 // PathMatchesPrefix reports whether reqPath is under prefix (prefix normalized).
 func PathMatchesPrefix(reqPath, prefix string) bool {
+	if IsCatchAllPath(prefix) {
+		return true
+	}
 	prefix = NormalizePathPrefix(prefix)
-	if prefix == "" {
+	if prefix == "" || prefix == "*" {
 		return true
 	}
 	reqPath = RequestPath(reqPath)
@@ -45,9 +57,12 @@ func PathMatchesPrefix(reqPath, prefix string) bool {
 
 // StripPathPrefix removes a matched prefix from reqPath for upstream forwarding.
 func StripPathPrefix(reqPath, prefix string) string {
+	if IsCatchAllPath(prefix) {
+		return RequestPath(reqPath)
+	}
 	prefix = NormalizePathPrefix(prefix)
 	reqPath = RequestPath(reqPath)
-	if prefix == "" {
+	if prefix == "" || prefix == "*" {
 		return reqPath
 	}
 	if reqPath == prefix {

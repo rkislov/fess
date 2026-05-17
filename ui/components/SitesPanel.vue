@@ -328,178 +328,77 @@
               </div>
 
               <div>
-                <h3 class="text-sm font-medium text-slate-300">Бэкенды</h3>
-                <p class="mt-1 text-sm text-slate-400">
-                  Маршрут по префиксу пути: для запроса выбирается бэкенд с самым длинным совпадающим
-                  <span class="font-mono">path_prefix</span> (пустой = «по умолчанию» для остальных путей). Включите
-                  <span class="font-mono">WebSocket</span>, чтобы handshake проксировался без буфера тела и ICAP. Для
-                  <span class="font-mono">https://</span> upstream можно отключить проверку TLS.
-                  Ограничение по IP действует только для запросов, попадающих в этот бэкенд по
-                  <span class="font-mono">path_prefix</span> (например <span class="font-mono">/admin</span> + «только приватные сети»).
-                  За балансировщиком задайте <span class="font-mono">WAF_TRUSTED_PROXIES</span>, чтобы видеть реальный клиентский IP.
-                </p>
-
-                <div class="mt-4 overflow-x-auto">
-                  <table class="w-full text-left text-sm">
-                    <thead>
-                      <tr class="border-b border-slate-800 text-slate-500">
-                        <th class="py-2 pr-4">Имя</th>
-                        <th class="py-2 pr-4">Base URL</th>
-                        <th class="py-2 pr-4">Префикс пути</th>
-                        <th class="py-2 pr-4">Приоритет</th>
-                        <th class="py-2">Вкл.</th>
-                        <th class="py-2 pr-2 text-center" title="InsecureSkipVerify к upstream HTTPS">TLS</th>
-                        <th class="py-2 pr-2 text-center" title="Проксировать WebSocket upgrade">WS</th>
-                        <th class="py-2 pr-2" title="Лимит upstream, сек (0 = без лимита)">Timeout</th>
-                        <th class="py-2 pr-2" title="Idle keep-alive, сек (0 = по умолчанию)">Idle</th>
-                        <th class="py-2 pr-2" title="Кто может обращаться к этому path_prefix">IP</th>
-                        <th class="py-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-if="!backends.length">
-                        <td colspan="11" class="py-6 text-center text-slate-500">Нет бэкендов — добавьте ниже.</td>
-                      </tr>
-                      <tr v-for="b in backends" :key="b.id" class="border-b border-slate-800/80">
-                        <td class="py-2 pr-4">
-                          <input v-model="b.name" class="w-full min-w-[100px] rounded border border-slate-700 bg-slate-950 px-2 py-1" />
-                        </td>
-                        <td class="py-2 pr-4">
-                          <input v-model="b.base_url" class="w-full min-w-[180px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs" />
-                        </td>
-                        <td class="py-2 pr-4">
-                          <input
-                            v-model="b.path_prefix"
-                            placeholder="/ws"
-                            class="w-full min-w-[88px] rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs"
-                          />
-                        </td>
-                        <td class="py-2 pr-4">
-                          <input v-model.number="b.priority" type="number" class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1" />
-                        </td>
-                        <td class="py-2">
-                          <input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" />
-                        </td>
-                        <td class="py-2 text-center">
-                          <input v-model="b.tls_skip_verify" type="checkbox" class="rounded border-slate-600" title="Не проверять сертификат HTTPS upstream" />
-                        </td>
-                        <td class="py-2 text-center">
-                          <input v-model="b.websocket_enabled" type="checkbox" class="rounded border-slate-600" title="WebSocket upgrade" />
-                        </td>
-                        <td class="py-2 pr-2">
-                          <input
-                            v-model.number="b.timeout"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1"
-                            title="Макс. время ответа upstream, сек"
-                          />
-                        </td>
-                        <td class="py-2 pr-2">
-                          <input
-                            v-model.number="b.idle_timeout"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            class="w-20 rounded border border-slate-700 bg-slate-950 px-2 py-1"
-                            title="Idle keep-alive к upstream, сек"
-                          />
-                        </td>
-                        <td class="py-2 pr-2 align-top">
-                          <select
-                            v-model="b.ip_allow_mode"
-                            class="w-full min-w-[108px] rounded border border-slate-700 bg-slate-950 px-1 py-1 text-xs"
-                          >
-                            <option value="none">Любой IP</option>
-                            <option value="private">Приватные</option>
-                            <option value="custom">Свой список</option>
-                          </select>
-                          <textarea
-                            v-if="b.ip_allow_mode === 'custom'"
-                            v-model="b.allowed_cidrs_text"
-                            rows="2"
-                            placeholder="10.0.0.0/8"
-                            class="mt-1 w-full min-w-[120px] rounded border border-slate-700 bg-slate-950 px-1 py-1 font-mono text-xs"
-                          />
-                        </td>
-                        <td class="py-2">
-                          <button type="button" class="text-sky-400 hover:underline" @click="saveBackend(b)">Сохранить</button>
-                          <button type="button" class="ml-2 text-rose-400 hover:underline" @click="removeBackend(b)">Удалить</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <h3 class="text-sm font-medium text-slate-300">Бэкенды (upstream)</h3>
+                <ul class="mt-2 list-inside list-disc space-y-1 text-xs text-slate-500">
+                  <li><strong class="text-slate-400">Upstream</strong> — один Base URL на бэкенд.</li>
+                  <li><strong class="text-slate-400">Пути</strong> — <span class="font-mono">*</span> (все) и префиксы вроде <span class="font-mono">/admin</span>.</li>
+                  <li>Длиннейший префикс побеждает; WS, таймауты и IP задаются на пути.</li>
+                </ul>
+                <p v-if="!backends.length" class="mt-4 rounded-lg border border-dashed border-slate-700 bg-slate-950/40 px-4 py-6 text-center text-sm text-slate-500">Нет upstream — добавьте ниже.</p>
+                <div v-else class="mt-4 space-y-5">
+                  <article v-for="b in backends" :key="b.id" class="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+                      <div class="min-w-0 flex-1">
+                        <h4 class="font-medium text-slate-100">{{ b.name || 'Без имени' }}</h4>
+                        <p class="mt-1 font-mono text-xs text-slate-500">{{ b.base_url }}</p>
+                      </div>
+                      <div class="flex gap-2">
+                        <button type="button" class="rounded-lg bg-sky-700/80 px-3 py-1.5 text-xs text-white hover:bg-sky-600" :disabled="busy" @click="saveBackend(b)">Сохранить upstream</button>
+                        <button type="button" class="rounded-lg border border-rose-800/80 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-950/40" :disabled="busy" @click="removeBackend(b)">Удалить</button>
+                      </div>
+                    </div>
+                    <fieldset class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <legend class="col-span-full mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Upstream</legend>
+                      <label class="block sm:col-span-2"><span class="text-xs text-slate-500">Имя</span><input v-model="b.name" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                      <label class="block sm:col-span-2"><span class="text-xs text-slate-500">Base URL</span><input v-model="b.base_url" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs" /></label>
+                      <label class="block"><span class="text-xs text-slate-500">Приоритет</span><input v-model.number="b.priority" type="number" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                      <label class="flex items-center gap-2 self-end text-sm text-slate-300"><input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" /> Включён</label>
+                      <label class="flex items-center gap-2 self-end text-sm text-amber-200/90 sm:col-span-2"><input v-model="b.tls_skip_verify" type="checkbox" class="rounded border-slate-600" /> Не проверять TLS</label>
+                    </fieldset>
+                    <div class="mt-6">
+                      <h5 class="text-xs font-medium uppercase tracking-wide text-slate-500">Пути</h5>
+                      <p v-if="!b.paths.length" class="mt-2 text-sm text-slate-500">Нет путей. Добавьте <span class="font-mono">*</span> или <span class="font-mono">/admin</span>.</p>
+                      <div v-else class="mt-3 space-y-3">
+                        <div v-for="p in b.paths" :key="p.id" class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                          <div class="mb-2 flex items-center justify-between gap-2"><span class="font-mono text-sm text-sky-300">{{ pathPrefixLabel(p.path_prefix) }}</span><span class="text-[10px] text-slate-500">prio {{ p.priority }}</span></div>
+                          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <label class="block"><span class="text-xs text-slate-500">Префикс</span><input v-model="p.path_prefix" placeholder="* /admin" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
+                            <label class="block"><span class="text-xs text-slate-500">Приоритет</span><input v-model.number="p.priority" type="number" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm" /></label>
+                            <label class="flex items-center gap-2 self-end text-sm text-teal-200/90"><input v-model="p.websocket_enabled" type="checkbox" class="rounded border-slate-600" /> WS</label>
+                            <label class="flex items-center gap-2 self-end text-sm text-slate-300"><input v-model="p.enabled" type="checkbox" class="rounded border-slate-600" /> Вкл</label>
+                            <label class="block"><span class="text-xs text-slate-500">Timeout</span><input v-model.number="p.timeout" type="number" min="0" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm" /></label>
+                            <label class="block"><span class="text-xs text-slate-500">Idle</span><input v-model.number="p.idle_timeout" type="number" min="0" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm" /></label>
+                            <label class="block sm:col-span-2"><span class="text-xs text-slate-500">IP</span><select v-model="p.ip_allow_mode" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"><option value="none">Любой</option><option value="private">Приватные</option><option value="custom">CIDR</option></select></label>
+                            <label v-if="p.ip_allow_mode === 'custom'" class="block sm:col-span-2 lg:col-span-4"><span class="text-xs text-slate-500">CIDR</span><textarea v-model="p.allowed_cidrs_text" rows="2" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
+                          </div>
+                          <div class="mt-2 flex gap-3"><button type="button" class="text-xs text-sky-400 hover:underline" @click="saveBackendPath(p)">Сохранить</button><button type="button" class="text-xs text-rose-400 hover:underline" @click="removeBackendPath(p)">Удалить</button></div>
+                        </div>
+                      </div>
+                      <div class="mt-4 rounded-lg border border-dashed border-slate-700 bg-slate-950/30 p-3">
+                        <p class="text-xs text-slate-400">Новый путь</p>
+                        <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <label class="block"><span class="text-xs text-slate-500">Префикс</span><input v-model="pathDraft(b.id).path_prefix" placeholder="* /admin" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
+                          <label class="block"><span class="text-xs text-slate-500">Приоритет</span><input v-model.number="pathDraft(b.id).priority" type="number" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm" /></label>
+                          <label class="flex items-center gap-2 self-end text-sm text-teal-200/90"><input v-model="pathDraft(b.id).websocket_enabled" type="checkbox" class="rounded border-slate-600" /> WS</label>
+                          <label class="block"><span class="text-xs text-slate-500">IP</span><select v-model="pathDraft(b.id).ip_allow_mode" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"><option value="none">Любой</option><option value="private">Приватные</option><option value="custom">CIDR</option></select></label>
+                          <label v-if="pathDraft(b.id).ip_allow_mode === 'custom'" class="block sm:col-span-2 lg:col-span-4"><span class="text-xs text-slate-500">CIDR</span><textarea v-model="pathDraft(b.id).allowed_cidrs_text" rows="2" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
+                        </div>
+                        <button type="button" class="mt-2 rounded bg-teal-800/80 px-3 py-1.5 text-xs text-teal-100" :disabled="busy" @click="addBackendPath(b.id)">Добавить путь</button>
+                      </div>
+                    </div>
+                  </article>
                 </div>
-
-                <div class="mt-6 border-t border-slate-800 pt-6">
-                  <h4 class="text-sm font-medium text-slate-300">Новый бэкенд</h4>
-                  <div class="mt-2 flex flex-col gap-3">
-                    <div class="flex flex-wrap gap-2">
-                      <input v-model="newBackend.name" placeholder="Имя" class="min-w-[120px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                      <input
-                        v-model="newBackend.base_url"
-                        placeholder="https://upstream:443"
-                        class="min-w-[200px] flex-[2] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
-                      />
-                      <input
-                        v-model="newBackend.path_prefix"
-                        placeholder="Префикс /ws"
-                        class="min-w-[120px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
-                      />
-                      <input v-model.number="newBackend.priority" type="number" placeholder="Приоритет" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                      <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">
-                        Добавить
-                      </button>
-                    </div>
-                    <div class="flex flex-wrap gap-4">
-                      <label class="flex items-center gap-2 text-sm text-amber-200/90">
-                        <input v-model="newBackend.tls_skip_verify" type="checkbox" class="rounded border-slate-600" />
-                        Не проверять TLS upstream (только для https)
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-teal-200/90">
-                        <input v-model="newBackend.websocket_enabled" type="checkbox" class="rounded border-slate-600" />
-                        WebSocket (upgrade)
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-slate-300">
-                        Timeout, сек
-                        <input
-                          v-model.number="newBackend.timeout"
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                        />
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-slate-300">
-                        Idle timeout, сек
-                        <input
-                          v-model.number="newBackend.idle_timeout"
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                        />
-                      </label>
-                      <label class="flex items-center gap-2 text-sm text-slate-300">
-                        Доступ по IP
-                        <select v-model="newBackend.ip_allow_mode" class="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm">
-                          <option value="none">Любой</option>
-                          <option value="private">Только приватные</option>
-                          <option value="custom">Список CIDR</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div v-if="newBackend.ip_allow_mode === 'custom'" class="mt-1">
-                      <textarea
-                        v-model="newBackend.allowed_cidrs_text"
-                        rows="3"
-                        placeholder="10.0.0.0/8&#10;192.168.0.0/16"
-                        class="w-full max-w-md rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-                      />
-                    </div>
+                <article class="mt-6 rounded-xl border border-dashed border-teal-800/40 bg-teal-950/10 p-4">
+                  <h4 class="text-sm font-medium text-teal-100">Новый upstream</h4>
+                  <p class="mt-1 text-xs text-slate-500">Создаётся с путём <span class="font-mono">*</span> по умолчанию.</p>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label class="block"><span class="text-xs text-slate-500">Имя</span><input v-model="newBackend.name" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                    <label class="block"><span class="text-xs text-slate-500">Base URL</span><input v-model="newBackend.base_url" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs" /></label>
+                    <label class="block"><span class="text-xs text-slate-500">Приоритет</span><input v-model.number="newBackend.priority" type="number" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                    <label class="flex items-center gap-2 self-end text-sm text-amber-200/90"><input v-model="newBackend.tls_skip_verify" type="checkbox" class="rounded border-slate-600" /> TLS skip</label>
                   </div>
-                </div>
+                  <div class="mt-4 flex justify-end"><button type="button" class="rounded-lg bg-emerald-600 px-5 py-2 text-sm text-white hover:bg-emerald-500" :disabled="busy" @click="addBackend">Добавить upstream</button></div>
+                </article>
               </div>
             </div>
           </div>
@@ -524,19 +423,29 @@ type Site = {
   tls_enabled: boolean
   tls_has_certificate: boolean
 }
+type IPAllowMode = 'none' | 'private' | 'custom'
+
+type BackendPath = {
+  id: string
+  backend_id: string
+  path_prefix: string
+  priority: number
+  enabled: boolean
+  websocket_enabled: boolean
+  timeout: number
+  idle_timeout: number
+  ip_allow_mode: IPAllowMode
+  allowed_cidrs_text: string
+}
+
 type Backend = {
   id: string
   name: string
   base_url: string
-  path_prefix: string
   priority: number
   enabled: boolean
   tls_skip_verify: boolean
-  websocket_enabled: boolean
-  timeout: number
-  idle_timeout: number
-  ip_allow_mode: 'none' | 'private' | 'custom'
-  allowed_cidrs_text: string
+  paths: BackendPath[]
 }
 
 const stepLabels = ['Сайт', 'Бэкенд', 'HTTPS']
@@ -575,15 +484,36 @@ const tlsForm = reactive({ enabled: false, cert_pem: '', key_pem: '' })
 const newBackend = reactive({
   name: '',
   base_url: '',
-  path_prefix: '',
   priority: 0,
   tls_skip_verify: false,
-  websocket_enabled: false,
-  timeout: 0,
-  idle_timeout: 0,
-  ip_allow_mode: 'none' as const,
-  allowed_cidrs_text: '',
 })
+
+type PathDraft = {
+  path_prefix: string
+  priority: number
+  websocket_enabled: boolean
+  timeout: number
+  idle_timeout: number
+  ip_allow_mode: IPAllowMode
+  allowed_cidrs_text: string
+}
+
+const pathDrafts = reactive<Record<string, PathDraft>>({})
+
+function pathDraft(backendId: string): PathDraft {
+  if (!pathDrafts[backendId]) {
+    pathDrafts[backendId] = {
+      path_prefix: '*',
+      priority: 100,
+      websocket_enabled: false,
+      timeout: 0,
+      idle_timeout: 0,
+      ip_allow_mode: 'none',
+      allowed_cidrs_text: '',
+    }
+  }
+  return pathDrafts[backendId]
+}
 
 function flashErr(e: unknown) {
   ok.value = ''
@@ -612,6 +542,17 @@ function normSite(raw: Record<string, unknown>): Site {
   }
 }
 
+function ipAllowLabel(mode: string): string {
+  switch (mode) {
+    case 'private':
+      return 'Приватные'
+    case 'custom':
+      return 'CIDR'
+    default:
+      return 'Любой IP'
+  }
+}
+
 function parseIPCIDRMultiline(text: string): string[] {
   return [...new Set(text.split(/[\s,;\n\r]+/).map((s) => s.trim()).filter(Boolean))]
 }
@@ -621,30 +562,60 @@ function cidrsToText(list: unknown): string {
   return list.map((x) => String(x).trim()).filter(Boolean).join('\n')
 }
 
-function backendIPPayload(b: Pick<Backend, 'ip_allow_mode' | 'allowed_cidrs_text'>) {
-  const mode = b.ip_allow_mode || 'none'
+function pathIPPayload(p: Pick<BackendPath, 'ip_allow_mode' | 'allowed_cidrs_text'>) {
+  const mode = p.ip_allow_mode || 'none'
   return {
     ip_allow_mode: mode,
-    allowed_cidrs: mode === 'custom' ? parseIPCIDRMultiline(b.allowed_cidrs_text) : [],
+    allowed_cidrs: mode === 'custom' ? parseIPCIDRMultiline(p.allowed_cidrs_text) : [],
+  }
+}
+
+function pathPrefixLabel(prefix: string): string {
+  const p = prefix.trim()
+  if (!p || p === '*') return '*'
+  return p
+}
+
+function normBackendPath(raw: Record<string, unknown>): BackendPath {
+  const mode = String(raw.ip_allow_mode ?? raw.IPAllowMode ?? 'none').toLowerCase()
+  const ipMode: IPAllowMode = mode === 'private' || mode === 'custom' ? mode : 'none'
+  return {
+    id: String(raw.id ?? raw.ID),
+    backend_id: String(raw.backend_id ?? raw.BackendID ?? ''),
+    path_prefix: String(raw.path_prefix ?? raw.PathPrefix ?? '*') || '*',
+    priority: Number(raw.priority ?? raw.Priority ?? 100),
+    enabled: Boolean(raw.enabled ?? raw.Enabled ?? true),
+    websocket_enabled: Boolean(raw.websocket_enabled ?? raw.websocketEnabled ?? raw.WebSocketEnabled ?? false),
+    timeout: Number(raw.timeout ?? raw.Timeout ?? 0),
+    idle_timeout: Number(raw.idle_timeout ?? raw.idleTimeout ?? raw.IdleTimeout ?? 0),
+    ip_allow_mode: ipMode,
+    allowed_cidrs_text: cidrsToText(raw.allowed_cidrs ?? raw.AllowedCIDRs),
   }
 }
 
 function normBackend(raw: Record<string, unknown>): Backend {
-  const mode = String(raw.ip_allow_mode ?? raw.IPAllowMode ?? 'none').toLowerCase()
-  const ipMode = mode === 'private' || mode === 'custom' ? mode : 'none'
+  const pathsRaw = raw.paths ?? raw.Paths
+  const paths = Array.isArray(pathsRaw) ? pathsRaw.map((p) => normBackendPath(p as Record<string, unknown>)) : []
   return {
     id: String(raw.id ?? raw.ID),
     name: String(raw.name ?? raw.Name),
     base_url: String(raw.base_url ?? raw.BaseURL),
-    path_prefix: String(raw.path_prefix ?? raw.PathPrefix ?? ''),
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
     tls_skip_verify: Boolean(raw.tls_skip_verify ?? raw.tlsSkipVerify ?? raw.TLSSkipVerify ?? false),
-    websocket_enabled: Boolean(raw.websocket_enabled ?? raw.websocketEnabled ?? raw.WebSocketEnabled ?? false),
-    timeout: Number(raw.timeout ?? raw.Timeout ?? 0),
-    idle_timeout: Number(raw.idle_timeout ?? raw.idleTimeout ?? raw.IdleTimeout ?? 0),
-    ip_allow_mode: ipMode as Backend['ip_allow_mode'],
-    allowed_cidrs_text: cidrsToText(raw.allowed_cidrs ?? raw.AllowedCIDRs),
+    paths,
+  }
+}
+
+function resetPathDraft(backendId: string) {
+  pathDrafts[backendId] = {
+    path_prefix: '*',
+    priority: 100,
+    websocket_enabled: false,
+    timeout: 0,
+    idle_timeout: 0,
+    ip_allow_mode: 'none',
+    allowed_cidrs_text: '',
   }
 }
 
@@ -946,18 +917,80 @@ async function saveBackend(b: Backend) {
       body: {
         name: b.name,
         base_url: b.base_url,
-        path_prefix: b.path_prefix,
         priority: b.priority,
         enabled: b.enabled,
         tls_skip_verify: b.tls_skip_verify,
-        websocket_enabled: b.websocket_enabled,
-        timeout: b.timeout,
-        idle_timeout: b.idle_timeout,
-        ...backendIPPayload(b),
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
-    flashOk('Бэкенд сохранён')
+    flashOk('Upstream сохранён')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function saveBackendPath(p: BackendPath) {
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl(`/backend-paths/${p.id}`), {
+      method: 'PUT',
+      body: {
+        path_prefix: p.path_prefix,
+        priority: p.priority,
+        enabled: p.enabled,
+        websocket_enabled: p.websocket_enabled,
+        timeout: p.timeout,
+        idle_timeout: p.idle_timeout,
+        ...pathIPPayload(p),
+      },
+    })
+    if (selected.value) await loadBackends(selected.value.id)
+    flashOk('Путь сохранён')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeBackendPath(p: BackendPath) {
+  if (!confirm(`Удалить путь ${pathPrefixLabel(p.path_prefix)}?`)) return
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl(`/backend-paths/${p.id}`), { method: 'DELETE' })
+    if (selected.value) await loadBackends(selected.value.id)
+    flashOk('Путь удалён')
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function addBackendPath(backendId: string) {
+  const draft = pathDraft(backendId)
+  busy.value = true
+  err.value = ''
+  try {
+    await $fetch(apiUrl(`/backends/${backendId}/paths`), {
+      method: 'POST',
+      body: {
+        path_prefix: draft.path_prefix,
+        priority: draft.priority || undefined,
+        enabled: true,
+        websocket_enabled: draft.websocket_enabled,
+        timeout: draft.timeout,
+        idle_timeout: draft.idle_timeout,
+        ...pathIPPayload(draft),
+      },
+    })
+    resetPathDraft(backendId)
+    if (selected.value) await loadBackends(selected.value.id)
+    flashOk('Путь добавлен')
   } catch (e) {
     flashErr(e)
   } finally {
@@ -990,25 +1023,15 @@ async function addBackend() {
       body: {
         name: newBackend.name,
         base_url: newBackend.base_url,
-        path_prefix: newBackend.path_prefix,
         priority: newBackend.priority || undefined,
         enabled: true,
         tls_skip_verify: newBackend.tls_skip_verify,
-        websocket_enabled: newBackend.websocket_enabled,
-        timeout: newBackend.timeout,
-        idle_timeout: newBackend.idle_timeout,
-        ...backendIPPayload(newBackend),
       },
     })
     newBackend.name = ''
     newBackend.base_url = ''
-    newBackend.path_prefix = ''
+    newBackend.priority = 0
     newBackend.tls_skip_verify = false
-    newBackend.websocket_enabled = false
-    newBackend.timeout = 0
-    newBackend.idle_timeout = 0
-    newBackend.ip_allow_mode = 'none'
-    newBackend.allowed_cidrs_text = ''
     await loadBackends(selected.value.id)
     flashOk('Бэкенд добавлен')
   } catch (e) {

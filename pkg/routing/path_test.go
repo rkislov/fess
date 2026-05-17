@@ -15,6 +15,9 @@ func TestPathMatchesPrefix(t *testing.T) {
 	if !PathMatchesPrefix("/anything", "") {
 		t.Fatal("empty prefix matches all")
 	}
+	if !PathMatchesPrefix("/admin/foo", "*") {
+		t.Fatal("* prefix matches all")
+	}
 }
 
 func TestStripPathPrefix(t *testing.T) {
@@ -32,8 +35,8 @@ func TestSnapshotPickBackend_longestPrefix(t *testing.T) {
 	site := ResolvedSite{
 		HostPattern: "*",
 		Backends: []ResolvedBackend{
-			{PathPrefix: "", Priority: 100, Backend: u, BackendName: "default"},
-			{PathPrefix: "/api", Priority: 50, Backend: u2, BackendName: "api"},
+			{PathPrefix: "*", PathPriority: 100, BackendPriority: 100, Backend: u, BackendName: "default"},
+			{PathPrefix: "/api", PathPriority: 50, BackendPriority: 50, Backend: u2, BackendName: "api"},
 		},
 	}
 	br := site.pickBackend("/api/ws")

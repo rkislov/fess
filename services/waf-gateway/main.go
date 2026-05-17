@@ -100,6 +100,11 @@ func main() {
 			return
 		}
 
+		if isStaticAssetRequest(r) {
+			serveStaticFastPath(w, r, mr, db, proxy, ipRes, gateTF.ProxyOutcomeHint)
+			return
+		}
+
 		if isWebSocketUpgrade(r) {
 			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes)
 			return

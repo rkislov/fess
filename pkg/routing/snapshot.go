@@ -31,10 +31,11 @@ type Snapshot struct {
 	Sites   []ResolvedSite
 }
 
-// ResolvedBackend is one upstream target for a site (path prefix + priority).
+// ResolvedBackend is one upstream path rule (flattened backend + path row).
 type ResolvedBackend struct {
 	PathPrefix       string
-	Priority         int
+	PathPriority     int
+	BackendPriority  int
 	Backend          *url.URL
 	BackendName      string
 	TLSSkipVerify    bool
@@ -111,7 +112,7 @@ func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {
 			continue
 		}
 		prefix := NormalizePathPrefix(b.PathPrefix)
-		if prefix == "" {
+		if IsCatchAllPath(prefix) {
 			defaults = append(defaults, b)
 			continue
 		}
@@ -125,7 +126,9 @@ func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {
 			continue
 		}
 		if plen == bestLen && best != nil {
-			if b.Priority < best.Priority {
+			if b.PathPriority < best.PathPriority {
+				best = b
+			} else if b.PathPriority == best.PathPriority && b.BackendPriority < best.BackendPriority {
 				best = b
 			}
 		}
@@ -138,7 +141,9 @@ func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {
 	}
 	def := defaults[0]
 	for _, b := range defaults[1:] {
-		if b.Priority < def.Priority {
+		if b.PathPriority < def.PathPriority {
+			def = b
+		} else if b.PathPriority == def.PathPriority && b.BackendPriority < def.BackendPriority {
 			def = b
 		}
 	}
@@ -167,12 +172,14 @@ func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Sn
 
 	rows, err := db.QueryContext(ctx, `
 SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
-  b.name, b.base_url, b.priority, b.tls_skip_verify, COALESCE(b.path_prefix, ''), b.websocket_enabled,
-  b.timeout_sec, b.idle_timeout_sec, b.ip_allow_mode, b.allowed_cidrs
+  b.name, b.base_url, b.priority, b.tls_skip_verify,
+  COALESCE(p.path_prefix, '*'), p.priority, p.websocket_enabled,
+  p.timeout_sec, p.idle_timeout_sec, p.ip_allow_mode, p.allowed_cidrs
 FROM sites s
 JOIN backends b ON b.site_id = s.id AND b.enabled = TRUE
+JOIN backend_paths p ON p.backend_id = b.id AND p.enabled = TRUE
 WHERE s.enabled = TRUE
-ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
+ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.priority ASC, p.created_at ASC`)
 	if err != nil {
 		return out, fmt.Errorf("routing query: %w", err)
 	}
@@ -190,12 +197,12 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 		var sitePri int
 		var policyID string
 		var backendName, base string
-		var backendPri int
+		var backendPri, pathPri int
 		var tlsSkip, wsEn bool
 		var pathPrefix string
 		var timeoutSec, idleTimeoutSec int
 		var ipAllowMode, allowedCIDRsJSON string
-		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON); err != nil {
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &pathPri, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON); err != nil {
 			return out, err
 		}
 		u, err := url.Parse(strings.TrimSpace(base))
@@ -230,7 +237,8 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC`)
 		}
 		out.Sites[idx].Backends = append(out.Sites[idx].Backends, ResolvedBackend{
 			PathPrefix:       NormalizePathPrefix(pathPrefix),
-			Priority:         backendPri,
+			PathPriority:     pathPri,
+			BackendPriority:  backendPri,
 			Backend:          u,
 			BackendName:      strings.TrimSpace(backendName),
 			TLSSkipVerify:    tlsSkip,

@@ -200,6 +200,9 @@ func main() {
 	mux.HandleFunc("/api/v1/backends/", func(w http.ResponseWriter, r *http.Request) {
 		backendByIDHandler(w, r, db, rdb)
 	})
+	mux.HandleFunc("/api/v1/backend-paths/", func(w http.ResponseWriter, r *http.Request) {
+		backendPathByIDHandler(w, r, db, rdb)
+	})
 
 	srv := &http.Server{
 		Addr:              listen,
