@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -141,6 +143,49 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 		out.LastError = lastErr.String
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func postThreatFeedUpload(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseMultipartForm(threatFeedMaxPageBytes + (1 << 20)); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart parse failed: " + err.Error()})
+		return
+	}
+	fh, _, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing form field \"file\""})
+		return
+	}
+	defer fh.Close()
+	body, err := io.ReadAll(io.LimitReader(fh, threatFeedMaxPageBytes+1))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(body) > threatFeedMaxPageBytes {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file exceeds max size (64 MiB)"})
+		return
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is empty"})
+		return
+	}
+
+	syncCtx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	n, err := ingestThreatFeedTXT(syncCtx, db, body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": sanitizeThreatFeedError(err.Error())})
+		return
+	}
+	if err := rdb.Publish(r.Context(), "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rows_ingested": n})
 }
 
 func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {

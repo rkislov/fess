@@ -162,6 +162,9 @@ func main() {
 		}
 		postThreatFeedSync(w, r, db, rdb)
 	})
+	mux.HandleFunc("/api/v1/settings/threat-feed/upload", func(w http.ResponseWriter, r *http.Request) {
+		postThreatFeedUpload(w, r, db, rdb)
+	})
 	mux.HandleFunc("/api/v1/settings/threat-feed", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

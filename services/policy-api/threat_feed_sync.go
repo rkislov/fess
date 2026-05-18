@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,10 +22,28 @@ var errThreatFeedSkipped = errors.New("threat feed disabled or missing feed_url"
 var errThreatFeedMissingURL = errors.New("threat feed missing feed_url")
 
 const (
-	threatFeedMaxPageBytes   = 64 << 20
-	threatFeedQFeedsPageSize = 4000
-	threatFeedQFeedsMaxPages = 999
+	threatFeedMaxPageBytes      = 64 << 20
+	threatFeedQFeedsPageSize    = 4000
+	threatFeedQFeedsMaxPages    = 999
+	threatFeedQFeedsPagePause   = 150 * time.Millisecond
+	threatFeedHTTPMaxAttempts   = 4
 )
+
+var threatFeedHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     false,
+		TLSHandshakeTimeout:   20 * time.Second,
+		ResponseHeaderTimeout: 90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConns:          8,
+		IdleConnTimeout:       60 * time.Second,
+	},
+}
 
 // syncThreatFeedFromConfig downloads the feed, applies source filtering, replaces indicators.
 func syncThreatFeedFromConfig(ctx context.Context, db *sql.DB, cfg threatfeed.Config) error {
@@ -49,11 +68,25 @@ UPDATE threat_feed_sync_state SET last_attempt_at = $1 WHERE singleton = 'global
 		recordThreatFeedFail(ctx, db, err.Error())
 		return err
 	}
+	_, err = ingestThreatFeedBody(ctx, db, body, cfg, now)
+	return err
+}
 
+// ingestThreatFeedTXT replaces indicators from a plain-text list (one IP or CIDR per line).
+func ingestThreatFeedTXT(ctx context.Context, db *sql.DB, body []byte) (int, error) {
+	now := time.Now().UTC()
+	_, _ = db.ExecContext(ctx, `
+UPDATE threat_feed_sync_state SET last_attempt_at = $1 WHERE singleton = 'global'
+`, now)
+	cfg := threatfeed.Config{Format: "plain"}
+	return ingestThreatFeedBody(ctx, db, body, cfg, now)
+}
+
+func ingestThreatFeedBody(ctx context.Context, db *sql.DB, body []byte, cfg threatfeed.Config, now time.Time) (int, error) {
 	rows, err := threatfeed.ParseFeedBody(body, cfg.Format, cfg.CSVIndicatorCol, cfg.CSVSourceCol)
 	if err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
-		return err
+		return 0, err
 	}
 	allow := cfg.SourcesAllowlist()
 	filtered := threatfeed.FilterBySources(rows, allow)
@@ -65,25 +98,25 @@ UPDATE threat_feed_sync_state SET last_attempt_at = $1 WHERE singleton = 'global
 			len(rows), len(filtered), len(rawInd),
 		)
 		recordThreatFeedFail(ctx, db, detail)
-		return fmt.Errorf("%s", detail)
+		return 0, fmt.Errorf("%s", detail)
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM threat_feed_indicators`); err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
-		return err
+		return 0, err
 	}
 
 	for _, s := range inds {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO threat_feed_indicators(indicator) VALUES ($1)`, s); err != nil {
 			recordThreatFeedFail(ctx, db, err.Error())
-			return err
+			return 0, err
 		}
 	}
 
@@ -95,14 +128,14 @@ UPDATE threat_feed_sync_state SET
 WHERE singleton = 'global'
 `, now, len(inds)); err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
-		return err
+		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
-		return err
+		return 0, err
 	}
-	return nil
+	return len(inds), nil
 }
 
 // normalizeAPIQFeedsURL fixes common portal typos/mirrors so sync works against the real endpoint.
@@ -226,9 +259,18 @@ func fetchQFeedsPaginated(ctx context.Context, baseURLStr string, apiKey, apiKey
 		return nil, err
 	}
 	q := u.Query()
+	// Official Q-Feeds integrations paginate with page+limit only; download=1 can trigger a single huge response and RST from CDN.
+	q.Del("download")
 	var combined [][]byte
 	var total int
 	for page := 1; page <= threatFeedQFeedsMaxPages; page++ {
+		if page > 1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(threatFeedQFeedsPagePause):
+			}
+		}
 		q.Set("page", strconv.Itoa(page))
 		q.Set("limit", strconv.Itoa(threatFeedQFeedsPageSize))
 		u.RawQuery = q.Encode()
@@ -279,19 +321,50 @@ func countNonBlankLines(body []byte) int {
 }
 
 func threatFeedHTTPGet(ctx context.Context, urlStr string, apiKey string, apiKeyHeader string, reqTimeout time.Duration) ([]byte, int, error) {
+	var lastErr error
+	for attempt := 1; attempt <= threatFeedHTTPMaxAttempts; attempt++ {
+		if attempt > 1 {
+			backoff := time.Duration(attempt*attempt) * time.Second
+			select {
+			case <-ctx.Done():
+				return nil, 0, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+		body, status, err := threatFeedHTTPGetOnce(ctx, urlStr, apiKey, apiKeyHeader, reqTimeout)
+		if err != nil {
+			lastErr = err
+			if attempt < threatFeedHTTPMaxAttempts && threatFeedHTTPRetryable(err) {
+				continue
+			}
+			return nil, 0, err
+		}
+		if attempt < threatFeedHTTPMaxAttempts && threatFeedHTTPRetryStatus(status) {
+			lastErr = fmt.Errorf("feed http %d", status)
+			continue
+		}
+		return body, status, nil
+	}
+	if lastErr != nil {
+		return nil, 0, lastErr
+	}
+	return nil, 0, errors.New("feed: request failed after retries")
+}
+
+func threatFeedHTTPGetOnce(ctx context.Context, urlStr string, apiKey string, apiKeyHeader string, reqTimeout time.Duration) ([]byte, int, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, reqTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, urlStr, nil)
 	if err != nil {
 		return nil, 0, err
 	}
-	// CDN/WAF часто режет дефолтный Go UA; браузероподобный запрос совместим с api.qfeeds.com.
-	req.Header.Set("User-Agent", "Fence-ThreatFeed/1 (+https://github.com/) Mozilla/5.0 compatible")
+	req.Header.Set("User-Agent", "Fence-ThreatFeed/1.0")
 	req.Header.Set("Accept", "text/plain, text/csv, application/json;q=0.9, */*;q=0.8")
+	req.Header.Set("Connection", "close")
 	if apiKey != "" && apiKeyHeader != "" {
 		req.Header.Set(apiKeyHeader, apiKey)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := threatFeedHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -301,6 +374,31 @@ func threatFeedHTTPGet(ctx context.Context, urlStr string, apiKey string, apiKey
 		return nil, resp.StatusCode, err
 	}
 	return body, resp.StatusCode, nil
+}
+
+func threatFeedHTTPRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "connection reset") ||
+		strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "broken pipe") ||
+		strings.Contains(s, "eof") ||
+		strings.Contains(s, "timeout") ||
+		strings.Contains(s, "tls handshake")
+}
+
+func threatFeedHTTPRetryStatus(status int) bool {
+	switch status {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func feedHTTPStatusError(status int, body []byte) error {
@@ -314,6 +412,9 @@ func feedHTTPStatusError(status int, body []byte) error {
 			strings.HasPrefix(ls, "<html") ||
 			strings.Contains(ls, "<h1>not found</h1>")) {
 		return fmt.Errorf("feed HTTP 404: вернулась HTML-страница (часто неверный путь). Для Q-Feeds используйте https://api.qfeeds.com/api.php?feed_type=malware_ip&api_token=… (путь /feeds не подходит)")
+	}
+	if status == http.StatusNotFound {
+		return fmt.Errorf("feed HTTP 404: %s", s)
 	}
 	return fmt.Errorf("feed http %d: %s", status, s)
 }

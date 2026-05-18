@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
+
+	"fence/pkg/threatfeed"
 )
 
 func TestNormalizeAPIQFeedsURLInjectsAPIKeyAndFixesPortalURL(t *testing.T) {
@@ -68,6 +71,35 @@ func TestQFeedsDefaultAuthorizationHeaderIsSuppressed(t *testing.T) {
 	}
 	if got := qFeedsHeaderName("tip_secret", "X-API-Key"); got != "X-API-Key" {
 		t.Fatalf("header = %q, want X-API-Key", got)
+	}
+}
+
+func TestIngestThreatFeedTXTPlain(t *testing.T) {
+	body := []byte("192.0.2.1\n# comment\n\n203.0.113.0/24\n+bad\n-not-used\n")
+	rows, err := threatfeed.ParseFeedBody(body, "plain", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inds := threatfeed.ValidIPCIDR(threatfeed.UniqueIndicators(rows))
+	if len(inds) != 2 {
+		t.Fatalf("inds = %v, want 2", inds)
+	}
+}
+
+func TestThreatFeedHTTPRetryable(t *testing.T) {
+	cases := []struct {
+		err  string
+		want bool
+	}{
+		{"read tcp: read: connection reset by peer", true},
+		{"unexpected EOF", true},
+		{"feed http 404", false},
+	}
+	for _, tc := range cases {
+		got := threatFeedHTTPRetryable(errors.New(tc.err))
+		if got != tc.want {
+			t.Fatalf("retryable(%q) = %v, want %v", tc.err, got, tc.want)
+		}
 	}
 }
 
