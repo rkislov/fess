@@ -63,7 +63,9 @@ func main() {
 	}
 
 	initGeoPath := getenv("GEOIP_MMDB_PATH", "")
+	initASNPath := getenv("GEOIP_ASN_MMDB_PATH", "")
 	reloadGeoIP(initGeoPath)
+	reloadGeoASN(initASNPath)
 	defer closeGeoIP()
 
 	ipRes := clientip.ParseTrustedProxies(getenv("WAF_TRUSTED_PROXIES", ""))
@@ -78,16 +80,23 @@ func main() {
 	routeStore := routing.NewStore(upstream)
 	tlsStore := &tlssites.Store{}
 	tfStore := newThreatFeedStore()
+	botStore := newBotProtectionStore()
+	bypassStore := newIPBypassStore()
 	proxy := newDynamicReverseProxy(upstream, routeStore, ipRes)
 	reloadPolicySnapshot(db, store)
 	reloadMalwareConfig(db, mwStore)
 	reloadThreatFeed(db, tfStore)
+	reloadBotProtection(db, botStore)
+	reloadIPBypass(db, bypassStore)
 	reloadRoutingTable(db, upstream, routeStore)
 	reloadTLSTable(db, tlsStore)
 	go subscribePolicyUpdates(db, rdb, store)
 	go subscribeMalwareUpdates(db, rdb, mwStore)
 	go subscribeThreatFeedUpdates(db, rdb, tfStore)
+	go subscribeBotProtectionUpdates(db, rdb, botStore)
+	go subscribeIPBypassUpdates(db, rdb, bypassStore)
 	go subscribeGeoIPUpdates(rdb, initGeoPath)
+	go subscribeGeoASNUpdates(rdb, initASNPath)
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +104,23 @@ func main() {
 		if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
 			return
 		}
-		gateTF := applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
-		if gateTF.Responded {
-			return
+		clientHost := ipRes.ClientHost(r)
+		if strings.TrimSpace(clientHost) == "" {
+			clientHost = clientip.PeerHost(r)
+		}
+		ipBypassed := clientIPBypassed(bypassStore, clientHost)
+
+		var gateTF threatFeedGateResult
+		var gateBot botProtectionGateResult
+		if !ipBypassed {
+			gateTF = applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
+			if gateTF.Responded {
+				return
+			}
+			gateBot = applyBotProtectionGate(w, r, db, mr, ipRes, botStore, rdb)
+			if gateBot.Responded {
+				return
+			}
 		}
 
 		if isStaticAssetRequest(r) {
@@ -106,7 +129,7 @@ func main() {
 		}
 
 		if isWebSocketUpgrade(r) {
-			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes)
+			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes, bypassStore)
 			return
 		}
 
@@ -138,11 +161,12 @@ func main() {
 		}
 
 		snapshot := store.Current()
-		clientHost := ipRes.ClientHost(r)
-		if strings.TrimSpace(clientHost) == "" {
-			clientHost = clientip.PeerHost(r)
+		var decision engine.Decision
+		if ipBypassed {
+			decision = engine.Decision{Action: "allow", Reason: "ip bypass allowlist"}
+		} else {
+			decision = evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
 		}
-		decision := evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
 		effectiveAction := decision.Action
 		if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
 			effectiveAction = "log"
@@ -156,8 +180,12 @@ func main() {
 		case "redirect":
 			accessOutcome = "redirect"
 		}
-		if accessOutcome == "proxied" && gateTF.ProxyOutcomeHint != "" {
-			accessOutcome = gateTF.ProxyOutcomeHint
+		if accessOutcome == "proxied" {
+			if gateBot.ProxyOutcomeHint != "" {
+				accessOutcome = gateBot.ProxyOutcomeHint
+			} else if gateTF.ProxyOutcomeHint != "" {
+				accessOutcome = gateTF.ProxyOutcomeHint
+			}
 		}
 		writeProxyAccessLog(r.Context(), db, r, mr, accessOutcome, ipRes)
 

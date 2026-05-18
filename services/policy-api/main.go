@@ -115,10 +115,13 @@ func main() {
 		wafRuleHitsHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/waf-log-events", func(w http.ResponseWriter, r *http.Request) {
-		wafLogEventsPathRouter(w, r, db)
+		wafLogEventsPathRouter(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/waf-log-events/", func(w http.ResponseWriter, r *http.Request) {
-		wafLogEventsPathRouter(w, r, db)
+		wafLogEventsPathRouter(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/ip-bypass", func(w http.ResponseWriter, r *http.Request) {
+		postIPBypass(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/logs", func(w http.ResponseWriter, r *http.Request) {
 		logsHandler(w, r, db)
@@ -171,6 +174,25 @@ func main() {
 			getThreatFeedSettings(w, r, db)
 		case http.MethodPut:
 			putThreatFeedSettings(w, r, db, rdb)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/v1/settings/bot-protection/status", func(w http.ResponseWriter, r *http.Request) {
+		getBotProtectionStatus(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/bot-protection/upload", func(w http.ResponseWriter, r *http.Request) {
+		postBotProtectionUpload(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/bot-protection/asn-mmdb", func(w http.ResponseWriter, r *http.Request) {
+		postBotProtectionASNMMDB(w, r, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/bot-protection", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			getBotProtectionSettings(w, r, db)
+		case http.MethodPut:
+			putBotProtectionSettings(w, r, db, rdb)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}

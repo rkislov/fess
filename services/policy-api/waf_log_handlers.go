@@ -136,7 +136,7 @@ func parseWafFlexiblePagination(r *http.Request) (limit, offset int, err error) 
 	return limit, offset, nil
 }
 
-func wafLogEventsPathRouter(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+func wafLogEventsPathRouter(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
 	p := strings.TrimPrefix(r.URL.Path, "/api/v1/waf-log-events")
 	p = strings.Trim(p, "/")
 	if p == "" {
@@ -165,6 +165,10 @@ func wafLogEventsPathRouter(w http.ResponseWriter, r *http.Request, db *sql.DB) 
 			return
 		}
 		wafLogEventAIReviewHandler(w, r, db, eventID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "unblock" {
+		wafLogEventUnblockHandler(w, r, db, rdb, eventID)
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
@@ -405,25 +409,66 @@ SELECT name, mode, enabled FROM policies WHERE id = $1::uuid`, policyID).Scan(&p
 		}
 	}
 
+	unblockCtx := enrichUnblockContext(ctx, db, sourceIP, action)
+
 	payload := map[string]any{
-		"id":            eventID,
-		"request_id":    requestID,
-		"policy_id":     policyID,
-		"policy":        pol,
-		"rule_id":       ruleID,
-		"rule":          rb,
-		"action":        action,
-		"source_ip":     sourceIP,
-		"origin_label":  "Клиентский IP после учёта прокси (как записал шлюз)",
-		"method":        method,
-		"path":          path,
-		"virtual_host":  host,
+		"id":             eventID,
+		"request_id":     requestID,
+		"policy_id":      policyID,
+		"policy":         pol,
+		"rule_id":        ruleID,
+		"rule":           rb,
+		"action":         action,
+		"source_ip":      sourceIP,
+		"origin_label":   "Клиентский IP после учёта прокси (как записал шлюз)",
+		"method":         method,
+		"path":           path,
+		"virtual_host":   host,
 		"matching_sites": sites,
-		"details":       details,
+		"details":        details,
 		"ai_analysis":    aiText,
-		"created_at":    created.UTC().Format(time.RFC3339Nano),
+		"created_at":     created.UTC().Format(time.RFC3339Nano),
+		"unblock":        unblockCtx,
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func enrichUnblockContext(ctx context.Context, db *sql.DB, sourceIP, action string) map[string]any {
+	out := map[string]any{
+		"can_unblock":       strings.TrimSpace(sourceIP) != "",
+		"bypass_active":     false,
+		"in_threat_feed":    false,
+		"remove_from_feed": false,
+	}
+	if strings.TrimSpace(sourceIP) == "" {
+		return out
+	}
+	active, bypassCIDR, err := ipBypassActive(ctx, db, sourceIP)
+	if err == nil {
+		out["bypass_active"] = active
+		if active {
+			out["bypass_cidr"] = bypassCIDR
+		}
+	}
+	inFeed, _, err := ipInThreatFeed(ctx, db, sourceIP)
+	if err == nil {
+		out["in_threat_feed"] = inFeed
+		out["remove_from_feed"] = inFeed
+	}
+	switch {
+	case strings.HasPrefix(action, "threat_feed"):
+		out["unblock_hint"] = "Добавит IP в обход и опционально удалит из блоклиста Q-feed."
+	case strings.HasPrefix(action, "bot_"):
+		out["unblock_hint"] = "Добавит IP в обход и сбросит счётчик rate limit в Redis."
+	case action == "waf_block":
+		out["unblock_hint"] = "Добавит IP в обход: правила WAF, threat feed и bot protection не применяются."
+	case action == "malware_block":
+		out["can_unblock"] = false
+		out["unblock_hint"] = "Блокировка антивирусом — обход IP здесь не отключает ICAP."
+	default:
+		out["unblock_hint"] = "Добавит IP в список обхода на шлюзе."
+	}
+	return out
 }
 
 func wafLogEventAIReviewHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, eventID int64) {

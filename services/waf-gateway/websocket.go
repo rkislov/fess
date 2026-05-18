@@ -34,6 +34,7 @@ func serveWebSocketUpgrade(
 	failMode string,
 	gateTF threatFeedGateResult,
 	ipRes *clientip.Resolver,
+	bypassStore *ipBypassStore,
 ) {
 	if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
 		return
@@ -49,7 +50,12 @@ func serveWebSocketUpgrade(
 	if strings.TrimSpace(clientHost) == "" {
 		clientHost = clientip.PeerHost(r)
 	}
-	decision := evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
+	var decision engine.Decision
+	if clientIPBypassed(bypassStore, clientHost) {
+		decision = engine.Decision{Action: "allow", Reason: "ip bypass allowlist"}
+	} else {
+		decision = evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
+	}
 	effectiveAction := decision.Action
 	if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
 		effectiveAction = "log"

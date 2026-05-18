@@ -44,6 +44,12 @@
             <div>
               <dt class="text-xs text-slate-500">Источник (IP)</dt>
               <dd class="mt-0.5 font-mono text-slate-200">{{ detail.source_ip || '—' }}</dd>
+              <p v-if="detail.unblock?.bypass_active" class="mt-1 text-xs text-emerald-400/90">
+                IP в списке обхода ({{ detail.unblock.bypass_cidr || detail.source_ip }})
+              </p>
+              <p v-else-if="detail.unblock?.in_threat_feed" class="mt-1 text-xs text-amber-300/90">
+                IP есть в блоклисте threat feed
+              </p>
             </div>
             <div class="sm:col-span-2">
               <dt class="text-xs text-slate-500">Запрос</dt>
@@ -70,6 +76,38 @@
               <span class="ml-2 font-mono text-xs text-slate-400">{{ s.host_pattern }}</span>
             </li>
           </ul>
+        </section>
+
+        <section
+          v-if="detail.unblock?.can_unblock"
+          class="rounded-2xl border border-teal-500/25 bg-teal-950/20 p-5"
+        >
+          <h3 class="text-sm font-medium text-teal-100">Разблокировка IP</h3>
+          <p v-if="detail.unblock?.unblock_hint" class="mt-2 text-xs text-slate-400">{{ detail.unblock.unblock_hint }}</p>
+          <label
+            v-if="detail.unblock?.remove_from_feed"
+            class="mt-3 flex items-center gap-2 text-sm text-slate-300"
+          >
+            <input v-model="removeFromThreatFeed" type="checkbox" class="rounded border-slate-600" />
+            Удалить IP из блоклиста threat feed (Q-feed)
+          </label>
+          <label class="mt-3 block text-xs text-slate-500">
+            Срок обхода, часов (по умолчанию 168 = 7 дней, 0 = без срока)
+            <input
+              v-model.number="unblockTTLHours"
+              type="number"
+              min="0"
+              class="mt-1 w-28 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200"
+            />
+          </label>
+          <button
+            type="button"
+            class="mt-4 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50"
+            :disabled="unblockBusy || detail.unblock?.bypass_active"
+            @click="unblockIP"
+          >
+            {{ detail.unblock?.bypass_active ? 'IP уже в обходе' : 'Разблокировать IP' }}
+          </button>
         </section>
 
         <section v-if="detail.rule || detail.policy" class="rounded-2xl border border-white/10 bg-slate-900/50 p-5">
@@ -176,6 +214,15 @@ type SiteBrief = { id: string; name: string; host_pattern: string; policy_id?: s
 type RuleBrief = { id: string; name: string; action: string; enabled: boolean; policy_id: string }
 type PolicyBrief = { id: string; name: string; mode: string; enabled: boolean }
 
+type UnblockCtx = {
+  can_unblock?: boolean
+  bypass_active?: boolean
+  bypass_cidr?: string
+  in_threat_feed?: boolean
+  remove_from_feed?: boolean
+  unblock_hint?: string
+}
+
 type Detail = {
   id: number
   created_at: string
@@ -189,11 +236,15 @@ type Detail = {
   matching_sites?: SiteBrief[]
   details?: Record<string, unknown>
   ai_analysis?: string
+  unblock?: UnblockCtx
 }
 
 const detail = ref<Detail | null>(null)
 const busy = ref(false)
 const ruleBusy = ref(false)
+const unblockBusy = ref(false)
+const removeFromThreatFeed = ref(false)
+const unblockTTLHours = ref(168)
 const aiBusy = ref(false)
 const err = ref('')
 const actionMsg = ref('')
@@ -221,6 +272,7 @@ async function load() {
   err.value = ''
   try {
     detail.value = await $fetch<Detail>(apiUrl(`/waf-log-events/${props.eventId}`))
+    removeFromThreatFeed.value = !!detail.value?.unblock?.in_threat_feed
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }
     err.value = fe?.data?.error || fe?.message || String(e)
@@ -255,6 +307,37 @@ async function runAi() {
     err.value = fe?.data?.error || fe?.message || String(e)
   } finally {
     aiBusy.value = false
+  }
+}
+
+async function unblockIP() {
+  if (!detail.value?.unblock?.can_unblock || detail.value.unblock?.bypass_active) return
+  unblockBusy.value = true
+  actionMsg.value = ''
+  err.value = ''
+  try {
+    const res = await $fetch<{
+      ok: boolean
+      bypass_cidr: string
+      removed_from_threat_feed: boolean
+      cleared_bot_rate_limit: boolean
+    }>(apiUrl(`/waf-log-events/${props.eventId}/unblock`), {
+      method: 'POST',
+      body: {
+        remove_from_threat_feed: removeFromThreatFeed.value,
+        ttl_hours: unblockTTLHours.value > 0 ? unblockTTLHours.value : 0,
+      },
+    })
+    const parts = [`IP ${res.bypass_cidr} добавлен в обход`]
+    if (res.removed_from_threat_feed) parts.push('удалён из threat feed')
+    if (res.cleared_bot_rate_limit) parts.push('сброшен rate limit')
+    actionMsg.value = parts.join('; ') + '.'
+    await load()
+  } catch (e: unknown) {
+    const fe = e as { data?: { error?: string }; message?: string }
+    err.value = fe?.data?.error || fe?.message || String(e)
+  } finally {
+    unblockBusy.value = false
   }
 }
 

@@ -30,6 +30,8 @@ services:
       - ../db/020_backend_timeouts.sql:/docker-entrypoint-initdb.d/020-backend-timeouts.sql:ro
       - ../db/021_backend_ip_allow.sql:/docker-entrypoint-initdb.d/021-backend-ip-allow.sql:ro
       - ../db/022_backend_paths.sql:/docker-entrypoint-initdb.d/022-backend-paths.sql:ro
+      - ../db/023_bot_protection.sql:/docker-entrypoint-initdb.d/023-bot-protection.sql:ro
+      - ../db/024_ip_bypass.sql:/docker-entrypoint-initdb.d/024-ip-bypass.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -120,6 +122,7 @@ services:
       POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
       REDIS_ADDR: "redis:6379"
       GEOIP_MMDB_PATH: /var/lib/fence/geoip/GeoLite2-Country.mmdb
+      GEOIP_ASN_MMDB_PATH: /var/lib/fence/geoip/GeoLite2-ASN.mmdb
       # За балансировщиком / Nginx: CIDR тех, кто **TCP-подключается к waf-gateway** (см. колонку «TCP пир» в журнале соединений).
       # Не то же самое, что set_real_ip_from в Nginx. Если пир не в списке — X-Forwarded-For не доверяется (client_ip = TCP-пир).
       # Для локального compose: обычно 172.16/12; с хоста через Docker Desktop часто 192.168.x. В проде сузьте до подсети вашего LB/Nginx.
