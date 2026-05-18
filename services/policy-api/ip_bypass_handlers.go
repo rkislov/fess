@@ -51,12 +51,11 @@ func upsertIPBypass(ctx context.Context, db *sql.DB, cidr, comment string, sourc
 	}
 	_, err = db.ExecContext(ctx, `
 INSERT INTO ip_bypass(cidr, comment, source_waf_log_id, expires_at)
-VALUES ($1, $2, NULLIF($3, 0), $4)
+VALUES ($1, $2, NULLIF($3::bigint, 0), $4)
 ON CONFLICT (cidr) DO UPDATE SET
   comment = EXCLUDED.comment,
   source_waf_log_id = COALESCE(EXCLUDED.source_waf_log_id, ip_bypass.source_waf_log_id),
-  expires_at = EXCLUDED.expires_at,
-`, cidr, strings.TrimSpace(comment), sourceID, exp)
+  expires_at = EXCLUDED.expires_at`, cidr, strings.TrimSpace(comment), sourceID, exp)
 	return err
 }
 
