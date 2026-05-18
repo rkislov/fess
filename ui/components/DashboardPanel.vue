@@ -380,6 +380,15 @@ function labelWafAction(a: string) {
     replace: 'Замена',
     malware_block: 'Блок антивируса',
     waf_block: 'Блок WAF',
+    threat_feed_block: 'Threat feed',
+    threat_feed_log: 'Threat feed (лог)',
+    bot_rate_limit: 'Rate limit бота',
+    bot_score_block: 'Скоринг бота',
+    bot_score_log: 'Скоринг бота (лог)',
+    bot_challenge: 'Challenge бота',
+    bot_asn_block: 'Блок ASN',
+    bot_cidr_block: 'Блок CIDR',
+    geo_block: 'GeoIP block',
   }
   return m[a] || a
 }
