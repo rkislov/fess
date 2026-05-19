@@ -215,11 +215,105 @@ func wafLogEventUnblockHandler(w http.ResponseWriter, r *http.Request, db *sql.D
 	})
 }
 
-func postIPBypass(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+type ipBypassListItem struct {
+	CIDR           string  `json:"cidr"`
+	Comment        string  `json:"comment"`
+	SourceWafLogID *int64  `json:"source_waf_log_id,omitempty"`
+	ExpiresAt      *string `json:"expires_at,omitempty"`
+	CreatedAt      string  `json:"created_at"`
+	Scopes         []string `json:"scopes"`
+}
+
+func listIPBypass(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	rows, err := db.QueryContext(r.Context(), `
+SELECT cidr, comment, source_waf_log_id, expires_at, created_at
+FROM ip_bypass
+ORDER BY created_at DESC`)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	defer rows.Close()
+	var items []ipBypassListItem
+	for rows.Next() {
+		var cidr, comment string
+		var src sql.NullInt64
+		var exp sql.NullTime
+		var created time.Time
+		if err := rows.Scan(&cidr, &comment, &src, &exp, &created); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		it := ipBypassListItem{
+			CIDR:      cidr,
+			Comment:   comment,
+			CreatedAt: created.UTC().Format(time.RFC3339Nano),
+			Scopes:    []string{"WAF", "Threat feed", "Боты", "Rate limit"},
+		}
+		if src.Valid {
+			v := src.Int64
+			it.SourceWafLogID = &v
+		}
+		if exp.Valid {
+			s := exp.Time.UTC().Format(time.RFC3339Nano)
+			it.ExpiresAt = &s
+		}
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if items == nil {
+		items = []ipBypassListItem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func deleteIPBypass(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
+	var req struct {
+		CIDR string `json:"cidr"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	norm, err := normalizeBypassCIDR(req.CIDR)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	res, err := db.ExecContext(r.Context(), `DELETE FROM ip_bypass WHERE cidr = $1`, norm)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err := rdb.Publish(r.Context(), "ip_bypass_updated", `{"source":"delete"}`).Err(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cidr": norm})
+}
+
+func ipBypassHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
+	switch r.Method {
+	case http.MethodGet:
+		listIPBypass(w, r, db)
+	case http.MethodPost:
+		postIPBypass(w, r, db, rdb)
+	case http.MethodDelete:
+		deleteIPBypass(w, r, db, rdb)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func postIPBypass(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
 	var req ipBypassCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})

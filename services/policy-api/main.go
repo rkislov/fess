@@ -171,7 +171,7 @@ func main() {
 		wafLogEventsPathRouter(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/ip-bypass", func(w http.ResponseWriter, r *http.Request) {
-		postIPBypass(w, r, db, rdb)
+		ipBypassHandler(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/logs", func(w http.ResponseWriter, r *http.Request) {
 		logsHandler(w, r, db)
@@ -256,6 +256,9 @@ func main() {
 	mux.HandleFunc("/api/v1/settings/ai", aiSettingsHandler)
 	mux.HandleFunc("/api/v1/ai/analyze", func(w http.ResponseWriter, r *http.Request) {
 		aiAnalyzeHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/ai/ask", func(w http.ResponseWriter, r *http.Request) {
+		aiAskHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/owasp/packs", func(w http.ResponseWriter, r *http.Request) {
 		owaspPacksHandler(w, r)

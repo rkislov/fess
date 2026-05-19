@@ -43,6 +43,20 @@ type aiAnalyzeResponse struct {
 	Model    string `json:"model"`
 }
 
+type aiAskRequest struct {
+	Question              string `json:"question"`
+	IncludeProxyLogs      bool   `json:"include_proxy_logs"`
+	IncludeWafLogs        bool   `json:"include_waf_logs"`
+	IncludePolicySnapshot bool   `json:"include_policy_snapshot"`
+	ProxyLimit            int    `json:"proxy_limit"`
+	WafLimit              int    `json:"waf_limit"`
+}
+
+type aiAskResponse struct {
+	Answer string `json:"answer"`
+	Model  string `json:"model"`
+}
+
 func aiSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -149,6 +163,93 @@ func aiAnalyzeHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 	writeJSON(w, http.StatusOK, aiAnalyzeResponse{Analysis: analysis, Model: aiModel()})
+}
+
+func aiAskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	key := strings.TrimSpace(os.Getenv("FENCE_AI_API_KEY"))
+	if key == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "ИИ не настроен: задайте FENCE_AI_API_KEY для policy-api.",
+		})
+		return
+	}
+	var req aiAskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	q := strings.TrimSpace(req.Question)
+	if q == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "question is required"})
+		return
+	}
+	if len(q) > 16000 {
+		q = truncateRunes(q, 16000)
+	}
+
+	pl := req.ProxyLimit
+	if pl <= 0 {
+		pl = 20
+	}
+	if pl > aiMaxProxyRows {
+		pl = aiMaxProxyRows
+	}
+	wl := req.WafLimit
+	if wl <= 0 {
+		wl = 20
+	}
+	if wl > aiMaxWafRows {
+		wl = aiMaxWafRows
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), aiHTTPTimeout)
+	defer cancel()
+
+	var ctxParts []string
+	if req.IncludePolicySnapshot {
+		snap, err := fetchPoliciesRulesSummary(ctx, db)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		ctxParts = append(ctxParts, "### Политики и правила\n"+snap)
+	}
+	if req.IncludeProxyLogs {
+		s, err := fetchProxyLogsSnippet(ctx, db, pl)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		ctxParts = append(ctxParts, "### Журнал соединений\n"+s)
+	}
+	if req.IncludeWafLogs {
+		s, err := fetchWafLogsSnippet(ctx, db, wl)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		ctxParts = append(ctxParts, "### Журнал срабатываний WAF\n"+s)
+	}
+
+	userPrompt := "### Вопрос оператора\n" + q
+	if len(ctxParts) > 0 {
+		userPrompt = strings.Join(ctxParts, "\n\n") + "\n\n" + userPrompt
+	}
+
+	systemPrompt := `Ты помощник администратора веб‑шлюза Fence (WAF, антивирус ICAP, threat feed, защита от ботов).
+Отвечай на русском языке по существу вопроса оператора. Если в контексте есть журналы или политики — опирайся на них.
+Не выдумывай UUID и факты, которых нет в данных. Если данных недостаточно — скажи, что нужно уточнить.`
+
+	answer, err := callChatCompletions(ctx, key, systemPrompt, userPrompt)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, aiAskResponse{Answer: answer, Model: aiModel()})
 }
 
 func aiBaseURL() string {
@@ -292,19 +393,74 @@ type openAIMessage struct {
 }
 
 type openAIChatReq struct {
-	Model       string            `json:"model"`
-	Messages    []openAIMessage   `json:"messages"`
-	Temperature float64           `json:"temperature"`
-	MaxTokens   int               `json:"max_tokens"`
+	Model       string          `json:"model"`
+	Messages    []openAIMessage `json:"messages"`
+	Temperature float64         `json:"temperature"`
+	MaxTokens   int             `json:"max_tokens"`
+}
+
+type openAIChatRespMessage struct {
+	Role             string          `json:"role"`
+	Content          json.RawMessage `json:"content"`
+	Reasoning        string          `json:"reasoning"`
+	ReasoningContent string          `json:"reasoning_content"`
+}
+
+type openAIChatChoice struct {
+	Message openAIChatRespMessage `json:"message"`
+	Text    string                `json:"text"`
 }
 
 type openAIChatResp struct {
-	Choices []struct {
-		Message openAIMessage `json:"message"`
-	} `json:"choices"`
-	Error *struct {
+	Choices []openAIChatChoice `json:"choices"`
+	Error   *struct {
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// extractAIChoiceText supports OpenAI-style content and reasoning models (e.g. DeepSeek R1 on GPUStack).
+func extractAIChoiceText(ch openAIChatChoice) string {
+	if t := strings.TrimSpace(ch.Text); t != "" {
+		return t
+	}
+	msg := ch.Message
+	if t := parseAIContentField(msg.Content); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(msg.Reasoning); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(msg.ReasoningContent); t != "" {
+		return t
+	}
+	return ""
+}
+
+func parseAIContentField(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strings.TrimSpace(s)
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		var b strings.Builder
+		for _, p := range parts {
+			if strings.TrimSpace(p.Text) != "" {
+				if b.Len() > 0 {
+					b.WriteByte('\n')
+				}
+				b.WriteString(strings.TrimSpace(p.Text))
+			}
+		}
+		return strings.TrimSpace(b.String())
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func callChatCompletions(ctx context.Context, apiKey, systemPrompt, userPrompt string) (string, error) {
@@ -345,8 +501,12 @@ func callChatCompletions(ctx context.Context, apiKey, systemPrompt, userPrompt s
 	if parsed.Error != nil && parsed.Error.Message != "" {
 		return "", fmt.Errorf("ИИ: %s", parsed.Error.Message)
 	}
-	if len(parsed.Choices) == 0 || strings.TrimSpace(parsed.Choices[0].Message.Content) == "" {
-		return "", fmt.Errorf("пустой ответ от ИИ")
+	if len(parsed.Choices) == 0 {
+		return "", fmt.Errorf("пустой ответ от ИИ (нет choices)")
 	}
-	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+	text := extractAIChoiceText(parsed.Choices[0])
+	if text == "" {
+		return "", fmt.Errorf("пустой ответ от ИИ (модель %s: проверьте content/reasoning в ответе API)", aiModel())
+	}
+	return text, nil
 }

@@ -26,7 +26,7 @@
           <div>
             <h1 class="text-lg font-semibold tracking-tight text-white sm:text-xl">Fence — панель управления</h1>
             <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
-              Журналы, антивирус, политики и сайты — без перезапуска шлюза
+              Дашборд, сайты и ИИ — настройки защиты в разделе «Настройки»
             </p>
           </div>
         </div>
@@ -65,11 +65,6 @@
     <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <DashboardPanel v-if="tab === 'dashboard'" />
       <SitesPanel v-else-if="tab === 'sites'" />
-      <PoliciesPanel v-else-if="tab === 'policies'" />
-      <MalwarePanel v-else-if="tab === 'antivirus'" />
-      <ThreatFeedPanel v-else-if="tab === 'qfeed'" />
-      <BotProtectionPanel v-else-if="tab === 'bots'" />
-      <LoggingPanel v-else-if="tab === 'logging'" />
       <AiAssistantPanel v-else-if="tab === 'ai'" />
       <SettingsPanel v-else-if="tab === 'settings'" />
     </main>
@@ -93,7 +88,7 @@
 
 <script setup lang="ts">
 const auth = useUiAuth()
-const { ready, logout, user, canUseApp } = auth
+const { ready, logout, canUseApp } = auth
 
 async function onLogout() {
   await logout()
@@ -112,20 +107,13 @@ function onOpenWafEvent(id: number) {
   openWafEventDetail(id, eventsParams.value)
 }
 
-type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'qfeed' | 'bots' | 'logging' | 'ai' | 'settings'
+type TabId = 'dashboard' | 'sites' | 'ai' | 'settings'
 
 const tab = ref<TabId>('dashboard')
 const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: '📊' },
   { id: 'sites', label: 'Сайты', icon: '🌐' },
-  { id: 'policies', label: 'Политики', icon: '📋' },
-  { id: 'antivirus', label: 'Антивирус', icon: '🦠' },
-  { id: 'qfeed', label: 'Q-feed', icon: '📡' },
-  { id: 'bots', label: 'Боты', icon: '🤖' },
-  { id: 'logging', label: 'Логирование', icon: '📝' },
   { id: 'ai', label: 'ИИ', icon: '✨' },
   { id: 'settings', label: 'Настройки', icon: '⚙️' },
 ]
-
-// init() вызывается в plugins/auth.client.ts до монтирования панелей
 </script>
