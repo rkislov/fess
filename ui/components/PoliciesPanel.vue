@@ -341,7 +341,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 const err = ref('')
 const ok = ref('')
@@ -589,7 +589,7 @@ async function createPolicy() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl('/policies'), {
+    await apiFetch(apiUrl('/policies'), {
       method: 'POST',
       body: {
         name: newPolicy.name,
@@ -612,7 +612,7 @@ async function savePolicy() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/policies/${detail.value.id}`), {
+    await apiFetch(apiUrl(`/policies/${detail.value.id}`), {
       method: 'PUT',
       body: {
         name: detail.value.name,
@@ -635,7 +635,7 @@ async function publishPolicy() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/policies/${detail.value.id}/publish`), { method: 'POST' })
+    await apiFetch(apiUrl(`/policies/${detail.value.id}/publish`), { method: 'POST' })
     flashOk('Published')
   } catch (e) {
     flashErr(e)
@@ -661,7 +661,7 @@ async function saveRule(idx: number) {
   try {
     const condition_json = parseJsonField(r.conditionText, 'condition_json')
     const transform_json = parseJsonField(r.transformText, 'transform_json')
-    await $fetch(apiUrl(`/rules/${r.id}`), {
+    await apiFetch(apiUrl(`/rules/${r.id}`), {
       method: 'PUT',
       body: {
         name: r.name,
@@ -687,7 +687,7 @@ async function addRule() {
   try {
     const condition_json = parseJsonField(newRule.conditionText, 'condition_json')
     const transform_json = parseJsonField(newRule.transformText || '{}', 'transform_json')
-    await $fetch(apiUrl(`/policies/${detail.value.id}/rules`), {
+    await apiFetch(apiUrl(`/policies/${detail.value.id}/rules`), {
       method: 'POST',
       body: {
         name: newRule.name,

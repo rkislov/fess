@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 function formatFetchError(e: unknown): string {
   if (e && typeof e === 'object') {

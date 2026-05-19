@@ -130,17 +130,14 @@
           </div>
           <span v-if="summary?.hosts_total" class="font-mono text-xs text-slate-500">{{ summary.hosts_total }} всего</span>
         </div>
-        <ul class="mt-4 space-y-2 text-sm">
-          <li v-if="!visibleHostRows.length" class="text-slate-500">Нет записей</li>
-          <li
-            v-for="(h, i) in visibleHostRows"
-            :key="h.host + '-' + i"
-            class="flex flex-col gap-1 rounded-lg bg-slate-800/60 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
-          >
-            <span class="min-w-0 flex-1 truncate font-medium text-slate-200" :title="h.host">{{ h.host || '—' }}</span>
-            <span class="font-mono text-slate-400">{{ h.count }}</span>
-          </li>
-        </ul>
+        <p v-if="summary && !visibleHostRows.length" class="mt-4 text-sm text-slate-500">Нет записей</p>
+        <div
+          v-else
+          class="relative mt-4 w-full"
+          :style="{ height: `${barChartHeight(visibleHostRows.length)}px` }"
+        >
+          <canvas ref="elHost"></canvas>
+        </div>
         <button
           v-if="hostsHiddenCount > 0"
           type="button"
@@ -186,13 +183,33 @@
           <canvas ref="elOutcome"></canvas>
         </div>
       </section>
-      <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-4 shadow-inner lg:col-span-2">
-        <h3 class="mb-3 text-sm font-medium text-slate-300">Топ User-Agent</h3>
-        <p class="mb-2 text-xs text-slate-500">По заголовку <span class="font-mono text-slate-400">User-Agent</span> клиента; длинные строки сокращены на оси, полный текст — в подсказке.</p>
-        <div class="relative h-[28rem] w-full">
+      <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 lg:col-span-2">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">Топ User-Agent</h3>
+            <p class="mt-0.5 text-xs text-slate-500">
+              Топ‑10 за период · длинные строки сокращены на оси, полный текст — в подсказке
+              <template v-if="uaHiddenCount > 0"> · ещё {{ uaHiddenCount }} — по кнопке ниже</template>
+            </p>
+          </div>
+        </div>
+        <p v-if="summary && !visibleUARows.length" class="mt-4 text-sm text-slate-500">Нет записей</p>
+        <div
+          v-else
+          class="relative mt-4 w-full"
+          :style="{ height: `${barChartHeight(visibleUARows.length)}px` }"
+        >
           <canvas ref="elUA"></canvas>
         </div>
-      </div>
+        <button
+          v-if="uaHiddenCount > 0"
+          type="button"
+          class="mt-3 w-full rounded-lg border border-teal-600/40 bg-teal-950/40 px-3 py-2 text-xs font-medium text-teal-200 hover:bg-teal-900/50"
+          @click="uaExpanded = !uaExpanded"
+        >
+          {{ uaExpanded ? 'Свернуть до топ‑10' : `Показать ещё ${uaHiddenCount} User-Agent` }}
+        </button>
+      </section>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
@@ -302,7 +319,7 @@
 import type { Map as LeafMap, CircleMarker } from 'leaflet'
 import type { Chart as ChartType } from 'chart.js'
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 const { openWafEventsExplorer, openWafEventDetail } = useHashAppView()
 
 type CountRow = { key: string; count: number }
@@ -342,7 +359,7 @@ type Summary = {
   rps_bucket_interval?: string
 }
 
-const HOSTS_TOP = 10
+const RANK_TOP = 10
 const SERIES_VIS_LS_KEY = 'fence_dashboard_traffic_series_vis'
 const OUTCOME_VIS_LS_KEY = 'fence_dashboard_outcome_vis'
 
@@ -351,6 +368,7 @@ const busy = ref(false)
 const err = ref('')
 const summary = ref<Summary | null>(null)
 const hostsExpanded = ref(false)
+const uaExpanded = ref(false)
 const seriesVisible = ref<Record<string, boolean>>({})
 const outcomeVisible = ref<Record<string, boolean>>({})
 
@@ -396,6 +414,7 @@ function startRefreshTimer() {
   }, autoRefreshSec.value * 1000)
 }
 
+const elHost = ref<HTMLCanvasElement | null>(null)
 const elMethod = ref<HTMLCanvasElement | null>(null)
 const elProto = ref<HTMLCanvasElement | null>(null)
 const elOutcome = ref<HTMLCanvasElement | null>(null)
@@ -403,6 +422,7 @@ const elUA = ref<HTMLCanvasElement | null>(null)
 const elRps = ref<HTMLCanvasElement | null>(null)
 const elMap = ref<HTMLDivElement | null>(null)
 
+let chartHost: ChartType | null = null
 let chartMethod: ChartType | null = null
 let chartProto: ChartType | null = null
 let chartOutcome: ChartType | null = null
@@ -449,9 +469,22 @@ const allHostRows = computed(() => summary.value?.by_host ?? [])
 const visibleHostRows = computed(() => {
   const rows = allHostRows.value
   if (hostsExpanded.value) return rows
-  return rows.slice(0, HOSTS_TOP)
+  return rows.slice(0, RANK_TOP)
 })
-const hostsHiddenCount = computed(() => Math.max(0, allHostRows.value.length - HOSTS_TOP))
+const hostsHiddenCount = computed(() => Math.max(0, allHostRows.value.length - RANK_TOP))
+
+const allUARows = computed(() => dashboardByUserAgent(summary.value))
+const visibleUARows = computed(() => {
+  const rows = allUARows.value
+  if (uaExpanded.value) return rows
+  return rows.slice(0, RANK_TOP)
+})
+const uaHiddenCount = computed(() => Math.max(0, allUARows.value.length - RANK_TOP))
+
+function barChartHeight(rowCount: number) {
+  const n = Math.max(rowCount, 1)
+  return Math.min(Math.max(n * 28 + 48, 220), 960)
+}
 
 const hasTrafficChartData = computed(() => {
   const s = summary.value
@@ -657,11 +690,13 @@ function labelWafAction(a: string) {
 }
 
 function destroyCharts() {
+  chartHost?.destroy()
   chartMethod?.destroy()
   chartProto?.destroy()
   chartOutcome?.destroy()
   chartUA?.destroy()
   chartRps?.destroy()
+  chartHost = null
   chartMethod = null
   chartProto = null
   chartOutcome = null
@@ -943,6 +978,34 @@ async function renderTrafficChart(s: Summary) {
   chartRps = await buildTrafficLineChart(elRps.value, labels, datasets)
 }
 
+async function renderHostChart(s: Summary) {
+  if (!import.meta.client) return
+  chartHost?.destroy()
+  chartHost = null
+  await nextTick()
+  const rows = visibleHostRows.value
+  if (!elHost.value || !rows.length) return
+  chartHost = await buildBar(
+    elHost.value,
+    rows.map((x) => x.host || '—'),
+    rows.map((x) => Number(x.count) || 0),
+    'Запросы',
+    rows.map((x) => x.host || '—'),
+  )
+}
+
+async function renderUAChart(s: Summary) {
+  if (!import.meta.client) return
+  chartUA?.destroy()
+  chartUA = null
+  await nextTick()
+  const rows = visibleUARows.value
+  if (!elUA.value || !rows.length) return
+  const full = rows.map((x) => (x.key || '').trim() || '—')
+  const labels = full.map((t) => (t.length > 56 ? `${t.slice(0, 56)}…` : t))
+  chartUA = await buildBar(elUA.value, labels, rows.map((x) => Number(x.count) || 0), 'Запросы', full)
+}
+
 async function renderOutcomeChart(s: Summary) {
   if (!import.meta.client) return
   const rows = s.by_outcome || []
@@ -983,18 +1046,8 @@ async function renderCharts(s: Summary) {
     )
   }
   await renderOutcomeChart(s)
-  const uaRows = s.by_user_agent
-  if (elUA.value && uaRows?.length) {
-    const full = uaRows.map((x) => (x.key || '').trim() || '—')
-    const labels = full.map((t) => (t.length > 56 ? `${t.slice(0, 56)}…` : t))
-    chartUA = await buildBar(
-      elUA.value,
-      labels,
-      uaRows.map((x) => Number(x.count) || 0),
-      'Запросы',
-      full,
-    )
-  }
+  await renderHostChart(s)
+  await renderUAChart(s)
 }
 
 async function renderMap(rows: CountryRow[]) {
@@ -1103,6 +1156,14 @@ onMounted(() => {
   autoRefreshSec.value = readStoredRefreshSec()
   void load()
   startRefreshTimer()
+})
+
+watch(hostsExpanded, () => {
+  if (summary.value) void renderHostChart(summary.value)
+})
+
+watch(uaExpanded, () => {
+  if (summary.value) void renderUAChart(summary.value)
 })
 
 watch(autoRefreshSec, () => {

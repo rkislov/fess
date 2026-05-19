@@ -208,7 +208,7 @@
 const props = defineProps<{ eventId: number }>()
 const emit = defineEmits<{ back: []; close: [] }>()
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type SiteBrief = { id: string; name: string; host_pattern: string; policy_id?: string }
 type RuleBrief = { id: string; name: string; action: string; enabled: boolean; policy_id: string }
@@ -347,7 +347,7 @@ async function ruleAction(action: 'enable' | 'disable' | 'log_only' | 'block') {
   actionMsg.value = ''
   err.value = ''
   try {
-    await $fetch(apiUrl(`/rules/${detail.value.rule.id}/quick-action`), {
+    await apiFetch(apiUrl(`/rules/${detail.value.rule.id}/quick-action`), {
       method: 'POST',
       body: { action },
     })

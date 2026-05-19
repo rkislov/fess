@@ -33,7 +33,7 @@
         <button
           type="button"
           class="self-start rounded-lg border border-slate-600/80 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 sm:self-center"
-          @click="logout"
+          @click="onLogout"
         >
           Выйти
         </button>
@@ -71,6 +71,7 @@
       <BotProtectionPanel v-else-if="tab === 'bots'" />
       <LoggingPanel v-else-if="tab === 'logging'" />
       <AiAssistantPanel v-else-if="tab === 'ai'" />
+      <SettingsPanel v-else-if="tab === 'settings'" />
     </main>
 
     <WafEventsExplorerPanel
@@ -92,7 +93,11 @@
 
 <script setup lang="ts">
 const auth = useUiAuth()
-const { authed, ready, init, logout } = auth
+const { authed, ready, init, logout, user } = auth
+
+async function onLogout() {
+  await logout()
+}
 
 const {
   view: hashView,
@@ -107,7 +112,7 @@ function onOpenWafEvent(id: number) {
   openWafEventDetail(id, eventsParams.value)
 }
 
-type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'qfeed' | 'bots' | 'logging' | 'ai'
+type TabId = 'dashboard' | 'sites' | 'policies' | 'antivirus' | 'qfeed' | 'bots' | 'logging' | 'ai' | 'settings'
 
 const tab = ref<TabId>('dashboard')
 const tabs: { id: TabId; label: string; icon: string }[] = [
@@ -119,9 +124,10 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'bots', label: 'Боты', icon: '🤖' },
   { id: 'logging', label: 'Логирование', icon: '📝' },
   { id: 'ai', label: 'ИИ', icon: '✨' },
+  { id: 'settings', label: 'Настройки', icon: '⚙️' },
 ]
 
 onMounted(() => {
-  init()
+  void init()
 })
 </script>

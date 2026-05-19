@@ -411,7 +411,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type Site = {
   id: string
@@ -712,7 +712,7 @@ async function finalizeWizard() {
       },
     })
     const siteId = siteRes.id
-    await $fetch(apiUrl(`/sites/${siteId}/backends`), {
+    await apiFetch(apiUrl(`/sites/${siteId}/backends`), {
       method: 'POST',
       body: {
         name: wizard.backend_name.trim(),
@@ -723,7 +723,7 @@ async function finalizeWizard() {
       },
     })
     if (withTls) {
-      await $fetch(apiUrl(`/sites/${siteId}/tls`), {
+      await apiFetch(apiUrl(`/sites/${siteId}/tls`), {
         method: 'PUT',
         body: {
           tls_enabled: true,
@@ -823,7 +823,7 @@ async function saveSite() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/sites/${selected.value.id}`), {
+    await apiFetch(apiUrl(`/sites/${selected.value.id}`), {
       method: 'PUT',
       body: {
         name: edit.name,
@@ -848,7 +848,7 @@ async function deleteSite() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/sites/${selected.value.id}`), { method: 'DELETE' })
+    await apiFetch(apiUrl(`/sites/${selected.value.id}`), { method: 'DELETE' })
     selectedId.value = ''
     backends.value = []
     sitePanelOpen.value = false
@@ -868,7 +868,7 @@ async function saveTls() {
     busy.value = true
     err.value = ''
     try {
-      await $fetch(apiUrl(`/sites/${selected.value.id}/tls`), { method: 'PUT', body: { tls_enabled: false } })
+      await apiFetch(apiUrl(`/sites/${selected.value.id}/tls`), { method: 'PUT', body: { tls_enabled: false } })
       tlsForm.cert_pem = ''
       tlsForm.key_pem = ''
       await loadSites()
@@ -895,7 +895,7 @@ async function saveTls() {
     const body: Record<string, unknown> = { tls_enabled: true }
     if (tlsForm.cert_pem.trim()) body.tls_cert_pem = tlsForm.cert_pem.trim()
     if (tlsForm.key_pem.trim()) body.tls_key_pem = tlsForm.key_pem.trim()
-    await $fetch(apiUrl(`/sites/${selected.value.id}/tls`), { method: 'PUT', body })
+    await apiFetch(apiUrl(`/sites/${selected.value.id}/tls`), { method: 'PUT', body })
     tlsForm.cert_pem = ''
     tlsForm.key_pem = ''
     await loadSites()
@@ -912,7 +912,7 @@ async function saveBackend(b: Backend) {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/backends/${b.id}`), {
+    await apiFetch(apiUrl(`/backends/${b.id}`), {
       method: 'PUT',
       body: {
         name: b.name,
@@ -935,7 +935,7 @@ async function saveBackendPath(p: BackendPath) {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/backend-paths/${p.id}`), {
+    await apiFetch(apiUrl(`/backend-paths/${p.id}`), {
       method: 'PUT',
       body: {
         path_prefix: p.path_prefix,
@@ -961,7 +961,7 @@ async function removeBackendPath(p: BackendPath) {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/backend-paths/${p.id}`), { method: 'DELETE' })
+    await apiFetch(apiUrl(`/backend-paths/${p.id}`), { method: 'DELETE' })
     if (selected.value) await loadBackends(selected.value.id)
     flashOk('Путь удалён')
   } catch (e) {
@@ -976,7 +976,7 @@ async function addBackendPath(backendId: string) {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/backends/${backendId}/paths`), {
+    await apiFetch(apiUrl(`/backends/${backendId}/paths`), {
       method: 'POST',
       body: {
         path_prefix: draft.path_prefix,
@@ -1003,7 +1003,7 @@ async function removeBackend(b: Backend) {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/backends/${b.id}`), { method: 'DELETE' })
+    await apiFetch(apiUrl(`/backends/${b.id}`), { method: 'DELETE' })
     if (selected.value) await loadBackends(selected.value.id)
     flashOk('Бэкенд удалён')
   } catch (e) {
@@ -1018,7 +1018,7 @@ async function addBackend() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl(`/sites/${selected.value.id}/backends`), {
+    await apiFetch(apiUrl(`/sites/${selected.value.id}/backends`), {
       method: 'POST',
       body: {
         name: newBackend.name,

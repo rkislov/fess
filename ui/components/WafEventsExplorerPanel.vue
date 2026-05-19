@@ -104,7 +104,7 @@ const emit = defineEmits<{
   openEvent: [id: number]
 }>()
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type Row = {
   id: number

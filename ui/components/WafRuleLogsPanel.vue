@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 const { openWafEventDetail } = useHashAppView()
 
 type Row = {

@@ -163,7 +163,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type ThreatFeedCfg = {
   enabled: boolean
@@ -282,7 +282,7 @@ async function save() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
+    await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await load()
     flashOk('Настройки сохранены')
   } catch (e) {
@@ -320,8 +320,8 @@ async function syncNow() {
   busy.value = true
   err.value = ''
   try {
-    await $fetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
-    await $fetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
+    await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
+    await apiFetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
     await load()
     flashOk('Синхронизация по URL выполнена')
   } catch (e) {

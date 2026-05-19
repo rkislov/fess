@@ -235,7 +235,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type BotCfg = {
   enabled: boolean
@@ -458,7 +458,7 @@ async function load() {
 async function save() {
   busy.value = true
   try {
-    await $fetch(apiUrl('/settings/bot-protection'), { method: 'PUT', body: bodyFromForm() })
+    await apiFetch(apiUrl('/settings/bot-protection'), { method: 'PUT', body: bodyFromForm() })
     await load()
     flashOk('Сохранено')
   } catch (e) {
@@ -485,7 +485,7 @@ async function uploadAsnMmdb() {
   try {
     const fd = new FormData()
     fd.append('file', f, f.name)
-    await $fetch(apiUrl('/settings/bot-protection/asn-mmdb'), { method: 'POST', body: fd })
+    await apiFetch(apiUrl('/settings/bot-protection/asn-mmdb'), { method: 'POST', body: fd })
     asnMmdbFile.value = null
     await load()
     flashOk('ASN MMDB загружена')

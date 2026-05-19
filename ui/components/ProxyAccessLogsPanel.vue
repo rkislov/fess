@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-const { apiUrl } = useApi()
+const { apiUrl, apiFetch } = useApi()
 
 type Row = {
   id: number

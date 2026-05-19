@@ -18,6 +18,7 @@ import (
 
 	fencedb "fence/db"
 	"fence/internal/bootstrap"
+	"fence/pkg/auth"
 	"fence/pkg/owasp"
 )
 
@@ -93,10 +94,53 @@ func main() {
 		log.Fatalf("redis: %v", err)
 	}
 
+	if err := ensureDefaultAdmin(context.Background(), db); err != nil {
+		log.Fatalf("default admin: %v", err)
+	}
+
+	authDisabled := envTruthy(getenv("FENCE_AUTH_DISABLED", ""))
+	authSvc, err := auth.NewService(
+		getenv("FENCE_JWT_SECRET", "fence-dev-change-me-in-production"),
+		parseDurationEnv("FENCE_ACCESS_TOKEN_TTL", 15*time.Minute),
+		parseDurationEnv("FENCE_REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		authDisabled,
+	)
+	if err != nil {
+		log.Fatalf("auth service: %v", err)
+	}
+	if authDisabled {
+		log.Printf("auth: disabled (FENCE_AUTH_DISABLED) — all API routes open as admin")
+	}
+
 	go runThreatFeedPoller(context.Background(), db, rdb)
+	go runSIEMExporter(context.Background(), db)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
+	mux.HandleFunc("/api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		authLoginHandler(w, r, db, authSvc)
+	})
+	mux.HandleFunc("/api/v1/auth/refresh", func(w http.ResponseWriter, r *http.Request) {
+		authRefreshHandler(w, r, db, authSvc)
+	})
+	mux.HandleFunc("/api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		authLogoutHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/auth/me", func(w http.ResponseWriter, r *http.Request) {
+		authMeHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/auth", func(w http.ResponseWriter, r *http.Request) {
+		authSettingsHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		usersCollectionHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
+		userByIDHandler(w, r, db)
+	})
+	mux.HandleFunc("/api/v1/settings/siem-export", func(w http.ResponseWriter, r *http.Request) {
+		siemExportSettingsHandler(w, r, db)
+	})
 	mux.HandleFunc("/api/v1/policies", func(w http.ResponseWriter, r *http.Request) {
 		policiesHandler(w, r, db)
 	})
@@ -229,9 +273,10 @@ func main() {
 		backendPathByIDHandler(w, r, db, rdb)
 	})
 
+	apiHandler := auth.Middleware(authSvc, requireWriteRole(mux))
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           loggingMiddleware(mux),
+		Handler:           loggingMiddleware(apiHandler),
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -459,6 +504,23 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		log.Printf("method=%s path=%s remote=%s latency=%s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start))
 	})
+}
+
+func parseDurationEnv(key string, fallback time.Duration) time.Duration {
+	v := strings.TrimSpace(getenv(key, ""))
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fallback
+	}
+	return d
+}
+
+func envTruthy(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
 func getenv(key, fallback string) string {

@@ -33,6 +33,7 @@ services:
       - ../db/023_bot_protection.sql:/docker-entrypoint-initdb.d/023-bot-protection.sql:ro
       - ../db/024_ip_bypass.sql:/docker-entrypoint-initdb.d/024-ip-bypass.sql:ro
       - ../db/025_malware_scan_stages.sql:/docker-entrypoint-initdb.d/025-malware-scan-stages.sql:ro
+      - ../db/026_auth_siem.sql:/docker-entrypoint-initdb.d/026-auth-siem.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
       interval: 2s
@@ -77,6 +78,9 @@ services:
       FENCE_AI_API_KEY: "gpustack_2ff1005cf5899ce1_1eef56a616edc42c91b42a58fdfdd0af"
       FENCE_AI_BASE_URL: "http://gpustack.ai.cit.st/v1"
       FENCE_AI_MODEL: "deepseek-r1-0528-qwen3-8b-TEST"
+      FENCE_JWT_SECRET: "fence-local-dev-change-me-in-production"
+      FENCE_ACCESS_TOKEN_TTL: "15m"
+      FENCE_REFRESH_TOKEN_TTL: "168h"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
     ports:

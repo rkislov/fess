@@ -63,12 +63,12 @@
         </button>
 
         <p class="mt-6 text-center text-xs leading-relaxed text-slate-500">
-          Демо-доступ по умолчанию: логин
+          По умолчанию после первого запуска:
           <code class="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">admin</code>
-          , пароль
+          /
           <code class="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">fence</code>
           <br />
-          <span class="text-slate-600">Задаётся переменными NUXT_PUBLIC_UI_USER и NUXT_PUBLIC_UI_PASSWORD при сборке.</span>
+          <span class="text-slate-600">Поддерживаются локальная и доменная (LDAP) авторизация — настройка в разделе «Настройки».</span>
         </p>
       </form>
     </div>
@@ -82,11 +82,11 @@ const password = ref('')
 const err = ref('')
 const busy = ref(false)
 
-function submit() {
+async function submit() {
   err.value = ''
   busy.value = true
   try {
-    const r = auth.login(username.value, password.value)
+    const r = await auth.login(username.value, password.value)
     appendPanelLoginEntry(username.value, r.ok)
     if (!r.ok) err.value = r.message
   } finally {
