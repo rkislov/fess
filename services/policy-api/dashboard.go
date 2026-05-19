@@ -51,6 +51,17 @@ type rpsPoint struct {
 	RPS                float64 `json:"rps"`
 }
 
+type rpsOutcomeSeries struct {
+	Outcome string     `json:"outcome"`
+	Points  []rpsPoint `json:"points"`
+}
+
+type malwareScanStats struct {
+	ICAPChecked     int64 `json:"icap_checked"`
+	ExternalChecked int64 `json:"external_checked"`
+	Blocked         int64 `json:"blocked"`
+}
+
 var rpsBinOrigin = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func rpsStrideForHours(hours int) (stride time.Duration, intervalSQL string) {
@@ -80,6 +91,32 @@ func alignBinDown(t time.Time, stride time.Duration) time.Time {
 	return rpsBinOrigin.Add(time.Duration(q * step))
 }
 
+func rpsBucketRange(since time.Time, stride time.Duration) (start, end time.Time, sec float64) {
+	now := time.Now().UTC()
+	start = alignBinDown(since.UTC(), stride)
+	end = alignBinDown(now, stride)
+	sec = stride.Seconds()
+	return start, end, sec
+}
+
+func pointsFromCounts(counts map[int64]int64, start, end time.Time, stride time.Duration, sec float64) []rpsPoint {
+	if start.After(end) {
+		return []rpsPoint{}
+	}
+	var out []rpsPoint
+	for t := start; !t.After(end); t = t.Add(stride) {
+		c := counts[t.Unix()]
+		rps := float64(c) / sec
+		out = append(out, rpsPoint{
+			BucketStartRFC3339: t.Format(time.RFC3339),
+			BucketSeconds:      sec,
+			Count:              c,
+			RPS:                rps,
+		})
+	}
+	return out
+}
+
 func queryRPSSeries(ctx context.Context, db *sql.DB, since time.Time, hours int) ([]rpsPoint, float64, string, error) {
 	stride, intervalSQL := rpsStrideForHours(hours)
 	rows, err := db.QueryContext(ctx, `
@@ -106,26 +143,79 @@ ORDER BY b`, since, intervalSQL)
 	if err := rows.Err(); err != nil {
 		return nil, 0, "", err
 	}
+	start, end, sec := rpsBucketRange(since, stride)
+	return pointsFromCounts(counts, start, end, stride, sec), sec, intervalSQL, nil
+}
 
-	now := time.Now().UTC()
-	start := alignBinDown(since.UTC(), stride)
-	end := alignBinDown(now, stride)
-	sec := stride.Seconds()
-	if start.After(end) {
-		return []rpsPoint{}, sec, intervalSQL, nil
+func queryRPSByOutcome(ctx context.Context, db *sql.DB, since time.Time, hours int) ([]rpsOutcomeSeries, float64, string, error) {
+	stride, intervalSQL := rpsStrideForHours(hours)
+	rows, err := db.QueryContext(ctx, `
+SELECT date_bin($2::interval, created_at, TIMESTAMPTZ '2000-01-01') AS b, outcome, COUNT(*)::bigint AS c
+FROM proxy_access_logs
+WHERE created_at >= $1
+GROUP BY b, outcome
+ORDER BY b, outcome`, since, intervalSQL)
+	if err != nil {
+		return nil, 0, "", err
 	}
-	var out []rpsPoint
-	for t := start; !t.After(end); t = t.Add(stride) {
-		c := counts[t.Unix()]
-		rps := float64(c) / sec
-		out = append(out, rpsPoint{
-			BucketStartRFC3339: t.Format(time.RFC3339),
-			BucketSeconds:      sec,
-			Count:              c,
-			RPS:                rps,
+	defer rows.Close()
+
+	perOutcome := make(map[string]map[int64]int64)
+	for rows.Next() {
+		var b time.Time
+		var outcome string
+		var c int64
+		if err := rows.Scan(&b, &outcome, &c); err != nil {
+			return nil, 0, "", err
+		}
+		b = alignBinDown(b.UTC(), stride)
+		if perOutcome[outcome] == nil {
+			perOutcome[outcome] = make(map[int64]int64)
+		}
+		perOutcome[outcome][b.Unix()] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, "", err
+	}
+	start, end, sec := rpsBucketRange(since, stride)
+	var out []rpsOutcomeSeries
+	for outcome, counts := range perOutcome {
+		out = append(out, rpsOutcomeSeries{
+			Outcome: outcome,
+			Points:  pointsFromCounts(counts, start, end, stride, sec),
 		})
 	}
 	return out, sec, intervalSQL, nil
+}
+
+func queryWAFHitsSeries(ctx context.Context, db *sql.DB, since time.Time, hours int) ([]rpsPoint, float64, string, error) {
+	stride, intervalSQL := rpsStrideForHours(hours)
+	rows, err := db.QueryContext(ctx, `
+SELECT date_bin($2::interval, created_at, TIMESTAMPTZ '2000-01-01') AS b, COUNT(*)::bigint AS c
+FROM waf_logs
+WHERE created_at >= $1
+GROUP BY b
+ORDER BY b`, since, intervalSQL)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	defer rows.Close()
+
+	counts := make(map[int64]int64)
+	for rows.Next() {
+		var b time.Time
+		var c int64
+		if err := rows.Scan(&b, &c); err != nil {
+			return nil, 0, "", err
+		}
+		b = alignBinDown(b.UTC(), stride)
+		counts[b.Unix()] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, "", err
+	}
+	start, end, sec := rpsBucketRange(since, stride)
+	return pointsFromCounts(counts, start, end, stride, sec), sec, intervalSQL, nil
 }
 
 func dashboardSummaryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -188,11 +278,27 @@ func dashboardSummaryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	rpsByOutcome, _, _, err := queryRPSByOutcome(ctx, db, since, hours)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	wafHitsSeries, _, _, err := queryWAFHitsSeries(ctx, db, since, hours)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	malwareScans, err := queryMalwareScanStats(ctx, db, since)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"period_hours":        hours,
 		"since":               since.Format(time.RFC3339Nano),
 		"by_host":             byHost,
+		"hosts_total":         len(byHost),
 		"by_method":           byMethod,
 		"by_protocol":         byProtocol,
 		"by_outcome":          byOutcome,
@@ -201,9 +307,24 @@ func dashboardSummaryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		"top_waf_actions":     topWAFActions,
 		"top_waf_rules":       topWAFRules,
 		"rps_series":          rpsSeries,
+		"rps_by_outcome":      rpsByOutcome,
+		"waf_hits_series":     wafHitsSeries,
+		"malware_scans":       malwareScans,
 		"rps_bucket_seconds":  bucketSec,
 		"rps_bucket_interval": bucketLabel,
 	})
+}
+
+func queryMalwareScanStats(ctx context.Context, db *sql.DB, since time.Time) (malwareScanStats, error) {
+	var out malwareScanStats
+	err := db.QueryRowContext(ctx, `
+SELECT
+  COUNT(*) FILTER (WHERE icap_checked AND scan_result IS DISTINCT FROM 'skipped')::bigint,
+  COUNT(*) FILTER (WHERE external_checked AND scan_result IS DISTINCT FROM 'skipped')::bigint,
+  COUNT(*) FILTER (WHERE scan_result = 'infected')::bigint
+FROM malware_scan_logs
+WHERE created_at >= $1`, since).Scan(&out.ICAPChecked, &out.ExternalChecked, &out.Blocked)
+	return out, err
 }
 
 func queryHostCounts(ctx context.Context, db *sql.DB, since time.Time) ([]hostRow, error) {
@@ -213,7 +334,7 @@ FROM proxy_access_logs
 WHERE created_at >= $1
 GROUP BY host
 ORDER BY c DESC
-LIMIT 25`, since)
+LIMIT 50`, since)
 	if err != nil {
 		return nil, err
 	}
