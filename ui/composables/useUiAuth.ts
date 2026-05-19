@@ -10,9 +10,18 @@ export type AuthUser = {
 
 const SESSION_KEY = 'fence_ui_session'
 
+function publicApiBase() {
+  const config = useRuntimeConfig()
+  return (config.public.apiBase as string).replace(/\/$/, '')
+}
+
+function publicApiUrl(path: string) {
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${publicApiBase()}${p}`
+}
+
 export function useUiAuth() {
   const config = useRuntimeConfig()
-  const { apiUrl } = useApi()
   const tokens = useAuthTokens()
 
   function gateEnabled(): boolean {
@@ -26,10 +35,14 @@ export function useUiAuth() {
   const ready = useState<boolean>('fence-ui-auth-ready', () => false)
   const user = useState<AuthUser | null>('fence-ui-user', () => null)
 
+  const hasAccessToken = computed(() => !!tokens.getAccess())
+
   async function loadMe(): Promise<boolean> {
+    const access = tokens.getAccess()
+    if (!access) return false
     try {
-      const res = await $fetch<{ user: AuthUser }>(apiUrl('/auth/me'), {
-        headers: { Authorization: `Bearer ${tokens.getAccess()}` },
+      const res = await $fetch<{ user: AuthUser }>(publicApiUrl('/auth/me'), {
+        headers: { Authorization: `Bearer ${access}` },
       })
       user.value = res.user
       authed.value = true
@@ -40,27 +53,7 @@ export function useUiAuth() {
     }
   }
 
-  async function init() {
-    if (!import.meta.client) return
-    if (!gateEnabled()) {
-      authed.value = true
-      user.value = { id: 'dev', username: 'dev', display_name: 'Dev', email: '', role: 'admin', auth_provider: 'local', active: true }
-      ready.value = true
-      return
-    }
-    const hasToken = !!tokens.getAccess()
-    if (hasToken && (await loadMe())) {
-      ready.value = true
-      return
-    }
-    tokens.clearTokens()
-    authed.value = false
-    user.value = null
-    sessionStorage.removeItem(SESSION_KEY)
-    ready.value = true
-  }
-
-  async function login(
+  async function loginWithCredentials(
     username: string,
     password: string,
   ): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -68,7 +61,7 @@ export function useUiAuth() {
       const res = await $fetch<{
         tokens: { access_token: string; refresh_token: string }
         user: AuthUser
-      }>(apiUrl('/auth/login'), {
+      }>(publicApiUrl('/auth/login'), {
         method: 'POST',
         body: { username: username.trim(), password },
       })
@@ -83,14 +76,57 @@ export function useUiAuth() {
     }
   }
 
+  async function bootstrapEnvLogin(): Promise<boolean> {
+    const u = String(config.public.uiUser ?? 'admin').trim()
+    const p = String(config.public.uiPassword ?? 'fence')
+    const r = await loginWithCredentials(u, p)
+    return r.ok
+  }
+
+  async function init() {
+    if (!import.meta.client) return
+
+    // Старый флаг сессии без JWT — сбрасываем.
+    if (sessionStorage.getItem(SESSION_KEY) && !tokens.getAccess()) {
+      sessionStorage.removeItem(SESSION_KEY)
+    }
+
+    if (tokens.getAccess() && (await loadMe())) {
+      ready.value = true
+      return
+    }
+
+    tokens.clearTokens()
+    authed.value = false
+    user.value = null
+    sessionStorage.removeItem(SESSION_KEY)
+
+    // UI-gate выкл.: тихий вход локальным пользователем из env (admin/fence).
+    if (!gateEnabled()) {
+      await bootstrapEnvLogin()
+    }
+
+    ready.value = true
+  }
+
+  async function login(
+    username: string,
+    password: string,
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
+    return loginWithCredentials(username, password)
+  }
+
   async function logout() {
     const refresh = tokens.getRefresh()
+    const access = tokens.getAccess()
     try {
-      const { apiFetch } = useAuthFetch()
-      await apiFetch(apiUrl('/auth/logout'), {
-        method: 'POST',
-        body: { refresh_token: refresh },
-      })
+      if (access) {
+        await $fetch(publicApiUrl('/auth/logout'), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${access}` },
+          body: { refresh_token: refresh },
+        })
+      }
     } catch {
       /* ignore */
     }
@@ -101,12 +137,31 @@ export function useUiAuth() {
     authed.value = false
     user.value = null
     tokens.clearTokens()
-    if (import.meta.client) sessionStorage.removeItem(SESSION_KEY)
+    if (import.meta.client) {
+      sessionStorage.removeItem(SESSION_KEY)
+    }
   }
 
   function isAdmin() {
     return user.value?.role === 'admin'
   }
 
-  return { gateEnabled, authed, ready, user, init, login, logout, forceLogout, isAdmin }
+  /** Показывать основной UI только при валидном access token. */
+  function canUseApp() {
+    return authed.value && hasAccessToken.value
+  }
+
+  return {
+    gateEnabled,
+    authed,
+    ready,
+    user,
+    hasAccessToken,
+    canUseApp,
+    init,
+    login,
+    logout,
+    forceLogout,
+    isAdmin,
+  }
 }

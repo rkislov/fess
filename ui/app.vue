@@ -9,7 +9,7 @@
     </div>
   </div>
 
-  <LoginScreen v-else-if="!authed" />
+  <LoginScreen v-else-if="!canUseApp()" />
 
   <div v-else class="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-100 antialiased">
     <header
@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 const auth = useUiAuth()
-const { authed, ready, init, logout, user } = auth
+const { ready, init, logout, user, canUseApp } = auth
 
 async function onLogout() {
   await logout()

@@ -51,14 +51,22 @@ export function useAuthFetch() {
     try {
       return await $fetch<T>(url, { ...opts, headers })
     } catch (e: unknown) {
-      const fe = e as { status?: number; statusCode?: number }
+      const fe = e as { status?: number; statusCode?: number; data?: { error?: string } }
       const status = fe?.status ?? fe?.statusCode
-      if (status === 401 && tokens.getRefresh()) {
-        const ok = await tryRefresh()
-        if (ok) {
-          const retryHeaders = new Headers(opts.headers as HeadersInit | undefined)
-          retryHeaders.set('Authorization', `Bearer ${tokens.getAccess()}`)
-          return await $fetch<T>(url, { ...opts, headers: retryHeaders })
+      const errMsg = fe?.data?.error || ''
+      if (status === 401) {
+        if (!tokens.getAccess() || errMsg.includes('missing bearer') || errMsg.includes('invalid token')) {
+          authed.value = false
+          user.value = null
+          tokens.clearTokens()
+          if (import.meta.client) sessionStorage.removeItem('fence_ui_session')
+        } else if (tokens.getRefresh()) {
+          const ok = await tryRefresh()
+          if (ok) {
+            const retryHeaders = new Headers(opts.headers as HeadersInit | undefined)
+            retryHeaders.set('Authorization', `Bearer ${tokens.getAccess()}`)
+            return await $fetch<T>(url, { ...opts, headers: retryHeaders })
+          }
         }
       }
       throw e
