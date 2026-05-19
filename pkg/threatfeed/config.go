@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 		Enabled:         false,
 		Block:           true,
 		LogHits:         true,
-		PollIntervalSec: 3600,
+		PollIntervalSec: 12 * 3600, // min interval for automatic URL sync (policy-api caps at 12h)
 		HTTPTimeoutSec:  120,
 		Sources:         nil,
 		Format:          "auto",
@@ -50,7 +50,10 @@ func ParseConfig(raw []byte) (Config, error) {
 		return c, err
 	}
 	if c.PollIntervalSec <= 0 {
-		c.PollIntervalSec = 3600
+		c.PollIntervalSec = 12 * 3600
+	}
+	if c.PollIntervalSec < 12*3600 {
+		c.PollIntervalSec = 12 * 3600
 	}
 	if c.HTTPTimeoutSec <= 0 {
 		c.HTTPTimeoutSec = 120

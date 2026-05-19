@@ -39,6 +39,14 @@
           <span class="text-slate-500">Строк в последнем импорте</span>
           <span class="ml-2 font-mono text-slate-300">{{ feedStatus.rows_last_ingested }}</span>
         </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
+          <span class="text-slate-500">Авто-синхронизаций сегодня (UTC)</span>
+          <span class="ml-2 font-mono text-slate-300">{{ feedStatus.auto_syncs_today ?? 0 }} / {{ feedStatus.auto_sync_limit ?? 2 }}</span>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
+          <span class="text-slate-500">Следующая авто-синхронизация</span>
+          <span class="ml-2 font-mono text-xs text-slate-300">{{ fmtTs(feedStatus.next_auto_sync_at) }}</span>
+        </div>
         <div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3 sm:col-span-2">
           <span class="text-slate-500">Последний успех</span>
           <span class="ml-2 font-mono text-xs text-slate-300">{{ fmtTs(feedStatus.last_success_at) }}</span>
@@ -107,6 +115,10 @@
         Синхронизация по URL (Q-Feeds и др.) — опционально
       </summary>
       <div class="border-t border-white/5 px-6 pb-6 pt-2">
+        <p class="pb-3 text-xs text-slate-500">
+          Автоматическая загрузка по URL — не чаще <strong class="text-slate-400">2 раз в сутки</strong> (UTC), с интервалом не менее 12 часов.
+          Кнопка ниже — <strong class="text-slate-400">ручная</strong> синхронизация без ограничений.
+        </p>
         <div class="flex flex-wrap gap-2 pb-4">
           <button
             type="button"
@@ -114,7 +126,7 @@
             :disabled="busy"
             @click="syncNow"
           >
-            Синхронизировать сейчас
+            Синхронизировать вручную
           </button>
         </div>
 
@@ -124,13 +136,17 @@
             placeholder="https://api.qfeeds.com/api.php?feed_type=malware_ip&api_token=…"
             class="sm:col-span-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
           />
-          <input
-            v-model.number="cfg.poll_interval_sec"
-            type="number"
-            min="60"
-            placeholder="Интервал опроса, сек"
-            class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          />
+          <label class="text-sm text-slate-400">
+            Интервал авто-синхронизации (сек, мин. 43200 = 12 ч)
+            <input
+              v-model.number="cfg.poll_interval_sec"
+              type="number"
+              min="43200"
+              step="3600"
+              placeholder="43200"
+              class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
           <input
             v-model.number="cfg.http_timeout_sec"
             type="number"
@@ -190,6 +206,9 @@ type ThreatFeedStatus = {
   last_error?: string
   rows_last_ingested: number
   indicator_count: number
+  auto_syncs_today?: number
+  auto_sync_limit?: number
+  next_auto_sync_at?: string
 }
 
 type UploadResp = { ok: boolean; rows_ingested: number }
@@ -200,7 +219,7 @@ function defaultCfg(): ThreatFeedCfg {
     block: true,
     log_hits: true,
     feed_url: '',
-    poll_interval_sec: 3600,
+    poll_interval_sec: 43200,
     http_timeout_sec: 120,
     sources: [],
     format: 'auto',
@@ -323,7 +342,7 @@ async function syncNow() {
     await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await apiFetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
     await load()
-    flashOk('Синхронизация по URL выполнена')
+    flashOk('Ручная синхронизация по URL выполнена')
   } catch (e) {
     flashErr(e)
     await loadStatus().catch(() => {})

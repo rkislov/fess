@@ -29,6 +29,9 @@ type threatFeedStatusResponse struct {
 	LastError        string `json:"last_error,omitempty"`
 	RowsLastIngested int    `json:"rows_last_ingested"`
 	IndicatorCount   int    `json:"indicator_count"`
+	AutoSyncsToday   int    `json:"auto_syncs_today"`
+	AutoSyncLimit    int    `json:"auto_sync_limit"`
+	NextAutoSyncAt   string `json:"next_auto_sync_at,omitempty"`
 }
 
 func loadThreatFeedConfig(ctx context.Context, db *sql.DB) (threatfeed.Config, error) {
@@ -127,11 +130,18 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	var cnt int
 	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_indicators`).Scan(&cnt)
 
+	now := time.Now()
+	quota, _ := loadThreatFeedAutoQuota(r.Context(), db)
+	usedToday := autoSyncsUsedToday(quota, now)
+	_, nextAuto := autoThreatFeedSyncPermitted(r.Context(), db, cfg, now)
+
 	out := threatFeedStatusResponse{
 		Enabled:          cfg.Enabled,
 		Block:            cfg.Block,
 		RowsLastIngested: rowsIng,
 		IndicatorCount:   cnt,
+		AutoSyncsToday:   usedToday,
+		AutoSyncLimit:    threatFeedMaxAutoSyncsPerDay,
 	}
 	if lastAtt.Valid {
 		out.LastAttemptAtRFC = lastAtt.Time.UTC().Format(time.RFC3339Nano)
@@ -141,6 +151,14 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	}
 	if lastErr.Valid && strings.TrimSpace(lastErr.String) != "" {
 		out.LastError = lastErr.String
+	}
+	if strings.TrimSpace(cfg.FeedURL) != "" && cfg.Enabled {
+		if usedToday >= threatFeedMaxAutoSyncsPerDay {
+			nextAuto = threatFeedUTCDay(now).Add(24 * time.Hour)
+		}
+		if !nextAuto.IsZero() && nextAuto.After(now) {
+			out.NextAutoSyncAt = nextAuto.UTC().Format(time.RFC3339Nano)
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -188,6 +206,7 @@ func postThreatFeedUpload(w http.ResponseWriter, r *http.Request, db *sql.DB, rd
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rows_ingested": n})
 }
 
+// postThreatFeedSync runs an on-demand URL sync (does not count toward the daily automatic quota).
 func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
