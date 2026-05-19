@@ -81,10 +81,12 @@ services:
       FENCE_JWT_SECRET: "fence-local-dev-change-me-in-production"
       FENCE_ACCESS_TOKEN_TTL: "15m"
       FENCE_REFRESH_TOKEN_TTL: "168h"
+      POLICY_API_METRICS_ADDR: ":9092"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
     ports:
       - "8082:8082"
+      - "9092:9092"
     restart: unless-stopped
     healthcheck:
       test:
@@ -132,11 +134,13 @@ services:
       # Не то же самое, что set_real_ip_from в Nginx. Если пир не в списке — X-Forwarded-For не доверяется (client_ip = TCP-пир).
       # Для локального compose: обычно 172.16/12; с хоста через Docker Desktop часто 192.168.x. В проде сузьте до подсети вашего LB/Nginx.
       WAF_TRUSTED_PROXIES: "172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,10.0.0.0/8"
+      WAF_METRICS_ADDR: ":9091"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip:ro
     ports:
       - "8080:8080"
       - "8443:8443"
+      - "9091:9091"
     restart: unless-stopped
     depends_on:
       postgres:

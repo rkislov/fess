@@ -1,0 +1,18 @@
+# Пример scrape-конфигурации для Fence.
+# Запуск: docker run -p 9090:9090 -v $(pwd)/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: fence-waf-gateway
+    static_configs:
+      - targets: ["waf-gateway:9091"]
+
+  - job_name: fence-policy-api
+    static_configs:
+      - targets: ["policy-api:9092"]
+    # Дополнительно на основном порту (если не используете отдельный metrics-порт):
+    # - targets: ["policy-api:8082"]
+    #   metrics_path: /metrics

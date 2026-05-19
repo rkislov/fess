@@ -104,6 +104,17 @@
 
     <section v-if="detail" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">Rules</h2>
+
+      <div id="waf-rule-builder" class="mt-4 border-b border-slate-800 pb-6">
+        <WafRuleBuilder
+          ref="ruleBuilderRef"
+          :policy-id="detail?.id ?? null"
+          :disabled="busy"
+          @apply="onBuilderApply"
+          @save="onBuilderSave"
+        />
+      </div>
+
       <div class="mt-4 space-y-6">
         <div
           v-for="(r, idx) in ruleRows"
@@ -136,6 +147,13 @@
             <button type="button" class="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600" :disabled="busy" @click="saveRule(idx)">
               Save rule
             </button>
+            <button
+              type="button"
+              class="rounded border border-teal-700/60 bg-teal-950/40 px-3 py-1.5 text-sm text-teal-200 hover:bg-teal-900/50"
+              @click="editRuleInBuilder(r)"
+            >
+              В конструкторе
+            </button>
           </div>
           <div class="mt-3 grid gap-3 md:grid-cols-2">
             <div>
@@ -159,110 +177,7 @@
       </div>
 
       <div class="mt-6 border-t border-slate-800 pt-6">
-        <h3 class="text-sm font-medium text-slate-300">Конструктор условия</h3>
-        <p class="mt-1 text-xs text-slate-500">
-          Условия: <span class="font-mono text-slate-400">path_exact</span>, <span class="font-mono">path_contains</span>,
-          <span class="font-mono">path_prefix</span>, <span class="font-mono">path_regex</span>,
-          <span class="font-mono">client_ip_in</span> (разрешённые IP/CIDR для срабатывания правила),
-          <span class="font-mono">client_ip_not_in</span> — правило <strong class="text-slate-400">пропускается</strong>, если клиент входит в
-          одну из перечисленных сетей (удобная пара с <span class="font-mono">block</span>: доверенные сети не попадают под блокировку этого правила).
-        </p>
-        <div class="mt-3 grid gap-3 md:grid-cols-2">
-          <div>
-            <label class="text-xs text-slate-500">Тип условия</label>
-            <select v-model="ctor.kind" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
-              <option value="path_contains">path_contains</option>
-              <option value="path_exact">path_exact</option>
-              <option value="path_prefix">path_prefix (starts with)</option>
-              <option value="path_and_ip_allow">path_prefix + только эти клиентские IP/CIDR</option>
-              <option value="path_and_trusted_subnets">path_prefix + доверенные сети (остальные блок — см. текст)</option>
-              <option value="body_contains">body_contains</option>
-              <option value="request_uri_contains">request_uri_contains</option>
-              <option value="path_regex">path_regex</option>
-              <option value="method">method (HTTP)</option>
-              <option value="header_contains">header_contains</option>
-              <option value="query_equals">query_equals (одна пара)</option>
-            </select>
-          </div>
-          <div v-if="ctor.kind === 'method'">
-            <label class="text-xs text-slate-500">Метод</label>
-            <select v-model="ctor.method" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm">
-              <option>GET</option>
-              <option>POST</option>
-              <option>PUT</option>
-              <option>PATCH</option>
-              <option>DELETE</option>
-              <option>HEAD</option>
-              <option>OPTIONS</option>
-              <option>TRACE</option>
-            </select>
-          </div>
-          <template v-else-if="ctor.kind === 'header_contains'">
-            <div>
-              <label class="text-xs text-slate-500">Имя заголовка</label>
-              <input v-model="ctor.hdrKey" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
-            </div>
-            <div>
-              <label class="text-xs text-slate-500">Подстрока в значении</label>
-              <input v-model="ctor.hdrVal" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
-            </div>
-          </template>
-          <template v-else-if="ctor.kind === 'query_equals'">
-            <div>
-              <label class="text-xs text-slate-500">Имя параметра</label>
-              <input v-model="ctor.qKey" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
-            </div>
-            <div>
-              <label class="text-xs text-slate-500">Значение</label>
-              <input v-model="ctor.qVal" class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm" />
-            </div>
-          </template>
-          <template v-else-if="ctor.kind === 'path_and_ip_allow' || ctor.kind === 'path_and_trusted_subnets'">
-            <div class="md:col-span-2">
-              <label class="text-xs text-slate-500">Префикс пути (path_prefix)</label>
-              <input
-                v-model="ctor.pathValue"
-                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-sm"
-                placeholder="/api/private/"
-              />
-            </div>
-            <div class="md:col-span-2">
-              <label class="text-xs text-slate-500">
-                {{
-                  ctor.kind === 'path_and_ip_allow'
-                    ? 'IP/CIDR, с которых правило действует (по одному в строке или через запятую)'
-                    : 'Доверенные IP/CIDR: для них правило не срабатывает; действие block применится к клиентам вне этого списка'
-                }}
-              </label>
-              <textarea
-                v-model="ctor.ipLines"
-                rows="5"
-                class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
-                placeholder="10.0.0.0/8&#10;192.168.1.42"
-              />
-            </div>
-          </template>
-          <div v-else class="md:col-span-2">
-            <label class="text-xs text-slate-500">Строка или регулярное выражение (path_regex)</label>
-            <input
-              v-model="ctor.value"
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
-              placeholder="например /admin или ^/api/v[0-9]+/"
-            />
-          </div>
-        </div>
-        <pre class="mt-3 max-h-40 overflow-auto rounded border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">{{ ctorPreview }}</pre>
-        <button
-          type="button"
-          class="mt-3 rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600"
-          @click="applyCtorToNewRule"
-        >
-          Вставить в форму «Добавить правило»
-        </button>
-      </div>
-
-      <div class="mt-6 border-t border-slate-800 pt-6">
-        <h3 class="text-sm font-medium text-slate-300">Add rule</h3>
+        <h3 class="text-sm font-medium text-slate-300">Добавить правило (JSON)</h3>
         <div class="mt-2 space-y-2">
           <input v-model="newRule.name" placeholder="Name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
           <select v-model="newRule.action" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
@@ -376,17 +291,10 @@ const newRule = reactive({
   transformText: '{}',
 })
 
-const ctor = reactive({
-  kind: 'path_contains',
-  value: '',
-  pathValue: '',
-  ipLines: '',
-  method: 'GET',
-  hdrKey: 'User-Agent',
-  hdrVal: '',
-  qKey: '',
-  qVal: '',
-})
+const ruleBuilderRef = ref<{
+  loadFromRule: (row: RuleRow) => void
+  resetBuilder: () => void
+} | null>(null)
 
 const packs = ref<{ id: string; title: string; rule_count: number }[]>([])
 const owasp = reactive({
@@ -425,74 +333,75 @@ async function loadPacks() {
   owasp.packId = prefer?.id || packs.value[0]?.id || ''
 }
 
-function parseIPCIDRMultiline(raw: string): string[] {
-  const parts = raw
-    .split(/[\s,;\n\r]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  return [...new Set(parts)]
+function onBuilderApply(payload: {
+  name: string
+  action: string
+  priority: number
+  conditionText: string
+  transformText: string
+}) {
+  newRule.name = payload.name
+  newRule.action = payload.action
+  newRule.priority = payload.priority
+  newRule.conditionText = payload.conditionText
+  newRule.transformText = payload.transformText
+  flashOk('Данные конструктора перенесены в форму ниже')
 }
 
-function buildCtorCondition(): Record<string, unknown> {
-  const k = ctor.kind
-  if (k === 'method') {
-    return { method: ctor.method }
-  }
-  if (k === 'header_contains') {
-    const key = ctor.hdrKey.trim()
-    if (!key) return {}
-    return { header_contains: { [key]: ctor.hdrVal } }
-  }
-  if (k === 'query_equals') {
-    const qk = ctor.qKey.trim()
-    if (!qk) return {}
-    return { query_equals: { [qk]: ctor.qVal } }
-  }
-  if (k === 'path_and_ip_allow' || k === 'path_and_trusted_subnets') {
-    const p = ctor.pathValue.trim()
-    const ips = parseIPCIDRMultiline(ctor.ipLines)
-    if (!p || !ips.length) return {}
-    if (k === 'path_and_ip_allow') {
-      return { path_prefix: p, client_ip_in: ips }
-    }
-    return { path_prefix: p, client_ip_not_in: ips }
-  }
-  const v = typeof ctor.value === 'string' ? ctor.value.trim() : ''
-  if (!v) return {}
-  switch (k) {
-    case 'path_contains':
-      return { path_contains: v }
-    case 'path_exact':
-      return { path_exact: v }
-    case 'path_prefix':
-      return { path_prefix: v }
-    case 'body_contains':
-      return { body_contains: v }
-    case 'request_uri_contains':
-      return { request_uri_contains: v }
-    case 'path_regex':
-      return { path_regex: v }
-    default:
-      return {}
-  }
-}
-
-const ctorPreview = computed(() => {
+async function onBuilderSave(payload: {
+  mode: 'create' | 'update'
+  ruleId?: string
+  name: string
+  action: string
+  priority: number
+  conditionText: string
+  transformText: string
+}) {
+  if (!detail.value) return
+  busy.value = true
+  err.value = ''
   try {
-    return JSON.stringify(buildCtorCondition(), null, 2)
-  } catch {
-    return '{}'
+    const condition_json = parseJsonField(payload.conditionText, 'condition_json')
+    const transform_json = parseJsonField(payload.transformText, 'transform_json')
+    if (payload.mode === 'create') {
+      await apiFetch(apiUrl(`/policies/${detail.value.id}/rules`), {
+        method: 'POST',
+        body: {
+          name: payload.name,
+          action: payload.action,
+          priority: payload.priority || undefined,
+          condition_json,
+          transform_json,
+        },
+      })
+      await selectPolicy(detail.value.id)
+      ruleBuilderRef.value?.resetBuilder()
+      flashOk('Правило создано')
+    } else if (payload.ruleId) {
+      await apiFetch(apiUrl(`/rules/${payload.ruleId}`), {
+        method: 'PUT',
+        body: {
+          name: payload.name,
+          action: payload.action,
+          priority: payload.priority,
+          condition_json,
+          transform_json,
+        },
+      })
+      await selectPolicy(detail.value.id)
+      flashOk('Правило обновлено')
+    }
+  } catch (e) {
+    flashErr(e)
+  } finally {
+    busy.value = false
   }
-})
+}
 
-function applyCtorToNewRule() {
-  const o = buildCtorCondition()
-  if (!Object.keys(o).length) {
-    flashErr(new Error('Заполните поля конструктора'))
-    return
-  }
-  newRule.conditionText = JSON.stringify(o, null, 2)
-  flashOk('Условие вставлено в форму добавления правила')
+function editRuleInBuilder(r: RuleRow) {
+  ruleBuilderRef.value?.loadFromRule(r)
+  document.getElementById('waf-rule-builder')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  flashOk('Правило загружено в конструктор')
 }
 
 async function downloadOwaspPack() {

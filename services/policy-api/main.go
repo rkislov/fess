@@ -20,6 +20,7 @@ import (
 	"fence/internal/bootstrap"
 	"fence/pkg/auth"
 	"fence/pkg/owasp"
+	"fence/pkg/prommetrics"
 )
 
 var errPolicyNotFound = errors.New("policy not found")
@@ -114,9 +115,14 @@ func main() {
 
 	go runThreatFeedPoller(context.Background(), db, rdb)
 	go runSIEMExporter(context.Background(), db)
+	go runPrometheusDBCollector(context.Background(), db)
+
+	metricsAddr := getenv("POLICY_API_METRICS_ADDR", ":9092")
+	prommetrics.ListenAndServe(metricsAddr)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
+	mux.Handle("/metrics", prommetrics.Handler())
 	mux.HandleFunc("/api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		authLoginHandler(w, r, db, authSvc)
 	})
@@ -273,7 +279,7 @@ func main() {
 		backendPathByIDHandler(w, r, db, rdb)
 	})
 
-	apiHandler := auth.Middleware(authSvc, requireWriteRole(mux))
+	apiHandler := prommetrics.Middleware("policy-api", auth.Middleware(authSvc, requireWriteRole(mux)))
 	srv := &http.Server{
 		Addr:              listen,
 		Handler:           loggingMiddleware(apiHandler),

@@ -22,6 +22,7 @@ import (
 	"fence/pkg/engine"
 	"fence/pkg/malware"
 	"fence/pkg/policy"
+	"fence/pkg/prommetrics"
 	"fence/pkg/routing"
 	"fence/pkg/tlssites"
 	_ "github.com/lib/pq"
@@ -98,6 +99,9 @@ func main() {
 	go subscribeGeoIPUpdates(rdb, initGeoPath)
 	go subscribeGeoASNUpdates(rdb, initASNPath)
 	go subscribeRoutingUpdates(db, rdb, upstream, routeStore, tlsStore)
+
+	metricsAddr := getenv("WAF_METRICS_ADDR", ":9091")
+	prommetrics.ListenAndServe(metricsAddr)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mr := routeStore.Current().Match(publicHostHeader(r, ipRes), r.URL.Path)
@@ -213,9 +217,10 @@ func main() {
 		}
 	})
 
+	wrapped := prommetrics.Middleware("waf-gateway", handler)
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           loggingMiddleware(handler, ipRes),
+		Handler:           loggingMiddleware(wrapped, ipRes),
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -233,7 +238,7 @@ func main() {
 			}
 			tlsLn := tls.NewListener(ln, cfg)
 			srvTLS := &http.Server{
-				Handler:           loggingMiddleware(handler, ipRes),
+				Handler:           loggingMiddleware(wrapped, ipRes),
 				ReadHeaderTimeout: 3 * time.Second,
 			}
 			n := len(tlsStore.Current().Entries)
@@ -302,6 +307,7 @@ VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::jsonb)`,
 	if err != nil {
 		log.Printf("failed to write waf log: %v", err)
 	}
+	prommetrics.RecordGatewayWAF(effectiveAction)
 }
 
 func loggingMiddleware(next http.Handler, ipRes *clientip.Resolver) http.Handler {
