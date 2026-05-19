@@ -114,6 +114,7 @@ func main() {
 	}
 
 	go runThreatFeedPoller(context.Background(), db, rdb)
+	go runThreatFeedBootstrap(context.Background(), db, rdb)
 	go runSIEMExporter(context.Background(), db)
 	go runPrometheusDBCollector(context.Background(), db)
 
@@ -214,6 +215,9 @@ func main() {
 			return
 		}
 		postThreatFeedSync(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/threat-feed/threatfox/full", func(w http.ResponseWriter, r *http.Request) {
+		postThreatFoxFull(w, r, db, rdb)
 	})
 	mux.HandleFunc("/api/v1/settings/threat-feed/upload", func(w http.ResponseWriter, r *http.Request) {
 		postThreatFeedUpload(w, r, db, rdb)

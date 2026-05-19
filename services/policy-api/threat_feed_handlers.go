@@ -24,6 +24,8 @@ type threatFeedResponse struct {
 type threatFeedStatusResponse struct {
 	Enabled          bool   `json:"enabled"`
 	Block            bool   `json:"block"`
+	Provider         string `json:"provider,omitempty"`
+	ThreatFoxReady   bool   `json:"threatfox_ready"`
 	LastAttemptAtRFC string `json:"last_attempt_at,omitempty"`
 	LastSuccessAtRFC string `json:"last_success_at,omitempty"`
 	LastError        string `json:"last_error,omitempty"`
@@ -138,6 +140,8 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	out := threatFeedStatusResponse{
 		Enabled:          cfg.Enabled,
 		Block:            cfg.Block,
+		Provider:         cfg.Provider,
+		ThreatFoxReady:   cfg.UsesThreatFox() && strings.TrimSpace(cfg.APIKey) != "",
 		RowsLastIngested: rowsIng,
 		IndicatorCount:   cnt,
 		AutoSyncsToday:   usedToday,
@@ -152,7 +156,7 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	if lastErr.Valid && strings.TrimSpace(lastErr.String) != "" {
 		out.LastError = lastErr.String
 	}
-	if strings.TrimSpace(cfg.FeedURL) != "" && cfg.Enabled {
+	if cfg.AutoSyncConfigured() && cfg.Enabled {
 		if usedToday >= threatFeedMaxAutoSyncsPerDay {
 			nextAuto = threatFeedUTCDay(now).Add(24 * time.Hour)
 		}
@@ -206,7 +210,7 @@ func postThreatFeedUpload(w http.ResponseWriter, r *http.Request, db *sql.DB, rd
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rows_ingested": n})
 }
 
-// postThreatFeedSync runs an on-demand URL sync (does not count toward the daily automatic quota).
+// postThreatFeedSync runs on-demand incremental sync (ThreatFox API or URL feed).
 func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -219,15 +223,48 @@ func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 	}
 	syncCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
-	switch err := syncThreatFeedFromConfig(syncCtx, db, cfg); err {
+	switch err := syncThreatFeedFromConfigRouter(syncCtx, db, cfg); err {
 	case nil:
 		if err := rdb.Publish(r.Context(), "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	case errThreatFeedMissingURL, errThreatFeedSkipped:
+	case errThreatFeedMissingURL:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "feed_url is empty"})
+	case errThreatFoxNoAuthKey:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ThreatFox Auth-Key не задан"})
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": sanitizeThreatFeedError(err.Error())})
+	}
+}
+
+// postThreatFoxFull replaces the blocklist from ThreatFox full CSV export.
+func postThreatFoxFull(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	cfg, err := loadThreatFeedConfig(r.Context(), db)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !cfg.UsesThreatFox() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "provider is not threatfox"})
+		return
+	}
+	syncCtx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	defer cancel()
+	switch err := syncThreatFoxFull(syncCtx, db, cfg); err {
+	case nil:
+		if err := rdb.Publish(r.Context(), "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	case errThreatFoxNoAuthKey:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ThreatFox Auth-Key не задан"})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": sanitizeThreatFeedError(err.Error())})
 	}

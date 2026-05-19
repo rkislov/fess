@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +39,7 @@ func tickThreatFeedPoll(parent context.Context, db *sql.DB, rdb *redis.Client) {
 		log.Printf("threat feed: load config: %v", err)
 		return
 	}
-	if !cfg.Enabled || strings.TrimSpace(cfg.FeedURL) == "" {
+	if !cfg.Enabled || !cfg.AutoSyncConfigured() {
 		return
 	}
 	now := time.Now()
@@ -48,7 +47,7 @@ func tickThreatFeedPoll(parent context.Context, db *sql.DB, rdb *redis.Client) {
 		return
 	}
 
-	if err := syncThreatFeedFromConfig(ctx, db, cfg); err != nil {
+	if err := syncThreatFeedFromConfigRouter(ctx, db, cfg); err != nil {
 		log.Printf("threat feed poll: %v", err)
 		return
 	}

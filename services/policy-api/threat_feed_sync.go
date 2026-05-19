@@ -101,41 +101,7 @@ func ingestThreatFeedBody(ctx context.Context, db *sql.DB, body []byte, cfg thre
 		return 0, fmt.Errorf("%s", detail)
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		recordThreatFeedFail(ctx, db, err.Error())
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM threat_feed_indicators`); err != nil {
-		recordThreatFeedFail(ctx, db, err.Error())
-		return 0, err
-	}
-
-	for _, s := range inds {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO threat_feed_indicators(indicator) VALUES ($1)`, s); err != nil {
-			recordThreatFeedFail(ctx, db, err.Error())
-			return 0, err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-UPDATE threat_feed_sync_state SET
-  last_success_at = $1,
-  last_error = '',
-  rows_ingested = $2
-WHERE singleton = 'global'
-`, now, len(inds)); err != nil {
-		recordThreatFeedFail(ctx, db, err.Error())
-		return 0, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		recordThreatFeedFail(ctx, db, err.Error())
-		return 0, err
-	}
-	return len(inds), nil
+	return replaceThreatFeedIndicators(ctx, db, inds, now)
 }
 
 // normalizeAPIQFeedsURL fixes common portal typos/mirrors so sync works against the real endpoint.
@@ -431,8 +397,12 @@ UPDATE threat_feed_sync_state SET last_error = $1 WHERE singleton = 'global'
 `, msg)
 }
 
-var threatFeedAPITokenRe = regexp.MustCompile(`(?i)(api_token=)[^&\s"']+`)
+var (
+	threatFeedAPITokenRe = regexp.MustCompile(`(?i)(api_token=)[^&\s"']+`)
+	threatFeedAuthKeyRe  = regexp.MustCompile(`(?i)(auth-key=)[^&\s"']+`)
+)
 
 func sanitizeThreatFeedError(msg string) string {
-	return threatFeedAPITokenRe.ReplaceAllString(msg, `${1}***`)
+	msg = threatFeedAPITokenRe.ReplaceAllString(msg, `${1}***`)
+	return threatFeedAuthKeyRe.ReplaceAllString(msg, `${1}***`)
 }

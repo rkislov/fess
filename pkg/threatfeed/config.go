@@ -14,18 +14,19 @@ type GatewayConfig struct {
 
 // Config is stored in threat_feed_settings.config (JSONB).
 type Config struct {
-	Enabled           bool     `json:"enabled"`
-	Block             bool     `json:"block"`
-	LogHits           bool     `json:"log_hits"`
-	FeedURL           string   `json:"feed_url"`
-	PollIntervalSec   int      `json:"poll_interval_sec"`
-	HTTPTimeoutSec    int      `json:"http_timeout_sec"`
-	Sources           []string `json:"sources"` // allowlist by feed "source" field; empty = all sources
-	Format            string   `json:"format"` // auto, csv, plain, ndjson
-	CSVIndicatorCol   string   `json:"csv_indicator_column"`
-	CSVSourceCol      string   `json:"csv_source_column"`
-	APIKey            string   `json:"api_key"`
-	APIKeyHeader      string   `json:"api_key_header"`
+	Enabled         bool     `json:"enabled"`
+	Block           bool     `json:"block"`
+	LogHits         bool     `json:"log_hits"`
+	Provider        string   `json:"provider"` // "threatfox" or "url" (empty: infer from feed_url)
+	FeedURL         string   `json:"feed_url"`
+	PollIntervalSec int      `json:"poll_interval_sec"`
+	HTTPTimeoutSec  int      `json:"http_timeout_sec"`
+	Sources         []string `json:"sources"` // allowlist by feed "source" field; empty = all sources
+	Format          string   `json:"format"`  // auto, csv, plain, ndjson
+	CSVIndicatorCol string   `json:"csv_indicator_column"`
+	CSVSourceCol    string   `json:"csv_source_column"`
+	APIKey          string   `json:"api_key"` // ThreatFox Auth-Key when provider=threatfox
+	APIKeyHeader    string   `json:"api_key_header"`
 }
 
 func DefaultConfig() Config {
@@ -64,9 +65,26 @@ func ParseConfig(raw []byte) (Config, error) {
 	}
 	c.Format = f
 	if strings.TrimSpace(c.APIKeyHeader) == "" {
-		c.APIKeyHeader = "Authorization"
+		if c.UsesThreatFox() {
+			c.APIKeyHeader = "Auth-Key"
+		} else {
+			c.APIKeyHeader = "Authorization"
+		}
 	}
 	return c, nil
+}
+
+// UsesThreatFox reports whether sync should use ThreatFox API/export.
+func (c Config) UsesThreatFox() bool {
+	return strings.EqualFold(strings.TrimSpace(c.Provider), ThreatFoxProvider)
+}
+
+// AutoSyncConfigured reports whether background sync can run (ThreatFox auth or feed URL).
+func (c Config) AutoSyncConfigured() bool {
+	if c.UsesThreatFox() {
+		return strings.TrimSpace(c.APIKey) != ""
+	}
+	return strings.TrimSpace(c.FeedURL) != ""
 }
 
 func (c Config) SourcesAllowlist() map[string]struct{} {
