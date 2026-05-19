@@ -5,28 +5,25 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 const (
-	aiMaxProxyRows  = 100
-	aiMaxWafRows    = 100
-	aiDefaultRows   = 40
-	aiHTTPTimeout   = 120 * time.Second
-	aiMaxCondRunes  = 600
-	aiMaxPathRunes  = 200
-	aiMaxUARunes    = 160
+	aiMaxProxyRows = 100
+	aiMaxWafRows   = 100
+	aiDefaultRows  = 40
+	aiMaxCondRunes = 600
+	aiMaxPathRunes = 200
+	aiMaxUARunes   = 160
 )
 
-type aiSettingsResponse struct {
-	Configured bool   `json:"configured"`
-	Model      string `json:"model"`
-	BaseURL    string `json:"base_url"`
+func aiNotConfiguredMessage() string {
+	return "ИИ не настроен: задайте API key в Настройки → ИИ или переменную FENCE_AI_API_KEY в policy-api."
 }
 
 type aiAnalyzeRequest struct {
@@ -57,29 +54,18 @@ type aiAskResponse struct {
 	Model  string `json:"model"`
 }
 
-func aiSettingsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	key := strings.TrimSpace(os.Getenv("FENCE_AI_API_KEY"))
-	writeJSON(w, http.StatusOK, aiSettingsResponse{
-		Configured: key != "",
-		Model:      aiModel(),
-		BaseURL:    aiBaseURL(),
-	})
-}
-
 func aiAnalyzeHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	key := strings.TrimSpace(os.Getenv("FENCE_AI_API_KEY"))
-	if key == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "ИИ не настроен: задайте переменную окружения FENCE_AI_API_KEY для сервиса policy-api (см. README).",
-		})
+	cfg, err := resolveAIConfig(r.Context(), db)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !cfg.configured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": aiNotConfiguredMessage()})
 		return
 	}
 
@@ -109,7 +95,7 @@ func aiAnalyzeHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), aiHTTPTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout)
 	defer cancel()
 
 	var parts []string
@@ -157,12 +143,12 @@ func aiAnalyzeHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 Отвечай на русском языке, структурировано (заголовки, списки). Не выдумывай UUID: используй только те, что в данных.`
 
-	analysis, err := callChatCompletions(ctx, key, systemPrompt, userPrompt)
+	analysis, err := callChatCompletions(ctx, cfg, systemPrompt, userPrompt)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, aiAnalyzeResponse{Analysis: analysis, Model: aiModel()})
+	writeJSON(w, http.StatusOK, aiAnalyzeResponse{Analysis: analysis, Model: cfg.Model})
 }
 
 func aiAskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -170,11 +156,13 @@ func aiAskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	key := strings.TrimSpace(os.Getenv("FENCE_AI_API_KEY"))
-	if key == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "ИИ не настроен: задайте FENCE_AI_API_KEY для policy-api.",
-		})
+	cfg, err := resolveAIConfig(r.Context(), db)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !cfg.configured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": aiNotConfiguredMessage()})
 		return
 	}
 	var req aiAskRequest
@@ -206,7 +194,7 @@ func aiAskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		wl = aiMaxWafRows
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), aiHTTPTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout)
 	defer cancel()
 
 	var ctxParts []string
@@ -244,28 +232,12 @@ func aiAskHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 Отвечай на русском языке по существу вопроса оператора. Если в контексте есть журналы или политики — опирайся на них.
 Не выдумывай UUID и факты, которых нет в данных. Если данных недостаточно — скажи, что нужно уточнить.`
 
-	answer, err := callChatCompletions(ctx, key, systemPrompt, userPrompt)
+	answer, err := callChatCompletions(ctx, cfg, systemPrompt, userPrompt)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, aiAskResponse{Answer: answer, Model: aiModel()})
-}
-
-func aiBaseURL() string {
-	u := strings.TrimSpace(os.Getenv("FENCE_AI_BASE_URL"))
-	if u == "" {
-		return "https://api.openai.com/v1"
-	}
-	return strings.TrimRight(u, "/")
-}
-
-func aiModel() string {
-	m := strings.TrimSpace(os.Getenv("FENCE_AI_MODEL"))
-	if m == "" {
-		return "gpt-4o-mini"
-	}
-	return m
+	writeJSON(w, http.StatusOK, aiAskResponse{Answer: answer, Model: cfg.Model})
 }
 
 func truncateRunes(s string, max int) string {
@@ -463,10 +435,10 @@ func parseAIContentField(raw json.RawMessage) string {
 	return strings.TrimSpace(string(raw))
 }
 
-func callChatCompletions(ctx context.Context, apiKey, systemPrompt, userPrompt string) (string, error) {
-	url := aiBaseURL() + "/chat/completions"
+func callChatCompletions(ctx context.Context, cfg resolvedAIConfig, systemPrompt, userPrompt string) (string, error) {
+	url := cfg.BaseURL + "/chat/completions"
 	body, err := json.Marshal(openAIChatReq{
-		Model:       aiModel(),
+		Model:       cfg.Model,
 		Temperature: 0.35,
 		MaxTokens:   4096,
 		Messages: []openAIMessage{
@@ -482,11 +454,24 @@ func callChatCompletions(ctx context.Context, apiKey, systemPrompt, userPrompt s
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: aiHTTPTimeout}
+	timeout := cfg.Timeout
+	if dl, ok := ctx.Deadline(); ok {
+		if rem := time.Until(dl); rem > 0 && rem < timeout {
+			timeout = rem
+		}
+	}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", fmt.Errorf(
+				"таймаут ожидания ответа модели (%s, лимит %s). Увеличьте таймаут в Настройки → ИИ или FENCE_AI_HTTP_TIMEOUT",
+				cfg.Model,
+				timeout.Round(time.Second),
+			)
+		}
 		return "", fmt.Errorf("запрос к ИИ: %w", err)
 	}
 	defer resp.Body.Close()
@@ -506,7 +491,7 @@ func callChatCompletions(ctx context.Context, apiKey, systemPrompt, userPrompt s
 	}
 	text := extractAIChoiceText(parsed.Choices[0])
 	if text == "" {
-		return "", fmt.Errorf("пустой ответ от ИИ (модель %s: проверьте content/reasoning в ответе API)", aiModel())
+		return "", fmt.Errorf("пустой ответ от ИИ (модель %s: проверьте content/reasoning в ответе API)", cfg.Model)
 	}
 	return text, nil
 }

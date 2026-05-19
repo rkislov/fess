@@ -7,8 +7,8 @@
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">ИИ‑помощник</h2>
       <p class="mt-1 text-sm text-slate-400">
-        Ответы формирует внешняя модель (OpenAI‑совместимый API). Ключ задаётся на сервере
-        <span class="font-mono text-slate-300">policy-api</span>, в браузер не передаётся.
+        Ответы формирует внешняя модель (OpenAI‑совместимый API). Параметры подключения — в
+        <strong class="text-slate-300">Настройки → ИИ</strong>; ключ в браузер не передаётся.
       </p>
       <div class="mt-5 flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-slate-900/40 p-2 shadow-inner shadow-black/15">
         <button
@@ -38,7 +38,9 @@
         <span v-if="status" class="text-sm">
           <span v-if="status.configured" class="text-emerald-400">ИИ настроен</span>
           <span v-else class="text-amber-400">Ключ не задан — запросы недоступны</span>
-          <span class="ml-2 font-mono text-xs text-slate-500">model={{ status.model }}</span>
+          <span class="ml-2 font-mono text-xs text-slate-500">
+            model={{ status.model }} · таймаут {{ status.http_timeout_sec ?? '—' }} с
+          </span>
         </span>
       </div>
     </section>
@@ -166,9 +168,11 @@
         :disabled="analyzeBusy || (status != null && !status.configured)"
         @click="runAnalyze"
       >
-        {{ analyzeBusy ? 'Анализ… (до 2–3 мин)' : 'Запустить анализ' }}
+        {{ analyzeBusy ? `Анализ… (до ${Math.ceil(aiFetchTimeoutMs / 60000)} мин)` : 'Запустить анализ' }}
       </button>
-      <p v-if="analyzeBusy" class="mt-2 text-xs text-slate-500">Запрос к модели {{ status?.model || '…' }} — подождите, не закрывайте вкладку.</p>
+      <p v-if="analyzeBusy" class="mt-2 text-xs text-slate-500">
+        Запрос к {{ status?.model || 'модели' }} ({{ status?.base_url }}) — не закрывайте вкладку.
+      </p>
       <p v-if="analyzeError" class="mt-3 rounded-lg border border-rose-800/60 bg-rose-950/40 px-3 py-2 text-sm text-rose-200">{{ analyzeError }}</p>
 
       <div v-if="analysis" class="mt-6">
@@ -182,21 +186,11 @@
       v-else
       class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm"
     >
-      <h3 class="text-base font-semibold text-white">Настройка на сервере</h3>
-      <dl class="mt-4 space-y-3 text-sm">
-        <div class="rounded-xl border border-slate-700/60 bg-slate-950/40 px-4 py-3">
-          <dt class="font-mono text-teal-300/90">FENCE_AI_API_KEY</dt>
-          <dd class="mt-1 text-slate-400">Секретный ключ (обязательно).</dd>
-        </div>
-        <div class="rounded-xl border border-slate-700/60 bg-slate-950/40 px-4 py-3">
-          <dt class="font-mono text-teal-300/90">FENCE_AI_BASE_URL</dt>
-          <dd class="mt-1 text-slate-400">База API, по умолчанию https://api.openai.com/v1</dd>
-        </div>
-        <div class="rounded-xl border border-slate-700/60 bg-slate-950/40 px-4 py-3">
-          <dt class="font-mono text-teal-300/90">FENCE_AI_MODEL</dt>
-          <dd class="mt-1 text-slate-400">Модель, по умолчанию gpt-4o-mini</dd>
-        </div>
-      </dl>
+      <h3 class="text-base font-semibold text-white">Настройка</h3>
+      <p class="mt-2 text-sm text-slate-400">
+        URL, модель и API-ключ — в разделе <strong class="text-slate-300">Настройки → ИИ</strong>. Значения из
+        docker-compose (<span class="font-mono text-slate-500">FENCE_AI_*</span>) используются, пока поле в форме пустое.
+      </p>
     </section>
   </div>
 </template>
@@ -221,7 +215,13 @@ const sections: { id: SectionId; label: string }[] = [
   { id: 'setup', label: 'Настройка' },
 ]
 
-type AiStatus = { configured: boolean; model: string; base_url: string }
+type AiStatus = { configured: boolean; model: string; base_url: string; http_timeout_sec?: number }
+
+const aiFetchTimeoutMs = computed(() => {
+  const sec = status.value?.http_timeout_sec
+  if (sec && sec > 0) return (sec + 30) * 1000
+  return 630_000
+})
 
 const status = ref<AiStatus | null>(null)
 const statusBusy = ref(false)
@@ -264,7 +264,7 @@ async function runAsk() {
   try {
     const res = await apiFetch<{ answer: string; model: string }>(apiUrl('/ai/ask'), {
       method: 'POST',
-      timeout: 180_000,
+      timeout: aiFetchTimeoutMs.value,
       body: {
         question: q,
         include_proxy_logs: askIncludeProxy.value,
@@ -301,7 +301,7 @@ async function runAnalyze() {
     }
     const res = await apiFetch<{ analysis: string; model: string }>(apiUrl('/ai/analyze'), {
       method: 'POST',
-      timeout: 180_000,
+      timeout: aiFetchTimeoutMs.value,
       body: {
         include_proxy_logs: includeProxy.value,
         include_waf_logs: includeWaf.value,

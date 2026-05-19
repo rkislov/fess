@@ -181,7 +181,7 @@
               type="button"
               class="rounded-lg border border-violet-600/40 bg-violet-950/50 px-3 py-1.5 text-xs text-violet-100 hover:bg-violet-900/40 disabled:opacity-50"
               :disabled="aiBusy || !aiConfigured"
-              :title="aiConfigured ? '' : 'Задайте FENCE_AI_API_KEY на policy-api'"
+              :title="aiConfigured ? '' : 'Настройки → ИИ: укажите API key'"
               @click="runAi"
             >
               {{ aiBusy ? 'Анализ…' : detail.ai_analysis ? 'Обновить анализ' : 'Запросить анализ' }}
@@ -191,7 +191,7 @@
             v-if="detail.ai_analysis"
             class="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-700/60 bg-slate-950/80 p-4 text-sm leading-relaxed text-slate-200"
           >{{ detail.ai_analysis }}</pre>
-          <p v-else-if="!aiConfigured" class="mt-3 text-sm text-slate-500">ИИ не настроен на сервере.</p>
+          <p v-else-if="!aiConfigured" class="mt-3 text-sm text-slate-500">ИИ не настроен — укажите ключ в Настройки → ИИ.</p>
           <p v-else class="mt-3 text-sm text-slate-500">Нажмите «Запросить анализ» для оценки ложного срабатывания и рекомендаций.</p>
         </section>
 

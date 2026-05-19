@@ -15,7 +15,7 @@
         {{ s.icon }} {{ s.label }}
       </button>
       <button
-        v-if="sub === 'users' || sub === 'auth' || sub === 'siem'"
+        v-if="sub === 'users' || sub === 'auth' || sub === 'siem' || sub === 'ai'"
         type="button"
         class="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
         :disabled="busy"
@@ -136,6 +136,8 @@
       </button>
     </section>
 
+    <AiSettingsPanel v-else-if="sub === 'ai' && isAdmin" />
+
     <!-- Admin: SIEM -->
     <section v-else-if="sub === 'siem' && isAdmin" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-semibold text-white">Экспорт в SIEM</h3>
@@ -229,6 +231,7 @@ type SubId =
   | 'users'
   | 'auth'
   | 'siem'
+  | 'ai'
   | 'policies'
   | 'antivirus'
   | 'qfeed'
@@ -240,6 +243,7 @@ const adminSections = [
   { id: 'users' as const, label: 'Пользователи', icon: '👤' },
   { id: 'auth' as const, label: 'Авторизация', icon: '🔐' },
   { id: 'siem' as const, label: 'SIEM', icon: '📤' },
+  { id: 'ai' as const, label: 'ИИ', icon: '✨' },
 ]
 
 const securitySections = [
@@ -297,7 +301,7 @@ const siem = ref({
 })
 
 watch(isAdmin, (admin) => {
-  if (!admin && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem')) {
+  if (!admin && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem' || sub.value === 'ai')) {
     sub.value = 'policies'
   }
 })
@@ -388,13 +392,13 @@ async function saveSiem() {
 }
 
 watch(sub, (id) => {
-  if (isAdmin.value && (id === 'users' || id === 'auth' || id === 'siem')) {
+  if (isAdmin.value && (id === 'users' || id === 'auth' || id === 'siem' || id === 'ai')) {
     void loadAdmin()
   }
 })
 
 onMounted(() => {
-  if (isAdmin.value && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem')) {
+  if (isAdmin.value && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem' || sub.value === 'ai')) {
     void loadAdmin()
   }
 })

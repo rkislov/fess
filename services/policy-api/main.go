@@ -253,7 +253,9 @@ func main() {
 	mux.HandleFunc("/api/v1/settings/geoip/fetch", func(w http.ResponseWriter, r *http.Request) {
 		postGeoIPMMDBFetch(w, r, db, rdb)
 	})
-	mux.HandleFunc("/api/v1/settings/ai", aiSettingsHandler)
+	mux.HandleFunc("/api/v1/settings/ai", func(w http.ResponseWriter, r *http.Request) {
+		aiSettingsHandler(w, r, db)
+	})
 	mux.HandleFunc("/api/v1/ai/analyze", func(w http.ResponseWriter, r *http.Request) {
 		aiAnalyzeHandler(w, r, db)
 	})

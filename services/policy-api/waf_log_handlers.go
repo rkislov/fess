@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -472,15 +471,17 @@ func enrichUnblockContext(ctx context.Context, db *sql.DB, sourceIP, action stri
 }
 
 func wafLogEventAIReviewHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, eventID int64) {
-	key := strings.TrimSpace(os.Getenv("FENCE_AI_API_KEY"))
-	if key == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "ИИ не настроен: задайте FENCE_AI_API_KEY для policy-api",
-		})
+	cfg, err := resolveAIConfig(r.Context(), db)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !cfg.configured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": aiNotConfiguredMessage()})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), aiHTTPTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout)
 	defer cancel()
 
 	var (
@@ -488,7 +489,7 @@ func wafLogEventAIReviewHandler(w http.ResponseWriter, r *http.Request, db *sql.
 		details                                                                        json.RawMessage
 		created                                                                        time.Time
 	)
-	err := db.QueryRowContext(ctx, `
+	err = db.QueryRowContext(ctx, `
 SELECT request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''),
        action, source_ip, method, path, COALESCE(host,''), COALESCE(ai_analysis,''),
        COALESCE(details, '{}'::jsonb), created_at
@@ -504,7 +505,7 @@ FROM waf_logs WHERE id = $1`, eventID).Scan(
 		return
 	}
 	if strings.TrimSpace(existingAI) != "" {
-		writeJSON(w, http.StatusOK, map[string]any{"analysis": existingAI, "model": aiModel(), "cached": true})
+		writeJSON(w, http.StatusOK, map[string]any{"analysis": existingAI, "model": cfg.Model, "cached": true})
 		return
 	}
 
@@ -537,7 +538,7 @@ FROM waf_logs WHERE id = $1`, eventID).Scan(
 3) Рекомендация: включить правило / отключить / перевести политику или правило в режим только логирования (log) / оставить block — без автоматического применения.
 Будь конкретен, не выдумывай UUID.`
 
-	analysis, err := callChatCompletions(ctx, key, systemPrompt, userPrompt)
+	analysis, err := callChatCompletions(ctx, cfg, systemPrompt, userPrompt)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -546,7 +547,7 @@ FROM waf_logs WHERE id = $1`, eventID).Scan(
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"analysis": analysis, "model": aiModel(), "cached": false})
+	writeJSON(w, http.StatusOK, map[string]any{"analysis": analysis, "model": cfg.Model, "cached": false})
 }
 
 type ruleQuickActionRequest struct {
