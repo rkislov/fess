@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 const auth = useUiAuth()
-const { ready, init, logout, user, canUseApp } = auth
+const { ready, logout, user, canUseApp } = auth
 
 async function onLogout() {
   await logout()
@@ -127,7 +127,5 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'settings', label: 'Настройки', icon: '⚙️' },
 ]
 
-onMounted(() => {
-  void init()
-})
+// init() вызывается в plugins/auth.client.ts до монтирования панелей
 </script>

@@ -155,7 +155,7 @@ async function reload() {
     })
     if (filterRule.value) q.set('rule_id', filterRule.value)
     if (filterAction.value) q.set('action', filterAction.value)
-    const data = await $fetch<{ items: Row[]; total: number }>(apiUrl(`/waf-log-events?${q}`))
+    const data = await apiFetch<{ items: Row[]; total: number }>(apiUrl(`/waf-log-events?${q}`))
     items.value = data.items || []
     total.value = data.total ?? 0
   } catch (e: unknown) {

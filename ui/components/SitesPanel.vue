@@ -701,7 +701,7 @@ async function finalizeWizard() {
   busy.value = true
   err.value = ''
   try {
-    const siteRes = await $fetch<{ id: string }>(apiUrl('/sites'), {
+    const siteRes = await apiFetch<{ id: string }>(apiUrl('/sites'), {
       method: 'POST',
       body: {
         name: wizard.name.trim(),
@@ -745,7 +745,7 @@ async function finalizeWizard() {
 }
 
 async function loadPolicies() {
-  const data = await $fetch<{ items: { id: string; name: string }[] }>(apiUrl('/policies'))
+  const data = await apiFetch<{ items: { id: string; name: string }[] }>(apiUrl('/policies'))
   policies.value = data.items || []
 }
 
@@ -763,7 +763,7 @@ async function loadSites() {
   err.value = ''
   const prevId = selectedId.value
   try {
-    const data = await $fetch<{ items: Record<string, unknown>[] }>(apiUrl('/sites'))
+    const data = await apiFetch<{ items: Record<string, unknown>[] }>(apiUrl('/sites'))
     sites.value = (data.items || []).map(normSite)
     const still = prevId && sites.value.some((s) => s.id === prevId)
     if (still) {
@@ -783,13 +783,13 @@ async function loadSites() {
 }
 
 async function loadBackends(siteId: string) {
-  const data = await $fetch<{ items: Record<string, unknown>[] }>(apiUrl(`/sites/${siteId}/backends`))
+  const data = await apiFetch<{ items: Record<string, unknown>[] }>(apiUrl(`/sites/${siteId}/backends`))
   backends.value = (data.items || []).map(normBackend)
 }
 
 async function loadTlsMeta(siteId: string) {
   try {
-    const data = await $fetch<{ tls_enabled: boolean; tls_has_certificate: boolean }>(apiUrl(`/sites/${siteId}/tls`))
+    const data = await apiFetch<{ tls_enabled: boolean; tls_has_certificate: boolean }>(apiUrl(`/sites/${siteId}/tls`))
     tlsMeta.tls_enabled = data.tls_enabled
     tlsMeta.tls_has_certificate = data.tls_has_certificate
     tlsForm.enabled = data.tls_enabled

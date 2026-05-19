@@ -439,8 +439,8 @@ async function load() {
   err.value = ''
   try {
     const [data, st] = await Promise.all([
-      $fetch<BotResp>(apiUrl('/settings/bot-protection')),
-      $fetch<BotStatus>(apiUrl('/settings/bot-protection/status')),
+      apiFetch<BotResp>(apiUrl('/settings/bot-protection')),
+      apiFetch<BotStatus>(apiUrl('/settings/bot-protection/status')),
     ])
     challengeSecretSet.value = !!data.challenge_secret_set
     const { challenge_secret_set: _s, ...rest } = data
@@ -503,7 +503,7 @@ async function uploadList(type: 'asn' | 'cidr') {
   try {
     const fd = new FormData()
     fd.append('file', f, f.name)
-    const res = await $fetch<{ rows_ingested: number }>(apiUrl(`/settings/bot-protection/upload?type=${type}`), {
+    const res = await apiFetch<{ rows_ingested: number }>(apiUrl(`/settings/bot-protection/upload?type=${type}`), {
       method: 'POST',
       body: fd,
     })

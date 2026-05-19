@@ -160,7 +160,7 @@ async function load() {
   try {
     const offset = (page.value - 1) * pageSize.value
     const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
-    const data = await $fetch<{ items: Row[]; total: number }>(apiUrl(`/proxy-access-logs?${q.toString()}`))
+    const data = await apiFetch<{ items: Row[]; total: number }>(apiUrl(`/proxy-access-logs?${q.toString()}`))
     items.value = data.items || []
     total.value = typeof data.total === 'number' ? data.total : 0
     const pages = Math.max(1, Math.ceil(total.value / pageSize.value))

@@ -202,7 +202,7 @@ async function loadStatus() {
   errBanner.value = ''
   statusBusy.value = true
   try {
-    status.value = await $fetch<AiStatus>(apiUrl('/settings/ai'))
+    status.value = await apiFetch<AiStatus>(apiUrl('/settings/ai'))
   } catch (e: unknown) {
     errBanner.value = formatFetchError(e)
     status.value = null
@@ -216,7 +216,7 @@ async function runAnalyze() {
   analysis.value = ''
   analyzeBusy.value = true
   try {
-    const res = await $fetch<{ analysis: string; model: string }>(apiUrl('/ai/analyze'), {
+    const res = await apiFetch<{ analysis: string; model: string }>(apiUrl('/ai/analyze'), {
       method: 'POST',
       body: {
         include_proxy_logs: includeProxy.value,

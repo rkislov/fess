@@ -414,12 +414,12 @@ function flashOk(msg: string) {
 }
 
 async function loadPolicies() {
-  const data = await $fetch<{ items: typeof policies.value }>(apiUrl('/policies'))
+  const data = await apiFetch<{ items: typeof policies.value }>(apiUrl('/policies'))
   policies.value = data.items || []
 }
 
 async function loadPacks() {
-  const data = await $fetch<{ items: typeof packs.value }>(apiUrl('/owasp/packs'))
+  const data = await apiFetch<{ items: typeof packs.value }>(apiUrl('/owasp/packs'))
   packs.value = data.items || []
   const prefer = packs.value.find((p) => p.id === 'crs-bundle-v1')
   owasp.packId = prefer?.id || packs.value[0]?.id || ''
@@ -538,7 +538,7 @@ async function selectPolicy(id: string) {
   selectedId.value = id
   busy.value = true
   try {
-    const d = await $fetch<{
+    const d = await apiFetch<{
       id: string
       name: string
       mode: string
@@ -713,7 +713,7 @@ async function importOwasp() {
   busy.value = true
   err.value = ''
   try {
-    const res = await $fetch<{ policy_id: string }>(apiUrl('/owasp/import'), {
+    const res = await apiFetch<{ policy_id: string }>(apiUrl('/owasp/import'), {
       method: 'POST',
       body: {
         pack_id: owasp.packId,

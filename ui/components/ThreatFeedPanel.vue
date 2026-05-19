@@ -259,14 +259,14 @@ function onFilePicked(ev: Event) {
 }
 
 async function loadStatus() {
-  feedStatus.value = await $fetch<ThreatFeedStatus>(apiUrl('/settings/threat-feed/status'))
+  feedStatus.value = await apiFetch<ThreatFeedStatus>(apiUrl('/settings/threat-feed/status'))
 }
 
 async function load() {
   busy.value = true
   err.value = ''
   try {
-    const data = await $fetch<ThreatFeedResp>(apiUrl('/settings/threat-feed'))
+    const data = await apiFetch<ThreatFeedResp>(apiUrl('/settings/threat-feed'))
     apiKeySet.value = !!data.api_key_set
     const { api_key_set: _k, ...rest } = data
     cfg.value = { ...defaultCfg(), ...rest }
@@ -300,7 +300,7 @@ async function upload() {
   try {
     const fd = new FormData()
     fd.append('file', file, file.name)
-    const res = await $fetch<UploadResp>(apiUrl('/settings/threat-feed/upload'), {
+    const res = await apiFetch<UploadResp>(apiUrl('/settings/threat-feed/upload'), {
       method: 'POST',
       body: fd,
     })

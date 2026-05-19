@@ -141,7 +141,7 @@ async function load() {
   try {
     const offset = (page.value - 1) * pageSize.value
     const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
-    const data = await $fetch<{ items: Row[]; total: number; limit: number; offset: number }>(
+    const data = await apiFetch<{ items: Row[]; total: number; limit: number; offset: number }>(
       apiUrl(`/logs?${q.toString()}`),
     )
     items.value = data.items || []

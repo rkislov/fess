@@ -271,7 +271,7 @@ async function load() {
   busy.value = true
   err.value = ''
   try {
-    detail.value = await $fetch<Detail>(apiUrl(`/waf-log-events/${props.eventId}`))
+    detail.value = await apiFetch<Detail>(apiUrl(`/waf-log-events/${props.eventId}`))
     removeFromThreatFeed.value = !!detail.value?.unblock?.in_threat_feed
   } catch (e: unknown) {
     const fe = e as { data?: { error?: string }; message?: string }
@@ -284,7 +284,7 @@ async function load() {
 
 async function loadAiStatus() {
   try {
-    const s = await $fetch<{ configured: boolean }>(apiUrl('/settings/ai'))
+    const s = await apiFetch<{ configured: boolean }>(apiUrl('/settings/ai'))
     aiConfigured.value = !!s.configured
   } catch {
     aiConfigured.value = false
@@ -296,7 +296,7 @@ async function runAi() {
   aiBusy.value = true
   err.value = ''
   try {
-    const res = await $fetch<{ analysis: string }>(apiUrl(`/waf-log-events/${props.eventId}/ai-review`), {
+    const res = await apiFetch<{ analysis: string }>(apiUrl(`/waf-log-events/${props.eventId}/ai-review`), {
       method: 'POST',
     })
     if (detail.value) {
@@ -316,7 +316,7 @@ async function unblockIP() {
   actionMsg.value = ''
   err.value = ''
   try {
-    const res = await $fetch<{
+    const res = await apiFetch<{
       ok: boolean
       bypass_cidr: string
       removed_from_threat_feed: boolean

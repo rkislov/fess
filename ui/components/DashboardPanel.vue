@@ -1135,7 +1135,7 @@ async function load() {
   err.value = ''
   try {
     const q = new URLSearchParams({ hours: String(hours.value) })
-    const data = await $fetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
+    const data = await apiFetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
     const byCountry = dashboardByCountry(data)
     const byUserAgent = dashboardByUserAgent(data)
     summary.value = { ...data, by_country: byCountry, by_user_agent: byUserAgent }
