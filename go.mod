@@ -1,6 +1,6 @@
 module fence
 
-go 1.25.0
+go 1.23
 
 require (
 	github.com/go-ldap/ldap/v3 v3.4.13
