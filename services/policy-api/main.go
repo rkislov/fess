@@ -251,6 +251,9 @@ func main() {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/v1/settings/rate-limit", func(w http.ResponseWriter, r *http.Request) {
+		rateLimitSettingsHandler(w, r, db, rdb)
+	})
 	mux.HandleFunc("/api/v1/settings/geoip/mmdb", func(w http.ResponseWriter, r *http.Request) {
 		postGeoIPMMDBUpload(w, r, db, rdb)
 	})

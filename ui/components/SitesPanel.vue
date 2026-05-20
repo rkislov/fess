@@ -354,6 +354,19 @@
                       <label class="block"><span class="text-xs text-slate-500">Приоритет</span><input v-model.number="b.priority" type="number" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
                       <label class="flex items-center gap-2 self-end text-sm text-slate-300"><input v-model="b.enabled" type="checkbox" class="rounded border-slate-600" /> Включён</label>
                       <label class="flex items-center gap-2 self-end text-sm text-amber-200/90 sm:col-span-2"><input v-model="b.tls_skip_verify" type="checkbox" class="rounded border-slate-600" /> Не проверять TLS</label>
+                      <div class="col-span-full rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                        <p class="text-xs font-medium text-slate-400">Rate limit</p>
+                        <label class="mt-2 flex items-center gap-2 text-sm text-slate-300">
+                          <input v-model="b.rate_limit.inherit" type="checkbox" class="rounded border-slate-600" />
+                          Наследовать системный (Настройки → Rate limit)
+                        </label>
+                        <div v-if="!b.rate_limit.inherit" class="mt-2 grid gap-2 sm:grid-cols-4">
+                          <label class="flex items-center gap-2 text-sm"><input v-model="b.rate_limit.enabled" type="checkbox" class="rounded" /> Вкл</label>
+                          <label class="block text-xs text-slate-500">Запросов<input v-model.number="b.rate_limit.requests_per_window" type="number" min="1" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm" /></label>
+                          <label class="block text-xs text-slate-500">Окно (с)<input v-model.number="b.rate_limit.window_sec" type="number" min="1" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm" /></label>
+                          <label class="block text-xs text-slate-500">Scope<select v-model="b.rate_limit.scope" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"><option value="ip">ip</option><option value="ip_host">ip_host</option><option value="ip_path">ip_path</option><option value="backend">backend</option></select></label>
+                        </div>
+                      </div>
                     </fieldset>
                     <div class="mt-6">
                       <h5 class="text-xs font-medium uppercase tracking-wide text-slate-500">Пути</h5>
@@ -370,6 +383,19 @@
                             <label class="block"><span class="text-xs text-slate-500">Idle</span><input v-model.number="p.idle_timeout" type="number" min="0" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm" /></label>
                             <label class="block sm:col-span-2"><span class="text-xs text-slate-500">IP</span><select v-model="p.ip_allow_mode" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"><option value="none">Любой</option><option value="private">Приватные</option><option value="custom">CIDR</option></select></label>
                             <label v-if="p.ip_allow_mode === 'custom'" class="block sm:col-span-2 lg:col-span-4"><span class="text-xs text-slate-500">CIDR</span><textarea v-model="p.allowed_cidrs_text" rows="2" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
+                            <div class="col-span-full rounded border border-slate-800/80 bg-slate-950/40 p-2">
+                              <p class="text-[10px] font-medium uppercase text-slate-500">Rate limit пути</p>
+                              <label class="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                                <input v-model="p.rate_limit.inherit" type="checkbox" class="rounded border-slate-600" />
+                                Наследовать (бэкенд → система)
+                              </label>
+                              <div v-if="!p.rate_limit.inherit" class="mt-2 grid gap-2 sm:grid-cols-4">
+                                <label class="flex items-center gap-1 text-xs"><input v-model="p.rate_limit.enabled" type="checkbox" class="rounded" /> Вкл</label>
+                                <label class="block text-[10px] text-slate-500">RPM<input v-model.number="p.rate_limit.requests_per_window" type="number" min="1" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-xs" /></label>
+                                <label class="block text-[10px] text-slate-500">сек<input v-model.number="p.rate_limit.window_sec" type="number" min="1" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-xs" /></label>
+                                <label class="block text-[10px] text-slate-500">scope<select v-model="p.rate_limit.scope" class="mt-0.5 w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-xs"><option value="ip">ip</option><option value="ip_host">ip_host</option><option value="ip_path">ip_path</option><option value="backend">backend</option></select></label>
+                              </div>
+                            </div>
                           </div>
                           <div class="mt-2 flex gap-3"><button type="button" class="text-xs text-sky-400 hover:underline" @click="saveBackendPath(p)">Сохранить</button><button type="button" class="text-xs text-rose-400 hover:underline" @click="removeBackendPath(p)">Удалить</button></div>
                         </div>
@@ -436,6 +462,7 @@ type BackendPath = {
   idle_timeout: number
   ip_allow_mode: IPAllowMode
   allowed_cidrs_text: string
+  rate_limit: RateLimitForm
 }
 
 type Backend = {
@@ -445,6 +472,7 @@ type Backend = {
   priority: number
   enabled: boolean
   tls_skip_verify: boolean
+  rate_limit: RateLimitForm
   paths: BackendPath[]
 }
 
@@ -590,6 +618,7 @@ function normBackendPath(raw: Record<string, unknown>): BackendPath {
     idle_timeout: Number(raw.idle_timeout ?? raw.idleTimeout ?? raw.IdleTimeout ?? 0),
     ip_allow_mode: ipMode,
     allowed_cidrs_text: cidrsToText(raw.allowed_cidrs ?? raw.AllowedCIDRs),
+    rate_limit: rateLimitFromAPI(raw.rate_limit),
   }
 }
 
@@ -603,6 +632,7 @@ function normBackend(raw: Record<string, unknown>): Backend {
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
     tls_skip_verify: Boolean(raw.tls_skip_verify ?? raw.tlsSkipVerify ?? raw.TLSSkipVerify ?? false),
+    rate_limit: rateLimitFromAPI(raw.rate_limit),
     paths,
   }
 }
@@ -920,6 +950,7 @@ async function saveBackend(b: Backend) {
         priority: b.priority,
         enabled: b.enabled,
         tls_skip_verify: b.tls_skip_verify,
+        rate_limit: rateLimitToPayload(b.rate_limit),
       },
     })
     if (selected.value) await loadBackends(selected.value.id)
@@ -945,6 +976,7 @@ async function saveBackendPath(p: BackendPath) {
         timeout: p.timeout,
         idle_timeout: p.idle_timeout,
         ...pathIPPayload(p),
+        rate_limit: rateLimitToPayload(p.rate_limit),
       },
     })
     if (selected.value) await loadBackends(selected.value.id)

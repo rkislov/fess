@@ -161,9 +161,6 @@ func applyBotProtectionGate(
 	if strings.TrimSpace(clientHost) == "" {
 		clientHost = clientip.PeerHost(r)
 	}
-	host := publicHostHeader(r, ipRes)
-	path := r.URL.Path
-
 	// Challenge cookie bypass for subsequent requests.
 	if snap.Cfg.Challenge.Enabled && botprotection.ChallengeValid(r, snap.Cfg.Challenge, clientHost) {
 		if q := strings.TrimSpace(r.URL.Query().Get(botprotection.ChallengeQueryParam)); q != "" {
@@ -214,13 +211,7 @@ func applyBotProtectionGate(
 		}
 	}
 
-	// Rate limit (Redis)
-	if snap.Cfg.RateLimit.Enabled && rdb != nil {
-		allowed, rlDetail := checkBotRateLimit(r.Context(), rdb, snap.Cfg, clientHost, host, path)
-		if !allowed {
-			return botFinish(w, r, db, mr, ipRes, snap, "bot_rate_limit", rlDetail, true, nil)
-		}
-	}
+	// Rate limit is enforced globally (rate_limit_settings + backend/path overrides) before bot protection.
 
 	// Behavioral score + TLS/JA3 + timing
 	var inter time.Duration = -1

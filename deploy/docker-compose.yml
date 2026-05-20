@@ -1,14 +1,22 @@
+# Локальный/стендовый стек Fence. Конфигурация: deploy/.env (см. deploy/.env.example).
+# Compose подхватывает deploy/.env автоматически (каталог файла compose).
+# Запуск из корня репозитория:
+#   cp deploy/.env.example deploy/.env && docker compose -f deploy/docker-compose.yml up -d --build
+
+x-fence-data-env: &fence-data-env
+  POSTGRES_DSN: ${POSTGRES_DSN:-postgres://fence:fence@postgres:5432/fence?sslmode=disable}
+  REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+
 services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_USER: fence
-      POSTGRES_PASSWORD: fence
-      POSTGRES_DB: fence
+      POSTGRES_USER: ${POSTGRES_USER:-fence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fence}
+      POSTGRES_DB: ${POSTGRES_DB:-fence}
     ports:
-      - "5432:5432"
+      - "${FENCE_POSTGRES_PORT:-5432}:5432"
     volumes:
-      # Именованный том: данные переживают `docker compose down` (без `-v`) и перезапуски.
       - postgres_data:/var/lib/postgresql/data
       - ../db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
       - ../db/002_malware_settings.sql:/docker-entrypoint-initdb.d/002-malware.sql:ro
@@ -36,8 +44,9 @@ services:
       - ../db/026_auth_siem.sql:/docker-entrypoint-initdb.d/026-auth-siem.sql:ro
       - ../db/028_ai_settings.sql:/docker-entrypoint-initdb.d/028-ai-settings.sql:ro
       - ../db/029_threat_feed_file_hashes.sql:/docker-entrypoint-initdb.d/029-threat-feed-hashes.sql:ro
+      - ../db/030_rate_limit.sql:/docker-entrypoint-initdb.d/030-rate-limit.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fence -d fence"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fence} -d ${POSTGRES_DB:-fence}"]
       interval: 2s
       timeout: 5s
       retries: 15
@@ -46,7 +55,7 @@ services:
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${FENCE_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     command:
@@ -70,26 +79,26 @@ services:
       dockerfile: services/policy-api/Dockerfile
     image: fence/policy-api:local
     environment:
-      POLICY_API_LISTEN_ADDR: ":8082"
-      POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
-      REDIS_ADDR: "redis:6379"
-      FENCE_GEOIP_DATA_DIR: /var/lib/fence/geoip
-      # Порт TCP clamd для probes VERSION в UI (policy-api). 0 — не проверять (часто clamd только локально к c-icap).
-      CLAMAV_CLAMD_PORT: "0"
-      # ИИ: значения по умолчанию; переопределяются в UI «Настройки → ИИ» (таблица ai_settings).
-      FENCE_AI_API_KEY: "gpustack_2ff1005cf5899ce1_1eef56a616edc42c91b42a58fdfdd0af"
-      FENCE_AI_BASE_URL: "http://10.0.156.40/v1"
-      FENCE_AI_MODEL: "gpt-oss-20b"
-      FENCE_AI_HTTP_TIMEOUT: "10m"
-      FENCE_JWT_SECRET: "fence-local-dev-change-me-in-production"
-      FENCE_ACCESS_TOKEN_TTL: "15m"
-      FENCE_REFRESH_TOKEN_TTL: "168h"
-      POLICY_API_METRICS_ADDR: ":9092"
+      <<: *fence-data-env
+      POLICY_API_LISTEN_ADDR: ${POLICY_API_LISTEN_ADDR:-:8082}
+      FENCE_GEOIP_DATA_DIR: ${FENCE_GEOIP_DATA_DIR:-/var/lib/fence/geoip}
+      CLAMAV_CLAMD_PORT: ${CLAMAV_CLAMD_PORT:-0}
+      FENCE_AI_API_KEY: ${FENCE_AI_API_KEY:-}
+      FENCE_AI_BASE_URL: ${FENCE_AI_BASE_URL:-https://api.openai.com/v1}
+      FENCE_AI_MODEL: ${FENCE_AI_MODEL:-gpt-4o-mini}
+      FENCE_AI_HTTP_TIMEOUT: ${FENCE_AI_HTTP_TIMEOUT:-10m}
+      FENCE_JWT_SECRET: ${FENCE_JWT_SECRET:-fence-local-dev-change-me-in-production}
+      FENCE_ACCESS_TOKEN_TTL: ${FENCE_ACCESS_TOKEN_TTL:-15m}
+      FENCE_REFRESH_TOKEN_TTL: ${FENCE_REFRESH_TOKEN_TTL:-168h}
+      FENCE_AUTH_DISABLED: ${FENCE_AUTH_DISABLED:-}
+      FENCE_SKIP_DB_MIGRATE: ${FENCE_SKIP_DB_MIGRATE:-}
+      FENCE_METRICS_DB_INTERVAL: ${FENCE_METRICS_DB_INTERVAL:-}
+      POLICY_API_METRICS_ADDR: ${POLICY_API_METRICS_ADDR:-:9092}
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
     ports:
-      - "8082:8082"
-      - "9092:9092"
+      - "${FENCE_POLICY_API_PORT:-8082}:8082"
+      - "${FENCE_POLICY_API_METRICS_PORT:-9092}:9092"
     restart: unless-stopped
     healthcheck:
       test:
@@ -109,14 +118,13 @@ services:
       clamav-icap:
         condition: service_started
 
-  # ClamAV + c-icap (REQMOD для waf-gateway). Первый старт может занять несколько минут (загрузка сигнатур).
   clamav-icap:
     image: opencloudeu/clamav-icap:latest
     restart: unless-stopped
     volumes:
       - clamav_defs:/var/lib/clamav
     ports:
-      - "1344:1344"
+      - "${FENCE_CLAMAV_ICAP_PORT:-1344}:1344"
 
   waf-gateway:
     build:
@@ -124,26 +132,21 @@ services:
       dockerfile: services/waf-gateway/Dockerfile
     image: fence/waf-gateway:local
     environment:
-      # HTTP reverse proxy. На границе сети сопоставьте хост :80 → контейнер :8080 (см. README).
-      WAF_LISTEN_ADDR: ":8080"
-      # HTTPS (SNI по host_pattern сайта и PEM в БД). Хост :443 → :8443.
-      WAF_TLS_LISTEN_ADDR: ":8443"
-      UPSTREAM_URL: "http://httpbin:8080"
-      POSTGRES_DSN: "postgres://fence:fence@postgres:5432/fence?sslmode=disable"
-      REDIS_ADDR: "redis:6379"
-      GEOIP_MMDB_PATH: /var/lib/fence/geoip/GeoLite2-Country.mmdb
-      GEOIP_ASN_MMDB_PATH: /var/lib/fence/geoip/GeoLite2-ASN.mmdb
-      # За балансировщиком / Nginx: CIDR тех, кто **TCP-подключается к waf-gateway** (см. колонку «TCP пир» в журнале соединений).
-      # Не то же самое, что set_real_ip_from в Nginx. Если пир не в списке — X-Forwarded-For не доверяется (client_ip = TCP-пир).
-      # Для локального compose: обычно 172.16/12; с хоста через Docker Desktop часто 192.168.x. В проде сузьте до подсети вашего LB/Nginx.
-      WAF_TRUSTED_PROXIES: "172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,10.0.0.0/8"
-      WAF_METRICS_ADDR: ":9091"
+      <<: *fence-data-env
+      WAF_LISTEN_ADDR: ${WAF_LISTEN_ADDR:-:8080}
+      WAF_TLS_LISTEN_ADDR: ${WAF_TLS_LISTEN_ADDR:-:8443}
+      UPSTREAM_URL: ${UPSTREAM_URL:-http://httpbin:8080}
+      WAF_FAIL_MODE: ${WAF_FAIL_MODE:-open}
+      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-/var/lib/fence/geoip/GeoLite2-Country.mmdb}
+      GEOIP_ASN_MMDB_PATH: ${GEOIP_ASN_MMDB_PATH:-/var/lib/fence/geoip/GeoLite2-ASN.mmdb}
+      WAF_TRUSTED_PROXIES: ${WAF_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,10.0.0.0/8}
+      WAF_METRICS_ADDR: ${WAF_METRICS_ADDR:-:9091}
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip:ro
     ports:
-      - "8080:8080"
-      - "8443:8443"
-      - "9091:9091"
+      - "${FENCE_WAF_HTTP_PORT:-8080}:8080"
+      - "${FENCE_WAF_HTTPS_PORT:-8443}:8443"
+      - "${FENCE_WAF_METRICS_PORT:-9091}:9091"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -156,19 +159,20 @@ services:
   httpbin:
     image: mccutchen/go-httpbin:latest
     ports:
-      - "8081:8080"
+      - "${FENCE_HTTPBIN_PORT:-8081}:8080"
 
   ui:
     build:
       context: ..
       dockerfile: ui/Dockerfile
       args:
+        NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
         NUXT_PUBLIC_UI_AUTH_ENABLED: ${FENCE_UI_AUTH_ENABLED:-true}
         NUXT_PUBLIC_UI_USER: ${FENCE_UI_USER:-admin}
         NUXT_PUBLIC_UI_PASSWORD: ${FENCE_UI_PASSWORD:-fence}
     image: fence/ui:local
     ports:
-      - "5173:80"
+      - "${FENCE_UI_PORT:-5173}:80"
     restart: unless-stopped
     depends_on:
       policy-api:

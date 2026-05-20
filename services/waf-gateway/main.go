@@ -82,12 +82,14 @@ func main() {
 	tlsStore := &tlssites.Store{}
 	tfStore := newThreatFeedStore()
 	botStore := newBotProtectionStore()
+	rlStore := newRateLimitStore()
 	bypassStore := newIPBypassStore()
 	proxy := newDynamicReverseProxy(upstream, routeStore, ipRes)
 	reloadPolicySnapshot(db, store)
 	reloadMalwareConfig(db, mwStore)
 	reloadThreatFeed(db, tfStore)
 	reloadBotProtection(db, botStore)
+	reloadRateLimitSettings(db, rlStore)
 	reloadIPBypass(db, bypassStore)
 	reloadRoutingTable(db, upstream, routeStore)
 	reloadTLSTable(db, tlsStore)
@@ -95,6 +97,7 @@ func main() {
 	go subscribeMalwareUpdates(db, rdb, mwStore)
 	go subscribeThreatFeedUpdates(db, rdb, tfStore)
 	go subscribeBotProtectionUpdates(db, rdb, botStore)
+	go subscribeRateLimitUpdates(db, rdb, rlStore)
 	go subscribeIPBypassUpdates(db, rdb, bypassStore)
 	go subscribeGeoIPUpdates(rdb, initGeoPath)
 	go subscribeGeoASNUpdates(rdb, initASNPath)
@@ -117,6 +120,10 @@ func main() {
 		var gateTF threatFeedGateResult
 		var gateBot botProtectionGateResult
 		if !ipBypassed {
+			gateRL := applyRateLimitGate(w, r, db, mr, ipRes, rlStore.Global(), rdb)
+			if gateRL.Responded {
+				return
+			}
 			gateTF = applyThreatFeedGate(w, r, db, mr, ipRes, tfStore)
 			if gateTF.Responded {
 				return

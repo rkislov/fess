@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 
+	"fence/pkg/ratelimit"
+
 	"github.com/redis/go-redis/v9"
 )
 
-// ClearBotRateLimitKeys removes bot protection rate-limit state for a client IP.
+// ClearBotRateLimitKeys removes bot protection and system rate-limit state for a client IP.
 func ClearBotRateLimitKeys(ctx context.Context, rdb *redis.Client, clientIP string) {
 	if rdb == nil {
 		return
@@ -24,4 +26,5 @@ func ClearBotRateLimitKeys(ctx context.Context, rdb *redis.Client, clientIP stri
 			_ = rdb.Del(ctx, iter.Val()).Err()
 		}
 	}
+	ratelimit.ClearKeysForIP(ctx, rdb, clientIP)
 }

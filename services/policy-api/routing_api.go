@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
+	"fence/pkg/ratelimit"
 	"fence/pkg/routing"
 )
 
@@ -33,11 +34,12 @@ type siteUpdateRequest struct {
 }
 
 type backendCreateRequest struct {
-	Name          string `json:"name"`
-	BaseURL       string `json:"base_url"`
-	Priority      int    `json:"priority"`
-	Enabled       *bool  `json:"enabled"`
-	TLSSkipVerify *bool  `json:"tls_skip_verify"`
+	Name          string                      `json:"name"`
+	BaseURL       string                      `json:"base_url"`
+	Priority      int                         `json:"priority"`
+	Enabled       *bool                       `json:"enabled"`
+	TLSSkipVerify *bool                       `json:"tls_skip_verify"`
+	RateLimit     *ratelimit.OverridePayload  `json:"rate_limit"`
 }
 
 type backendListItem struct {
@@ -47,6 +49,7 @@ type backendListItem struct {
 	Priority      int              `json:"priority"`
 	Enabled       bool             `json:"enabled"`
 	TLSSkipVerify bool             `json:"tls_skip_verify"`
+	RateLimit     any              `json:"rate_limit"`
 	Paths         []backendPathRow `json:"paths"`
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
@@ -386,7 +389,7 @@ func deleteSite(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.C
 
 func listBackends(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
 	rows, err := db.QueryContext(r.Context(), `
-SELECT id::text, name, base_url, priority, enabled, tls_skip_verify, created_at, updated_at
+SELECT id::text, name, base_url, priority, enabled, tls_skip_verify, rate_limit_override, created_at, updated_at
 FROM backends
 WHERE site_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, siteID)
@@ -398,10 +401,17 @@ ORDER BY priority ASC, created_at ASC`, siteID)
 	var items []backendListItem
 	for rows.Next() {
 		var it backendListItem
-		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		var rlRaw []byte
+		if err := rows.Scan(&it.ID, &it.Name, &it.BaseURL, &it.Priority, &it.Enabled, &it.TLSSkipVerify, &rlRaw, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		rl, rerr := ratelimit.ParseOverrideJSON(rlRaw)
+		if rerr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": rerr.Error()})
+			return
+		}
+		it.RateLimit, _ = rateLimitOverrideToJSON(rl)
 		paths, perr := loadPathsForBackend(r.Context(), db, it.ID)
 		if perr != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": perr.Error()})
@@ -474,9 +484,20 @@ func updateBackend(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redi
 	if payload.TLSSkipVerify != nil {
 		tlsSkip = *payload.TLSSkipVerify
 	}
+	rlOverride, rlErr := rateLimitOverrideFromPayload(payload.RateLimit)
+	if rlErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rlErr.Error()})
+		return
+	}
+	rlArg, rlArgErr := rateLimitOverrideDBArg(rlOverride)
+	if rlArgErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": rlArgErr.Error()})
+		return
+	}
 	res, err := db.ExecContext(r.Context(), `
-UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip)
+UPDATE backends SET name=$2, base_url=$3, priority=$4, enabled=$5, tls_skip_verify=$6,
+  rate_limit_override=$7::jsonb, updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.BaseURL), payload.Priority, en, tlsSkip, rlArg)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -89,8 +89,11 @@
               </label>
             </template>
 
-            <!-- rate_limit -->
+            <!-- rate_limit (legacy UI — настройка перенесена в «Rate limit» и «Сайты») -->
             <template v-else-if="tile.id === 'rate_limit'">
+              <p class="mb-3 text-xs text-slate-500">
+                Лимит запросов задаётся в <strong class="text-slate-300">Настройки → Rate limit</strong> (система) и при необходимости переопределяется на upstream/пути в <strong class="text-slate-300">Сайты</strong>. Параметры ниже в конфиге ботов больше не применяются на шлюзе.
+              </p>
               <label class="flex items-center gap-2 text-sm text-slate-300">
                 <input v-model="cfg.rate_limit.enabled" type="checkbox" class="rounded border-slate-600" />
                 Включить лимит (Redis)

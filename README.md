@@ -17,6 +17,8 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
 - `docs/openapi.yaml` - REST API contract
 - `docs/blueprint.md` - architecture and rollout plan
+- `docs/admin-guide.md` - **руководство администратора** (развёртывание, UI, `.env`)
+- `deploy/.env.example` - шаблон переменных окружения для всего стека
 - `deploy/docker-compose.yml` - local stack for development
 
 ## Core Runtime Pattern
@@ -39,8 +41,13 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 ## Quick Start (Docker)
 
 ```bash
+cp deploy/.env.example deploy/.env
+# Отредактируйте deploy/.env (пароли, FENCE_JWT_SECRET, при необходимости ИИ)
+
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
+
+Полное описание параметров и эксплуатации: **[docs/admin-guide.md](docs/admin-guide.md)**.
 
 ### Database migrations (automatic)
 
@@ -214,7 +221,9 @@ docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Do
 
 UI uses Nginx proxy and forwards `/api/*` to `policy-api`.
 
-**UI sign-in (demo):** the static Nuxt app shows a login screen that only protects the browser session (credentials are checked in the client bundle; they are **not** the same as Postgres or `policy-api` auth, which is not implemented yet). Defaults: user `admin`, password `fence`. Docker Compose passes build args from `FENCE_UI_USER`, `FENCE_UI_PASSWORD`, and `FENCE_UI_AUTH_ENABLED` (set the last to `false` to hide the login screen, e.g. behind your own SSO). For production, add real auth (API + cookies or reverse-proxy basic auth) and do not rely on client-only checks alone.
+**Конфигурация:** все переменные окружения для compose — в **`deploy/.env`** (шаблон **`deploy/.env.example`**). Секреты не коммитьте; файл `deploy/.env` в `.gitignore`.
+
+**UI sign-in (demo):** the static Nuxt app shows a login screen that only protects the browser session (credentials are checked in the client bundle). Defaults: `FENCE_UI_USER` / `FENCE_UI_PASSWORD` in `.env` (default `admin` / `fence`). **API auth:** JWT via `POST /api/v1/auth/login` — см. admin guide (`FENCE_JWT_SECRET`, пользователи в UI). Set `FENCE_UI_AUTH_ENABLED=false` to hide the demo login behind SSO.
 
 ## Next Engineering Steps
 
