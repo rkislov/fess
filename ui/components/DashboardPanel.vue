@@ -69,18 +69,26 @@
           (все источники)
         </p>
       </div>
-      <div class="rounded-2xl border border-violet-600/25 bg-slate-900/60 p-5">
+      <motion.div class="rounded-2xl border border-orange-600/25 bg-slate-900/60 p-5">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <h3 class="text-sm font-semibold text-white">Сторонний сканер</h3>
-            <p class="mt-0.5 text-xs text-slate-500">HTTP-сканер (THOR Lite и др.) — проверенные файлы за период</p>
+            <h3 class="text-sm font-semibold text-white">IOC (ThreatFox)</h3>
+            <p class="mt-0.5 text-xs text-slate-500">Срабатывания блоклиста IP за период</p>
           </div>
-          <span class="text-lg" aria-hidden="true">🔬</span>
+          <span
+            class="shrink-0 rounded-md border border-orange-600/50 bg-orange-950/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-200"
+          >
+            IOC
+          </span>
         </div>
-        <p class="mt-4 font-mono text-3xl font-semibold tabular-nums text-violet-300">
-          {{ fmtCount(malwareScans.external_checked) }}
+        <p class="mt-4 font-mono text-3xl font-semibold tabular-nums text-orange-300">
+          {{ fmtCount(iocHits.block) }}
         </p>
-      </div>
+        <p v-if="iocHits.log > 0" class="mt-1 text-xs text-slate-500">
+          Только в журнал:
+          <span class="font-mono text-orange-200/80">{{ fmtCount(iocHits.log) }}</span>
+        </p>
+      </motion.div>
     </section>
 
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-inner">
@@ -238,10 +246,16 @@
             @click="openActionHits(a)"
             @keydown.enter="openActionHits(a)"
           >
-            <span class="min-w-0 flex-1 font-medium text-slate-200" :title="a.action">
-              {{ labelWafAction(a.action) }}
+            <span class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span class="font-medium text-slate-200" :title="a.action">{{ labelWafAction(a.action) }}</span>
+              <span
+                v-if="isIocAction(a.action)"
+                class="shrink-0 rounded border border-orange-600/50 bg-orange-950/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-200"
+              >
+                IOC
+              </span>
             </span>
-            <span class="font-mono text-[10px] text-slate-500" :title="a.action">{{ a.action }}</span>
+            <span class="font-mono text-[10px] text-slate-500 sm:order-last" :title="a.action">{{ a.action }}</span>
             <span class="font-mono text-slate-400">{{ a.count }}</span>
           </li>
         </ul>
@@ -277,7 +291,15 @@
               </span>
               <span class="mt-0.5 block truncate font-mono text-[10px] text-slate-500" :title="r.rule_id">{{ r.rule_id }}</span>
             </span>
-            <span class="text-teal-300/90">{{ labelWafAction(r.action) }}</span>
+            <span class="flex items-center gap-2">
+              <span class="text-teal-300/90">{{ labelWafAction(r.action) }}</span>
+              <span
+                v-if="isIocAction(r.action)"
+                class="shrink-0 rounded border border-orange-600/50 bg-orange-950/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-200"
+              >
+                IOC
+              </span>
+            </span>
             <span class="font-mono text-slate-400">{{ r.count }}</span>
           </li>
         </ul>
@@ -460,6 +482,20 @@ const malwareScans = computed((): MalwareScanStats => {
     blocked: Number(m?.blocked) || 0,
   }
 })
+
+function outcomeCount(key: string): number {
+  const row = summary.value?.by_outcome?.find((r) => r.key === key)
+  return Number(row?.count) || 0
+}
+
+const iocHits = computed(() => ({
+  block: outcomeCount('threat_feed_block'),
+  log: outcomeCount('threat_feed_log'),
+}))
+
+function isIocAction(action: string) {
+  return action === 'threat_feed_block' || action === 'threat_feed_log'
+}
 
 function fmtCount(n: number) {
   return new Intl.NumberFormat('ru-RU').format(n)
@@ -676,8 +712,8 @@ function labelWafAction(a: string) {
     replace: 'Замена',
     malware_block: 'Блок антивируса',
     waf_block: 'Блок WAF',
-    threat_feed_block: 'Threat feed',
-    threat_feed_log: 'Threat feed (лог)',
+    threat_feed_block: 'IOC',
+    threat_feed_log: 'IOC (лог)',
     bot_rate_limit: 'Rate limit бота',
     bot_score_block: 'Скоринг бота',
     bot_score_log: 'Скоринг бота (лог)',
@@ -902,8 +938,8 @@ function labelOutcome(o: string) {
     waf_block: 'Блок WAF',
     redirect: 'Редирект',
     malware_block: 'Антивирус',
-    threat_feed_block: 'Threat feed',
-    threat_feed_log: 'Threat feed (лог)',
+    threat_feed_block: 'IOC',
+    threat_feed_log: 'IOC (лог)',
     bot_rate_limit: 'Rate limit бота',
     bot_score_block: 'Скоринг бота',
     bot_score_log: 'Скоринг бота (лог)',

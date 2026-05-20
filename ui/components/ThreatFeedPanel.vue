@@ -1,9 +1,9 @@
 <template>
-  <motion.div class="space-y-6" :initial="{ opacity: 0 }" :animate="{ opacity: 1 }">
+  <motion.div class="space-y-5" :initial="{ opacity: 0 }" :animate="{ opacity: 1 }">
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <motion.div class="flex flex-wrap gap-2" :initial="{ opacity: 0 }" :animate="{ opacity: 1 }">
+    <div class="flex flex-wrap gap-2">
       <button
         type="button"
         class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
@@ -14,132 +14,130 @@
       </button>
       <button
         type="button"
-        class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+        class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
         :disabled="busy"
         @click="save"
       >
         Сохранить настройки
       </button>
-    </motion.div>
+    </div>
 
-    <motion.section
-      class="rounded-2xl border border-orange-900/40 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm"
-      :initial="{ opacity: 0, y: 8 }"
-      :animate="{ opacity: 1, y: 0 }"
-    >
-      <h2 class="text-lg font-semibold text-white">ThreatFox (abuse.ch)</h2>
-      <p class="mt-1 text-sm text-slate-400">
-        Источник IOC: полный CSV-экспорт (~6 мес.) и инкремент через
-        <a href="https://threatfox.abuse.ch/api/" target="_blank" rel="noopener" class="text-teal-400 hover:underline">Community API</a>.
-        Auth-Key — на
+    <!-- ThreatFox -->
+    <section class="rounded-2xl border border-orange-900/35 bg-slate-900/50 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-white">ThreatFox (abuse.ch)</h2>
+      <p class="mt-1.5 text-sm leading-relaxed text-slate-400">
+        Синхронизируются IP/CIDR и хэши файлов (<span class="font-mono text-slate-500">md5_hash</span>,
+        <span class="font-mono text-slate-500">sha256_hash</span>). Хэши проверяются в цепочке антивируса до ICAP/HTTP-сканера.
+        Auth-Key —
         <a href="https://auth.abuse.ch/" target="_blank" rel="noopener" class="text-teal-400 hover:underline">auth.abuse.ch</a>.
-        Авто-синхронизация API — <strong class="text-slate-300">2 раза в сутки</strong> (добавляет новые IP).
-        При пустом блоклисте после включения выполняется полная загрузка автоматически.
-      </p>
-      <p class="mt-2 text-xs text-slate-500">
-        В блоклист попадают только IP/CIDR (типы <span class="font-mono">ip</span>, <span class="font-mono">ip:port</span>).
-        Ложные срабатывания — в разделе <strong class="text-slate-400">Настройки → Исключения</strong> или из карточки события WAF.
+        Авто-синхронизация — <strong class="font-normal text-slate-300">2 раза в сутки</strong>.
       </p>
 
-      <div class="mt-4 flex flex-wrap gap-2">
-        <label class="flex items-center gap-2 text-sm text-slate-300">
-          <input v-model="useThreatFox" type="checkbox" class="rounded border-slate-600" @change="onProviderChange" />
-          Использовать ThreatFox
-        </label>
-      </div>
+      <label class="mt-4 flex items-center gap-2 text-sm text-slate-300">
+        <input v-model="useThreatFox" type="checkbox" class="rounded border-slate-600" @change="onProviderChange" />
+        Использовать ThreatFox
+      </label>
 
-      <div v-if="useThreatFox" class="mt-4 space-y-4">
+      <div v-if="useThreatFox" class="mt-4 space-y-4 border-t border-white/5 pt-4">
         <label class="block text-xs text-slate-500">
           Auth-Key (токен)
           <input
             v-model="cfg.api_key"
             type="password"
             autocomplete="new-password"
-            :placeholder="apiKeySet ? 'Оставьте пустым, чтобы не менять' : 'Вставьте Auth-Key с auth.abuse.ch'"
-            class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm"
+            :placeholder="apiKeySet ? 'Оставьте пустым, чтобы не менять' : 'Вставьте Auth-Key'"
+            class="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm"
           />
         </label>
-        <label class="block text-xs text-slate-500">
-          Таймаут HTTP, сек (полный экспорт может занять несколько минут)
+        <label class="block max-w-xs text-xs text-slate-500">
+          Таймаут HTTP, сек
           <input
             v-model.number="cfg.http_timeout_sec"
             type="number"
             min="60"
             max="3600"
-            class="mt-1 w-full max-w-xs rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            class="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
           />
         </label>
-        <div class="flex flex-wrap gap-2">
+
+        <motion.div class="flex flex-wrap gap-2" :initial="{ opacity: 0 }" :animate="{ opacity: 1 }">
           <button
             type="button"
             class="rounded-lg bg-orange-700 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
             :disabled="busy || (!apiKeySet && !cfg.api_key)"
             @click="fullThreatFox"
           >
-            Полное обновление (замена списка)
+            Полное обновление
           </button>
           <button
             type="button"
-            class="rounded-lg border border-teal-700 bg-slate-900 px-4 py-2 text-sm text-teal-100 hover:bg-slate-800 disabled:opacity-50"
+            class="rounded-lg border border-teal-700/80 bg-slate-950 px-4 py-2 text-sm text-teal-100 hover:bg-slate-900 disabled:opacity-50"
             :disabled="busy || (!apiKeySet && !cfg.api_key)"
             @click="syncIncremental"
           >
-            Синхронизировать сейчас (API, 1 день)
+            Синхронизировать сейчас
           </button>
-        </div>
-        <p v-if="feedStatus?.threatfox_ready" class="text-xs text-emerald-400/90">Auth-Key задан · провайдер threatfox</p>
-      </div>
-    </motion.section>
+        </motion.div>
 
-    <motion.section
-      v-if="feedStatus"
-      class="rounded-2xl border border-white/10 bg-slate-900/50 p-6"
-      :initial="{ opacity: 0 }"
-      :animate="{ opacity: 1 }"
-    >
-      <div class="grid gap-3 text-sm sm:grid-cols-2">
-        <motion.div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
-          <span class="text-slate-500">Индикаторов в БД</span>
-          <span class="ml-2 font-mono text-teal-200/90">{{ feedStatus.indicator_count }}</span>
-        </motion.div>
-        <motion.div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
-          <span class="text-slate-500">Строк в последней синхронизации</span>
-          <span class="ml-2 font-mono text-slate-300">{{ feedStatus.rows_last_ingested }}</span>
-        </motion.div>
-        <motion.div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
-          <span class="text-slate-500">Авто-синхронизаций сегодня (UTC)</span>
-          <span class="ml-2 font-mono text-slate-300">{{ feedStatus.auto_syncs_today ?? 0 }} / {{ feedStatus.auto_sync_limit ?? 2 }}</span>
-        </motion.div>
-        <motion.div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3">
-          <span class="text-slate-500">Следующая авто-синхронизация</span>
-          <span class="ml-2 font-mono text-xs text-slate-300">{{ fmtTs(feedStatus.next_auto_sync_at) }}</span>
-        </motion.div>
-        <motion.div class="rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3 sm:col-span-2">
-          <span class="text-slate-500">Последний успех</span>
-          <span class="ml-2 font-mono text-xs text-slate-300">{{ fmtTs(feedStatus.last_success_at) }}</span>
-        </motion.div>
         <p
-          v-if="feedStatus.last_error"
-          class="sm:col-span-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-2 text-xs text-amber-100"
+          v-if="feedStatus?.threatfox_ready"
+          class="inline-flex items-center gap-1.5 rounded-full border border-emerald-800/60 bg-emerald-950/40 px-2.5 py-1 text-xs text-emerald-300/95"
         >
-          {{ feedStatus.last_error }}
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+          Auth-Key задан
         </p>
       </div>
-    </motion.section>
+    </section>
 
-    <motion.section
-      class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm"
-      :initial="{ opacity: 0, y: 8 }"
-      :animate="{ opacity: 1, y: 0 }"
-    >
-      <h2 class="text-lg font-semibold text-white">Шлюз WAF</h2>
-      <p class="mt-1 text-sm text-slate-400">
-        Проверка клиентского IP до чтения тела запроса. Исключения (обход блоклиста) — глобальные IP/CIDR в «Исключения».
+    <!-- Status -->
+    <section v-if="feedStatus" class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
+      <h3 class="text-sm font-semibold text-slate-200">Состояние блоклиста</h3>
+      <dl class="mt-4 grid gap-3 sm:grid-cols-2">
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <dt class="text-xs text-slate-500">IP/CIDR в БД</dt>
+          <dd class="mt-1 font-mono text-xl tabular-nums text-teal-200">{{ feedStatus.indicator_count }}</dd>
+        </motion.div>
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <dt class="text-xs text-slate-500">Хэшей файлов в БД</dt>
+          <dd class="mt-1 font-mono text-xl tabular-nums text-orange-200">{{ feedStatus.file_hash_count ?? 0 }}</dd>
+        </motion.div>
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <dt class="text-xs text-slate-500">Строк в последней синхронизации</dt>
+          <dd class="mt-1 font-mono text-xl tabular-nums text-slate-200">{{ feedStatus.rows_last_ingested }}</dd>
+        </motion.div>
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <dt class="text-xs text-slate-500">Авто-синхронизаций сегодня (UTC)</dt>
+          <dd class="mt-1 font-mono text-xl tabular-nums text-slate-200">
+            {{ feedStatus.auto_syncs_today ?? 0 }} / {{ feedStatus.auto_sync_limit ?? 2 }}
+          </dd>
+        </motion.div>
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <dt class="text-xs text-slate-500">Следующая авто-синхронизация</dt>
+          <dd class="mt-1 text-sm leading-snug text-slate-300">{{ fmtTs(feedStatus.next_auto_sync_at) }}</dd>
+        </motion.div>
+        <motion.div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 sm:col-span-2">
+          <dt class="text-xs text-slate-500">Последний успех</dt>
+          <dd class="mt-1 text-sm text-slate-300">{{ fmtTs(feedStatus.last_success_at) }}</dd>
+        </motion.div>
+      </dl>
+      <p
+        v-if="feedStatus.last_error"
+        class="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"
+      >
+        {{ feedStatus.last_error }}
       </p>
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <label class="flex items-center gap-2 text-sm text-slate-300 sm:col-span-2">
+    </section>
+
+    <!-- Gateway -->
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-white">Шлюз WAF</h2>
+      <p class="mt-1 text-sm text-slate-400">
+        Проверка IP до чтения тела. Обход — <strong class="font-normal text-slate-300">Настройки → Исключения</strong>.
+      </p>
+      <motion.div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <label class="flex items-center gap-2 text-sm text-slate-300">
           <input v-model="cfg.enabled" type="checkbox" class="rounded border-slate-600" />
-          Включить блоклист на шлюзе
+          Включить блоклист
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-300">
           <input v-model="cfg.block" type="checkbox" class="rounded border-slate-600" />
@@ -147,28 +145,23 @@
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-300">
           <input v-model="cfg.log_hits" type="checkbox" class="rounded border-slate-600" />
-          Писать попадания в WAF-журнал
+          Журнал WAF
         </label>
-      </div>
-    </motion.section>
+      </motion.div>
+    </section>
 
-    <motion.section
-      class="rounded-2xl border border-white/10 bg-slate-900/50 p-6"
-      :initial="{ opacity: 0 }"
-      :animate="{ opacity: 1 }"
-    >
-      <h2 class="text-lg font-semibold text-white">Ручная загрузка .txt</h2>
-      <p class="mt-1 text-sm text-slate-400">
-        Один IPv4, IPv6 или CIDR на строку. Список в БД <strong class="text-slate-300">полностью заменяется</strong>.
-      </p>
-      <motion.div class="mt-6 flex flex-wrap items-end gap-4">
-        <label class="block text-sm text-slate-400">
+    <!-- Manual upload -->
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-white">Ручная загрузка .txt</h2>
+      <p class="mt-1 text-sm text-slate-400">Один IP или CIDR на строку. Список в БД полностью заменяется.</p>
+      <motion.div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label class="block min-w-0 flex-1 text-sm text-slate-400">
           Файл
           <input
             ref="fileInput"
             type="file"
             accept=".txt,text/plain"
-            class="mt-2 block max-w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-800 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-teal-700"
+            class="mt-2 block w-full max-w-md text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-800 file:px-4 file:py-2 file:text-sm file:text-white hover:file:bg-teal-700"
             :disabled="busy"
             @change="onFilePicked"
           />
@@ -179,29 +172,27 @@
           :disabled="busy || !pickedFile"
           @click="upload"
         >
-          Загрузить и применить
+          Загрузить
         </button>
-        <p v-if="pickedFile" class="text-xs text-slate-500">{{ pickedFile.name }} ({{ fmtSize(pickedFile.size) }})</p>
       </motion.div>
-    </motion.section>
+      <p v-if="pickedFile" class="mt-2 text-xs text-slate-500">{{ pickedFile.name }} ({{ fmtSize(pickedFile.size) }})</p>
+    </section>
 
-    <details class="rounded-2xl border border-white/10 bg-slate-900/30">
-      <summary class="cursor-pointer px-6 py-4 text-sm font-medium text-slate-300 hover:text-white">
+    <details class="rounded-2xl border border-white/10 bg-slate-900/40">
+      <summary class="cursor-pointer px-5 py-3.5 text-sm font-medium text-slate-300 hover:text-white">
         Синхронизация по URL (Q-Feeds и др.)
       </summary>
-      <div class="border-t border-white/5 px-6 pb-6 pt-2">
-        <p class="pb-3 text-xs text-slate-500">
-          Альтернатива ThreatFox. Авто-загрузка — не чаще 2 раз в сутки. Отключите ThreatFox выше, чтобы использовать URL.
-        </p>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <input
-            v-model="cfg.feed_url"
-            placeholder="https://api.qfeeds.com/api.php?feed_type=malware_ip&api_token=…"
-            class="sm:col-span-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono"
-            :disabled="useThreatFox"
-          />
-          <label class="text-sm text-slate-400">
-            Интервал авто-синхронизации (сек, мин. 43200)
+      <div class="space-y-4 border-t border-white/5 px-5 pb-5 pt-3">
+        <p class="text-xs text-slate-500">Отключите ThreatFox выше. Авто — не чаще 2 раз в сутки.</p>
+        <input
+          v-model="cfg.feed_url"
+          placeholder="https://api.qfeeds.com/api.php?…"
+          class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm"
+          :disabled="useThreatFox"
+        />
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="text-xs text-slate-500">
+            Интервал авто (сек, мин. 43200)
             <input
               v-model.number="cfg.poll_interval_sec"
               type="number"
@@ -210,9 +201,9 @@
               class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             />
           </label>
-          <label class="text-sm text-slate-400 sm:col-span-2">
+          <label class="text-xs text-slate-500">
             Формат
-            <select v-model="cfg.format" class="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200">
+            <select v-model="cfg.format" class="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-200">
               <option value="auto">auto</option>
               <option value="plain">plain</option>
               <option value="csv">csv</option>
@@ -222,11 +213,11 @@
         </div>
         <button
           type="button"
-          class="mt-4 rounded-lg border border-teal-700 bg-slate-900 px-4 py-2 text-sm text-teal-100 hover:bg-slate-800"
+          class="rounded-lg border border-teal-700/80 px-4 py-2 text-sm text-teal-100 hover:bg-slate-900 disabled:opacity-50"
           :disabled="busy || useThreatFox"
           @click="syncUrl"
         >
-          Синхронизировать URL вручную
+          Синхронизировать URL
         </button>
       </div>
     </details>
@@ -266,6 +257,7 @@ type ThreatFeedStatus = {
   last_error?: string
   rows_last_ingested: number
   indicator_count: number
+  file_hash_count?: number
   auto_syncs_today?: number
   auto_sync_limit?: number
   next_auto_sync_at?: string
@@ -421,7 +413,7 @@ async function syncIncremental() {
     await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await apiFetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
     await load()
-    flashOk('Инкрементальная синхронизация ThreatFox выполнена')
+    flashOk('Синхронизация ThreatFox выполнена')
   } catch (e) {
     flashErr(e)
     await loadStatus().catch(() => {})
@@ -437,7 +429,7 @@ async function fullThreatFox() {
     await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await apiFetch(apiUrl('/settings/threat-feed/threatfox/full'), { method: 'POST' })
     await load()
-    flashOk('Полное обновление ThreatFox выполнено')
+    flashOk('Полное обновление выполнено')
   } catch (e) {
     flashErr(e)
     await loadStatus().catch(() => {})

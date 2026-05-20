@@ -153,6 +153,25 @@ func main() {
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 
+		if len(body) > 0 {
+			tfSnap := tfStore.Current()
+			if hash, matched, shouldBlock := tfSnap.MatchFileHash(body); matched {
+				v := malware.Verdict{
+					Clean:  false,
+					Source: "threatfox_hash",
+					Detail: "ThreatFox file hash IOC: " + hash,
+				}
+				writeMalwareScanLog(r.Context(), db, r, v, int64(len(body)), ipRes)
+				if shouldBlock {
+					writeThreatFeedLog(r.Context(), db, r, true, ipRes)
+					writeProxyAccessLog(r.Context(), db, r, mr, "threat_feed_block", ipRes)
+					http.Error(w, "request blocked: file hash in threat intelligence blocklist", http.StatusForbidden)
+					return
+				}
+				writeThreatFeedLog(r.Context(), db, r, false, ipRes)
+			}
+		}
+
 		if mcfg.ShouldScanHTTPRequest(r.Method, r.Header.Get("Content-Type"), int64(len(body))) {
 			v := malware.Scan(r.Context(), mcfg, r.Method, r.URL.RequestURI(), hostHeader(r), r.Header.Get("Content-Type"), body)
 			writeMalwareScanLog(r.Context(), db, r, v, int64(len(body)), ipRes)

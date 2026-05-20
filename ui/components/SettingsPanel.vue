@@ -249,7 +249,7 @@ const adminSections = [
 const securitySections = [
   { id: 'policies' as const, label: 'Политики WAF', icon: '📋' },
   { id: 'antivirus' as const, label: 'Антивирус', icon: '🦠' },
-  { id: 'qfeed' as const, label: 'Q-feed', icon: '📡' },
+  { id: 'qfeed' as const, label: 'IOC / ThreatFox', icon: '📡' },
   { id: 'bots' as const, label: 'Боты', icon: '🤖' },
   { id: 'logging' as const, label: 'Журналы', icon: '📝' },
   { id: 'exceptions' as const, label: 'Исключения', icon: '🛡️' },

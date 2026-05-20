@@ -48,17 +48,13 @@ func syncThreatFoxFull(ctx context.Context, db *sql.DB, cfg threatfeed.Config) e
 		recordThreatFeedFail(ctx, db, err.Error())
 		return err
 	}
-	ips, err := threatfeed.IPsFromThreatFoxCSV(body)
+	parsed, err := threatfeed.ParseThreatFoxCSV(body)
 	if err != nil {
 		recordThreatFeedFail(ctx, db, err.Error())
 		return err
 	}
-	n, err := replaceThreatFeedIndicators(ctx, db, ips, now)
-	if err != nil {
-		return err
-	}
-	_ = n
-	return nil
+	_, err = replaceThreatFoxData(ctx, db, parsed, now)
+	return err
 }
 
 func syncThreatFoxIncremental(ctx context.Context, db *sql.DB, cfg threatfeed.Config) error {
@@ -74,15 +70,15 @@ func syncThreatFoxIncremental(ctx context.Context, db *sql.DB, cfg threatfeed.Co
 		recordThreatFeedFail(ctx, db, err.Error())
 		return err
 	}
-	ips, err := threatfeed.IPsFromThreatFoxAPI(body)
+	parsed, err := threatfeed.ParseThreatFoxAPI(body)
 	if err != nil {
-		if strings.Contains(err.Error(), "no IP/CIDR") {
+		if strings.Contains(err.Error(), "no IP/CIDR or file hash") {
 			return recordThreatFeedSuccessNoRows(ctx, db, now)
 		}
 		recordThreatFeedFail(ctx, db, err.Error())
 		return err
 	}
-	_, err = mergeThreatFeedIndicators(ctx, db, ips, now)
+	_, err = mergeThreatFoxData(ctx, db, parsed, now)
 	return err
 }
 
@@ -207,6 +203,53 @@ func replaceThreatFeedIndicators(ctx context.Context, db *sql.DB, inds []string,
 	return len(inds), nil
 }
 
+func replaceThreatFoxData(ctx context.Context, db *sql.DB, p threatfeed.ThreatFoxParsed, now time.Time) (int, error) {
+	if p.Total() == 0 {
+		detail := "no valid IP/CIDR or file hash indicators"
+		recordThreatFeedFail(ctx, db, detail)
+		return 0, fmt.Errorf("%s", detail)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		recordThreatFeedFail(ctx, db, err.Error())
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM threat_feed_indicators`); err != nil {
+		recordThreatFeedFail(ctx, db, err.Error())
+		return 0, err
+	}
+	for _, s := range p.IPs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO threat_feed_indicators(indicator) VALUES ($1)`, s); err != nil {
+			recordThreatFeedFail(ctx, db, err.Error())
+			return 0, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM threat_feed_file_hashes`); err != nil {
+		recordThreatFeedFail(ctx, db, err.Error())
+		return 0, err
+	}
+	for _, h := range p.Hashes {
+		alg := hashAlgForHex(h)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO threat_feed_file_hashes(hash, hash_alg) VALUES ($1, $2)`, h, alg); err != nil {
+			recordThreatFeedFail(ctx, db, err.Error())
+			return 0, err
+		}
+	}
+	if err := finishThreatFeedSyncTx(ctx, tx, p.Total(), now); err != nil {
+		return 0, err
+	}
+	return p.Total(), nil
+}
+
+func hashAlgForHex(h string) string {
+	if len(h) == 32 {
+		return "md5"
+	}
+	return "sha256"
+}
+
 func readZipEntryCSV(f *zip.File) ([]byte, error) {
 	rc, err := f.Open()
 	if err != nil {
@@ -232,6 +275,48 @@ func mergeThreatFeedIndicators(ctx context.Context, db *sql.DB, inds []string, n
 		res, err := tx.ExecContext(ctx, `
 INSERT INTO threat_feed_indicators(indicator) VALUES ($1)
 ON CONFLICT (indicator) DO NOTHING`, s)
+		if err != nil {
+			recordThreatFeedFail(ctx, db, err.Error())
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			added++
+		}
+	}
+	if err := finishThreatFeedSyncTx(ctx, tx, added, now); err != nil {
+		return 0, err
+	}
+	return added, nil
+}
+
+func mergeThreatFoxData(ctx context.Context, db *sql.DB, p threatfeed.ThreatFoxParsed, now time.Time) (int, error) {
+	if p.Total() == 0 {
+		return 0, recordThreatFeedSuccessNoRows(ctx, db, now)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		recordThreatFeedFail(ctx, db, err.Error())
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	added := 0
+	for _, s := range p.IPs {
+		res, err := tx.ExecContext(ctx, `
+INSERT INTO threat_feed_indicators(indicator) VALUES ($1)
+ON CONFLICT (indicator) DO NOTHING`, s)
+		if err != nil {
+			recordThreatFeedFail(ctx, db, err.Error())
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			added++
+		}
+	}
+	for _, h := range p.Hashes {
+		res, err := tx.ExecContext(ctx, `
+INSERT INTO threat_feed_file_hashes(hash, hash_alg) VALUES ($1, $2)
+ON CONFLICT (hash) DO NOTHING`, h, hashAlgForHex(h))
 		if err != nil {
 			recordThreatFeedFail(ctx, db, err.Error())
 			return 0, err
@@ -276,6 +361,12 @@ func threatFeedIndicatorCount(ctx context.Context, db *sql.DB) (int, error) {
 	return cnt, err
 }
 
+func threatFeedHashCount(ctx context.Context, db *sql.DB) (int, error) {
+	var cnt int
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM threat_feed_file_hashes`).Scan(&cnt)
+	return cnt, err
+}
+
 func runThreatFeedBootstrap(ctx context.Context, db *sql.DB, rdb *redis.Client) {
 	time.Sleep(12 * time.Second)
 	bctx, cancel := context.WithTimeout(ctx, 60*time.Minute)
@@ -285,8 +376,12 @@ func runThreatFeedBootstrap(ctx context.Context, db *sql.DB, rdb *redis.Client) 
 	if err != nil || !cfg.Enabled || !cfg.UsesThreatFox() || strings.TrimSpace(cfg.APIKey) == "" {
 		return
 	}
-	cnt, err := threatFeedIndicatorCount(bctx, db)
-	if err != nil || cnt > 0 {
+	ipCnt, err := threatFeedIndicatorCount(bctx, db)
+	if err != nil {
+		return
+	}
+	hashCnt, err := threatFeedHashCount(bctx, db)
+	if err != nil || (ipCnt > 0 || hashCnt > 0) {
 		return
 	}
 	log.Printf("threatfox: blocklist empty — starting full export bootstrap")

@@ -1,7 +1,6 @@
 package threatfeed
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/netip"
@@ -29,7 +28,6 @@ func ExtractIPsFromThreatFoxIOC(ioc, iocType string) []string {
 	case "ip:port":
 		host, _, err := net.SplitHostPort(ioc)
 		if err != nil {
-			// fallback: last colon for simple IPv4:port
 			if i := strings.LastIndex(ioc, ":"); i > 0 {
 				host = ioc[:i]
 			} else {
@@ -62,44 +60,16 @@ func normalizeThreatFoxIP(s string) (string, bool) {
 	return a.Unmap().String(), true
 }
 
-// IPsFromThreatFoxCSV parses ThreatFox export CSV (full or recent) into IP/CIDR strings.
+// IPsFromThreatFoxCSV parses ThreatFox export CSV into IP/CIDR strings only (legacy helper).
 func IPsFromThreatFoxCSV(body []byte) ([]string, error) {
-	rows, err := ParseCSV(body, "ioc_value", "")
+	p, err := ParseThreatFoxCSV(body)
 	if err != nil {
 		return nil, err
 	}
-	var raw []string
-	for _, row := range rows {
-		val := strings.TrimSpace(row.Indicator)
-		if val == "" {
-			continue
-		}
-		// CSV rows are IOC values; infer type from shape when not tagged.
-		if strings.Contains(val, ":") && !strings.Contains(val, "/") {
-			if host, _, err := net.SplitHostPort(val); err == nil {
-				raw = append(raw, ExtractIPsFromThreatFoxIOC(host, "ip")...)
-				continue
-			}
-		}
-		if a, ok := normalizeThreatFoxIP(val); ok {
-			raw = append(raw, a)
-			continue
-		}
-		raw = append(raw, ExtractIPsFromThreatFoxIOC(val, "ip:port")...)
-	}
-	ips := ValidIPCIDR(UniqueIndicators(rowsToParsed(raw)))
-	if len(ips) == 0 {
+	if len(p.IPs) == 0 {
 		return nil, fmt.Errorf("threatfox csv: no IP/CIDR indicators found")
 	}
-	return ips, nil
-}
-
-func rowsToParsed(list []string) []ParsedRow {
-	out := make([]ParsedRow, 0, len(list))
-	for _, s := range list {
-		out = append(out, ParsedRow{Indicator: s})
-	}
-	return out
+	return p.IPs, nil
 }
 
 type threatFoxAPIEnvelope struct {
@@ -112,22 +82,22 @@ type threatFoxAPIEntry struct {
 	IOCType string `json:"ioc_type"`
 }
 
-// IPsFromThreatFoxAPI parses Community API get_iocs JSON response.
+// IPsFromThreatFoxAPI parses Community API get_iocs JSON into IPs only (legacy helper).
 func IPsFromThreatFoxAPI(body []byte) ([]string, error) {
-	var env threatFoxAPIEnvelope
-	if err := json.Unmarshal(body, &env); err != nil {
+	p, err := ParseThreatFoxAPI(body)
+	if err != nil {
 		return nil, err
 	}
-	if env.QueryStatus != "" && env.QueryStatus != "ok" {
-		return nil, fmt.Errorf("threatfox api: query_status=%s", env.QueryStatus)
-	}
-	var raw []string
-	for _, e := range env.Data {
-		raw = append(raw, ExtractIPsFromThreatFoxIOC(e.IOC, e.IOCType)...)
-	}
-	ips := ValidIPCIDR(UniqueIndicators(rowsToParsed(raw)))
-	if len(ips) == 0 {
+	if len(p.IPs) == 0 {
 		return nil, fmt.Errorf("threatfox api: no IP/CIDR indicators in response")
 	}
-	return ips, nil
+	return p.IPs, nil
+}
+
+func rowsToParsed(list []string) []ParsedRow {
+	out := make([]ParsedRow, 0, len(list))
+	for _, s := range list {
+		out = append(out, ParsedRow{Indicator: s})
+	}
+	return out
 }

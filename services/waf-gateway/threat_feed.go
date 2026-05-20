@@ -22,8 +22,9 @@ import (
 
 // threatFeedSnap is the hot-path snapshot built from Postgres + synced indicators.
 type threatFeedSnap struct {
-	GW threatfeed.GatewayConfig
-	M  *threatfeed.Matcher
+	GW     threatfeed.GatewayConfig
+	M      *threatfeed.Matcher
+	Hashes *threatfeed.HashSet
 }
 
 func (s threatFeedSnap) MatchThreat(clientHost string) (matched, block bool) {
@@ -39,6 +40,18 @@ func (s threatFeedSnap) MatchThreat(clientHost string) (matched, block bool) {
 		return false, false
 	}
 	return true, s.GW.Block
+}
+
+// MatchFileHash checks request body against ThreatFox file-hash IOCs.
+func (s threatFeedSnap) MatchFileHash(body []byte) (hash string, matched, block bool) {
+	if !s.GW.Enabled || s.Hashes == nil {
+		return "", false, false
+	}
+	h, ok := s.Hashes.MatchBody(body)
+	if !ok {
+		return "", false, false
+	}
+	return h, true, s.GW.Block
 }
 
 type threatFeedStore struct {
@@ -118,13 +131,34 @@ func reloadThreatFeed(db *sql.DB, store *threatFeedStore) {
 		}
 	}
 
-	snap := threatFeedSnap{GW: cfg.Gateway(), M: m}
+	var hashes []string
+	hrows, herr := db.QueryContext(ctx, `SELECT hash FROM threat_feed_file_hashes ORDER BY hash`)
+	if herr != nil {
+		log.Printf("threat feed: list file hashes: %v", herr)
+	} else {
+		defer hrows.Close()
+		for hrows.Next() {
+			var h string
+			if err := hrows.Scan(&h); err != nil {
+				log.Printf("threat feed hash scan: %v", err)
+				break
+			}
+			h = strings.TrimSpace(h)
+			if h != "" {
+				hashes = append(hashes, h)
+			}
+		}
+		_ = hrows.Err()
+	}
+
+	snap := threatFeedSnap{GW: cfg.Gateway(), M: m, Hashes: threatfeed.NewHashSet(hashes)}
 	store.Swap(snap)
 	nInd := 0
 	if m != nil {
 		nInd = m.Size()
 	}
-	log.Printf("threat feed reloaded enabled=%v block=%v indicators=%d", snap.GW.Enabled, snap.GW.Block, nInd)
+	log.Printf("threat feed reloaded enabled=%v block=%v ip_indicators=%d file_hashes=%d",
+		snap.GW.Enabled, snap.GW.Block, nInd, snap.Hashes.Len())
 }
 
 func subscribeThreatFeedUpdates(db *sql.DB, rdb *redis.Client, store *threatFeedStore) {

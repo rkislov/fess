@@ -31,6 +31,7 @@ type threatFeedStatusResponse struct {
 	LastError        string `json:"last_error,omitempty"`
 	RowsLastIngested int    `json:"rows_last_ingested"`
 	IndicatorCount   int    `json:"indicator_count"`
+	FileHashCount    int    `json:"file_hash_count"`
 	AutoSyncsToday   int    `json:"auto_syncs_today"`
 	AutoSyncLimit    int    `json:"auto_sync_limit"`
 	NextAutoSyncAt   string `json:"next_auto_sync_at,omitempty"`
@@ -129,8 +130,9 @@ func getThreatFeedStatus(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 SELECT last_attempt_at, last_success_at, last_error, rows_ingested
 FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK, &lastErr, &rowsIng)
 
-	var cnt int
+	var cnt, hashCnt int
 	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_indicators`).Scan(&cnt)
+	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_file_hashes`).Scan(&hashCnt)
 
 	now := time.Now()
 	quota, _ := loadThreatFeedAutoQuota(r.Context(), db)
@@ -144,6 +146,7 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 		ThreatFoxReady:   cfg.UsesThreatFox() && strings.TrimSpace(cfg.APIKey) != "",
 		RowsLastIngested: rowsIng,
 		IndicatorCount:   cnt,
+		FileHashCount:    hashCnt,
 		AutoSyncsToday:   usedToday,
 		AutoSyncLimit:    threatFeedMaxAutoSyncsPerDay,
 	}
