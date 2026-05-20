@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -17,19 +18,27 @@ func proxyAccessLogsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) 
 		return
 	}
 
+	qb := buildProxyAccessLogsQuery(r)
+	where := qb.whereSQL()
+	args := qb.argsSlice()
+	ctx := r.Context()
+
 	var total int64
-	if err := db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM proxy_access_logs`).Scan(&total); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM proxy_access_logs `+where, args...).Scan(&total); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	rows, err := db.QueryContext(r.Context(), `
+	lim := len(args) + 1
+	off := len(args) + 2
+	listArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := db.QueryContext(ctx, `
 SELECT id, host, method, path, COALESCE(client_ip,''), COALESCE(tcp_peer,''), COALESCE(backend_name,''),
        upstream_base, outcome,
        COALESCE(protocol,'http'), COALESCE(country_code,''), COALESCE(user_agent,''), created_at
-FROM proxy_access_logs
+FROM proxy_access_logs `+where+fmt.Sprintf(`
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2`, limit, offset)
+LIMIT $%d OFFSET $%d`, lim, off), listArgs...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

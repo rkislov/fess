@@ -9,12 +9,19 @@
           <span v-if="filterAction" class="text-teal-300/90"> · {{ filterAction }}</span>
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="flex min-w-[12rem] max-w-md flex-1 items-center gap-2">
+        <input
+          v-model="searchQ"
+          type="search"
+          placeholder="Поиск…"
+          class="h-9 min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+          @keydown.enter.prevent="onSearch"
+        />
         <select
           v-model.number="hours"
-          class="h-9 rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
-          @change="reload"
+          class="h-9 shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
         >
+          <option :value="0">Всё</option>
           <option :value="6">6 ч</option>
           <option :value="24">24 ч</option>
           <option :value="72">3 суток</option>
@@ -22,11 +29,11 @@
         </select>
         <button
           type="button"
-          class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+          class="h-9 shrink-0 rounded-lg bg-teal-700/90 px-3 text-sm text-white hover:bg-teal-600"
           :disabled="busy"
-          @click="reload"
+          @click="onSearch"
         >
-          Обновить
+          Найти
         </button>
         <button
           type="button"
@@ -118,8 +125,14 @@ type Row = {
 }
 
 const hours = ref(props.initialHours ?? 24)
+const searchQ = ref('')
 const filterRule = ref(props.ruleId ?? '')
 const filterAction = ref(props.action ?? '')
+
+function onSearch() {
+  page.value = 1
+  void reload()
+}
 const items = ref<Row[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -153,6 +166,7 @@ async function reload() {
       limit: String(pageSize.value),
       offset: String((page.value - 1) * pageSize.value),
     })
+    appendLogQueryBase(q, { q: searchQ.value, hours: hours.value })
     if (filterRule.value) q.set('rule_id', filterRule.value)
     if (filterAction.value) q.set('action', filterAction.value)
     const data = await apiFetch<{ items: Row[]; total: number }>(apiUrl(`/waf-log-events?${q}`))

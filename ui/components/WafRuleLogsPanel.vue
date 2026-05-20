@@ -6,16 +6,49 @@
       <p class="mt-1 text-sm text-slate-400">
         Записи из шлюза: сработала конкретная политика/правило, блокировка вредоносного ПО и эффективное действие.
       </p>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-          :disabled="busy"
-          @click="load"
-        >
-          Обновить
-        </button>
-      </div>
+      <LogQueryBar
+        class="mt-4"
+        v-model:q="searchQ"
+        v-model:hours="hours"
+        @apply="onSearch"
+        @reset="onReset"
+      >
+        <template #filters>
+          <label class="shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Действие</span>
+            <input
+              v-model="filterAction"
+              type="text"
+              placeholder="block, log…"
+              class="h-[38px] w-28 rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
+            />
+          </label>
+          <label class="shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">IP</span>
+            <input
+              v-model="filterIP"
+              type="text"
+              class="h-[38px] w-32 rounded-lg border border-slate-600 bg-slate-800 px-2 font-mono text-sm text-white"
+            />
+          </label>
+          <label class="min-w-[8rem] shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Host</span>
+            <input
+              v-model="filterHost"
+              type="text"
+              class="h-[38px] w-full min-w-[8rem] rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
+            />
+          </label>
+          <label class="min-w-[10rem] shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Правило (UUID)</span>
+            <input
+              v-model="filterRule"
+              type="text"
+              class="h-[38px] w-full min-w-[10rem] rounded-lg border border-slate-600 bg-slate-800 px-2 font-mono text-xs text-white"
+            />
+          </label>
+        </template>
+      </LogQueryBar>
       <div class="mt-4 overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
@@ -90,6 +123,28 @@ const busy = ref(false)
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(100)
+const searchQ = ref('')
+const hours = ref(0)
+const filterAction = ref('')
+const filterIP = ref('')
+const filterHost = ref('')
+const filterRule = ref('')
+
+function onSearch() {
+  page.value = 1
+  void load()
+}
+
+function onReset() {
+  searchQ.value = ''
+  hours.value = 0
+  filterAction.value = ''
+  filterIP.value = ''
+  filterHost.value = ''
+  filterRule.value = ''
+  page.value = 1
+  void load()
+}
 
 function rowKey(it: Row, idx: number) {
   return it.id ? String(it.id) : `${it.request_id}:${it.created_at}:${idx}`
@@ -141,6 +196,11 @@ async function load() {
   try {
     const offset = (page.value - 1) * pageSize.value
     const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
+    appendLogQueryBase(q, { q: searchQ.value, hours: hours.value })
+    appendIfSet(q, 'action', filterAction.value)
+    appendIfSet(q, 'source_ip', filterIP.value)
+    appendIfSet(q, 'host', filterHost.value)
+    appendIfSet(q, 'rule_id', filterRule.value)
     const data = await apiFetch<{ items: Row[]; total: number; limit: number; offset: number }>(
       apiUrl(`/logs?${q.toString()}`),
     )

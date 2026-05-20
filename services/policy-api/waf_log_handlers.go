@@ -178,19 +178,9 @@ func wafLogEventsListHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	hours := parseHoursQuery(r.URL.Query().Get("hours"), 168)
-	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
-	ruleFilter := strings.TrimSpace(r.URL.Query().Get("rule_id"))
-	actionFilter := strings.TrimSpace(r.URL.Query().Get("action"))
-	if actionFilter != "" && !logActionParamOK(actionFilter) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid action filter"})
+	if err := validateWafLogFilters(r); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
-	}
-	if ruleFilter != "" {
-		if _, err := uuid.Parse(ruleFilter); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid rule_id"})
-			return
-		}
 	}
 
 	limit, offset, perr := parseWafFlexiblePagination(r)
@@ -199,69 +189,28 @@ func wafLogEventsListHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		return
 	}
 
+	since, useSince := parseOptionalHours(r.URL.Query().Get("hours"), 168, true)
+	qb := buildWafLogsQuery(r, 168)
+	where := qb.whereSQL()
+	args := qb.argsSlice()
 	ctx := r.Context()
 
 	var total int64
-	var err error
-	switch {
-	case ruleFilter != "" && actionFilter != "":
-		err = db.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM waf_logs WHERE created_at >= $1 AND rule_id::text = $2 AND action = $3`,
-			since, ruleFilter, actionFilter).Scan(&total)
-	case ruleFilter != "":
-		err = db.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM waf_logs WHERE created_at >= $1 AND rule_id::text = $2`, since, ruleFilter).Scan(&total)
-	case actionFilter != "":
-		err = db.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM waf_logs WHERE created_at >= $1 AND action = $2`, since, actionFilter).Scan(&total)
-	default:
-		err = db.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM waf_logs WHERE created_at >= $1`, since).Scan(&total)
-	}
-	if err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM waf_logs `+where, args...).Scan(&total); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	var rows *sql.Rows
-	switch {
-	case ruleFilter != "" && actionFilter != "":
-		rows, err = db.QueryContext(ctx, `
+	lim := len(args) + 1
+	off := len(args) + 2
+	listArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := db.QueryContext(ctx, `
 SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''),
        action, source_ip, method, path, COALESCE(host,''), ai_analysis,
        COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
-WHERE created_at >= $1 AND rule_id::text = $4 AND action = $5
+FROM waf_logs `+where+fmt.Sprintf(`
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3`, since, limit, offset, ruleFilter, actionFilter)
-	case ruleFilter != "":
-		rows, err = db.QueryContext(ctx, `
-SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''),
-       action, source_ip, method, path, COALESCE(host,''), ai_analysis,
-       COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
-WHERE created_at >= $1 AND rule_id::text = $4
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3`, since, limit, offset, ruleFilter)
-	case actionFilter != "":
-		rows, err = db.QueryContext(ctx, `
-SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''),
-       action, source_ip, method, path, COALESCE(host,''), ai_analysis,
-       COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
-WHERE created_at >= $1 AND action = $4
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3`, since, limit, offset, actionFilter)
-	default:
-		rows, err = db.QueryContext(ctx, `
-SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''),
-       action, source_ip, method, path, COALESCE(host,''), ai_analysis,
-       COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
-WHERE created_at >= $1
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3`, since, limit, offset)
-	}
+LIMIT $%d OFFSET $%d`, lim, off), listArgs...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -291,10 +240,11 @@ LIMIT $2 OFFSET $3`, since, limit, offset)
 		}
 		out = append(out, it)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items": out, "total": total, "limit": limit, "offset": offset, "hours": hours,
-		"since": since.Format(time.RFC3339Nano),
-	})
+	meta := map[string]any{"items": out, "total": total, "limit": limit, "offset": offset}
+	if useSince && since != nil {
+		meta["since"] = since.Format(time.RFC3339Nano)
+	}
+	writeJSON(w, http.StatusOK, meta)
 }
 
 type siteBrief struct {

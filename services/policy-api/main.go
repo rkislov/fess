@@ -436,9 +436,8 @@ func logsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	action := strings.TrimSpace(r.URL.Query().Get("action"))
-	if action != "" && !logActionParamOK(action) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid action query (use letters, digits, underscore)"})
+	if err := validateWafLogFilters(r); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -448,34 +447,26 @@ func logsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
+	qb := buildWafLogsQuery(r, 0)
+	where := qb.whereSQL()
+	args := qb.argsSlice()
+	ctx := r.Context()
+
 	var total int64
-	if action == "" {
-		err = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM waf_logs`).Scan(&total)
-	} else {
-		err = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM waf_logs WHERE action = $1`, action).Scan(&total)
-	}
-	if err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM waf_logs `+where, args...).Scan(&total); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	var rows *sql.Rows
-	if action == "" {
-		rows, err = db.QueryContext(r.Context(), `
+	lim := len(args) + 1
+	off := len(args) + 2
+	listArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := db.QueryContext(ctx, `
 SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path,
        COALESCE(host,''), COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
+FROM waf_logs `+where+fmt.Sprintf(`
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2`, limit, offset)
-	} else {
-		rows, err = db.QueryContext(r.Context(), `
-SELECT id, request_id, COALESCE(policy_id::text, ''), COALESCE(rule_id::text, ''), action, source_ip, method, path,
-       COALESCE(host,''), COALESCE(details, '{}'::jsonb), created_at
-FROM waf_logs
-WHERE action = $1
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3`, action, limit, offset)
-	}
+LIMIT $%d OFFSET $%d`, lim, off), listArgs...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

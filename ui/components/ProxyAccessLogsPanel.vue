@@ -13,16 +13,53 @@
         <span class="font-mono text-slate-400">WAF_TRUSTED_PROXIES</span>); <strong class="text-slate-300">TCP пир</strong> — кто
         реально подключился к шлюзу (часто IP балансировщика).
       </p>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-          :disabled="busy"
-          @click="load"
-        >
-          Обновить
-        </button>
-      </div>
+      <LogQueryBar
+        class="mt-4"
+        v-model:q="searchQ"
+        v-model:hours="hours"
+        @apply="onSearch"
+        @reset="onReset"
+      >
+        <template #filters>
+          <label class="shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Итог</span>
+            <select
+              v-model="filterOutcome"
+              class="h-[38px] rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
+            >
+              <option value="">Все</option>
+              <option value="proxied">Проксировано</option>
+              <option value="waf_block">Блок WAF</option>
+              <option value="malware_block">Антивирус</option>
+              <option value="redirect">Редирект</option>
+            </select>
+          </label>
+          <label class="shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Метод</span>
+            <input
+              v-model="filterMethod"
+              type="text"
+              class="h-[38px] w-20 rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm uppercase text-white"
+            />
+          </label>
+          <label class="min-w-[8rem] shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Host</span>
+            <input
+              v-model="filterHost"
+              type="text"
+              class="h-[38px] w-full min-w-[8rem] rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-white"
+            />
+          </label>
+          <label class="shrink-0">
+            <span class="mb-1 block text-xs font-medium text-slate-500">Клиент IP</span>
+            <input
+              v-model="filterClientIP"
+              type="text"
+              class="h-[38px] w-32 rounded-lg border border-slate-600 bg-slate-800 px-2 font-mono text-sm text-white"
+            />
+          </label>
+        </template>
+      </LogQueryBar>
       <div class="mt-4 max-h-[min(70vh,52rem)] overflow-auto rounded-lg border border-slate-800/80">
         <table class="min-w-[1280px] border-separate border-spacing-0 text-left text-sm">
           <thead class="sticky top-0 z-10 border-b border-slate-700 bg-slate-900/95 text-slate-500 shadow-[inset_0_-1px_0_0_rgba(51,65,85,0.9)] backdrop-blur-sm">
@@ -124,6 +161,28 @@ const busy = ref(false)
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(100)
+const searchQ = ref('')
+const hours = ref(168)
+const filterOutcome = ref('')
+const filterMethod = ref('')
+const filterHost = ref('')
+const filterClientIP = ref('')
+
+function onSearch() {
+  page.value = 1
+  void load()
+}
+
+function onReset() {
+  searchQ.value = ''
+  hours.value = 168
+  filterOutcome.value = ''
+  filterMethod.value = ''
+  filterHost.value = ''
+  filterClientIP.value = ''
+  page.value = 1
+  void load()
+}
 
 function onPage(p: number) {
   page.value = p
@@ -160,6 +219,11 @@ async function load() {
   try {
     const offset = (page.value - 1) * pageSize.value
     const q = new URLSearchParams({ limit: String(pageSize.value), offset: String(offset) })
+    appendLogQueryBase(q, { q: searchQ.value, hours: hours.value })
+    appendIfSet(q, 'outcome', filterOutcome.value)
+    appendIfSet(q, 'method', filterMethod.value)
+    appendIfSet(q, 'host', filterHost.value)
+    appendIfSet(q, 'client_ip', filterClientIP.value)
     const data = await apiFetch<{ items: Row[]; total: number }>(apiUrl(`/proxy-access-logs?${q.toString()}`))
     items.value = data.items || []
     total.value = typeof data.total === 'number' ? data.total : 0
