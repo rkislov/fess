@@ -1,7 +1,6 @@
 package threatfeed
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -55,10 +54,7 @@ func ExtractHashFromThreatFoxIOC(ioc, iocType string) string {
 
 // ParseThreatFoxCSV parses export CSV (ioc_value + ioc_type columns).
 func ParseThreatFoxCSV(body []byte) (ThreatFoxParsed, error) {
-	body = trimBOMBytes(body)
-	r := csv.NewReader(strings.NewReader(string(body)))
-	r.TrimLeadingSpace = true
-	all, err := r.ReadAll()
+	all, err := readThreatFoxCSVRecords(body)
 	if err != nil {
 		return ThreatFoxParsed{}, err
 	}
