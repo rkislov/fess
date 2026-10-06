@@ -2,6 +2,89 @@
   <div class="space-y-8">
     <p v-if="err" class="rounded-xl border border-rose-500/25 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
 
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Состояние платформы FESS</h2>
+          <p class="mt-1 text-sm text-slate-400">
+            Нагрузка хоста (CPU, память, load) и контейнеры стека. Для статуса Docker смонтируйте
+            <span class="font-mono text-slate-300">/var/run/docker.sock</span> в policy-api.
+          </p>
+        </div>
+        <p v-if="sysHealth" class="font-mono text-[11px] text-slate-500">
+          {{ fmt(sysHealth.collected_at) }}
+        </p>
+      </div>
+      <p v-if="sysErr" class="mt-3 rounded-lg border border-amber-500/25 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+        {{ sysErr }}
+      </p>
+      <div v-if="sysHealth" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs font-medium text-slate-500">CPU хоста</p>
+          <p class="mt-1 font-mono text-2xl tabular-nums text-teal-300">{{ fmtPct(sysHealth.host.cpu_percent) }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ sysHealth.host.cpu_cores }} ядер · load {{ fmtLoad(sysHealth.host.load1) }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs font-medium text-slate-500">Память хоста</p>
+          <p class="mt-1 font-mono text-2xl tabular-nums text-sky-300">{{ sysHealth.host.memory_percent.toFixed(0) }}%</p>
+          <p class="mt-1 text-xs text-slate-500">{{ fmtBytes(sysHealth.host.memory_used_bytes) }} / {{ fmtBytes(sysHealth.host.memory_total_bytes) }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs font-medium text-slate-500">Load average</p>
+          <p class="mt-1 font-mono text-lg tabular-nums text-slate-200">
+            {{ fmtLoad(sysHealth.host.load1) }}
+            <span class="text-slate-500">/</span>
+            {{ fmtLoad(sysHealth.host.load5) }}
+            <span class="text-slate-500">/</span>
+            {{ fmtLoad(sysHealth.host.load15) }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500">uptime {{ fmtUptime(sysHealth.host.uptime_sec) }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs font-medium text-slate-500">Контейнеры</p>
+          <p class="mt-1 font-mono text-2xl tabular-nums text-emerald-300">{{ runningContainers }} / {{ sysHealth.docker.containers.length }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ sysHealth.docker.available ? (sysHealth.docker.project || 'Docker') : 'сокет недоступен' }}</p>
+        </div>
+      </div>
+      <div v-if="sysHealth?.docker?.error" class="mt-3 text-xs text-amber-200/90">{{ sysHealth.docker.error }}</div>
+      <div v-if="sysHealth?.docker?.containers?.length" class="mt-4 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-xs text-slate-500">
+              <th class="py-2 pr-3">Сервис</th>
+              <th class="py-2 pr-3">Состояние</th>
+              <th class="py-2 pr-3">CPU</th>
+              <th class="py-2 pr-3">Память</th>
+              <th class="py-2">Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in sysHealth.docker.containers" :key="c.id" class="border-b border-slate-800/80">
+              <td class="py-2 pr-3">
+                <span class="font-medium text-slate-200">{{ c.service || c.name }}</span>
+                <span class="ml-2 font-mono text-[10px] text-slate-600">{{ c.id }}</span>
+              </td>
+              <td class="py-2 pr-3">
+                <span
+                  class="rounded-md px-2 py-0.5 text-xs"
+                  :class="c.running ? 'bg-emerald-950/80 text-emerald-300' : 'bg-rose-950/80 text-rose-300'"
+                >
+                  {{ c.health || c.state }}
+                </span>
+              </td>
+              <td class="py-2 pr-3 font-mono text-xs tabular-nums">{{ fmtPct(c.cpu_percent) }}</td>
+              <td class="py-2 pr-3 font-mono text-xs tabular-nums">
+                <template v-if="c.memory_usage_bytes">{{ fmtBytes(c.memory_usage_bytes) }}</template>
+                <template v-else>—</template>
+                <span v-if="c.memory_percent != null" class="text-slate-500"> ({{ c.memory_percent.toFixed(0) }}%)</span>
+              </td>
+              <td class="max-w-[16rem] truncate py-2 text-xs text-slate-500" :title="c.status">{{ c.status }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
       <p class="mt-1 text-xs text-slate-500">
@@ -361,6 +444,43 @@ type RpsPoint = { bucket_start: string; bucket_seconds: number; count: number; r
 type RpsOutcomeSeries = { outcome: string; points: RpsPoint[] }
 type MalwareScanStats = { icap_checked: number; external_checked: number; blocked: number }
 
+type SystemContainer = {
+  id: string
+  name: string
+  service: string
+  image: string
+  state: string
+  status: string
+  health: string
+  running: boolean
+  cpu_percent: number | null
+  memory_usage_bytes: number
+  memory_limit_bytes: number
+  memory_percent: number | null
+}
+
+type SystemHealth = {
+  collected_at: string
+  host: {
+    hostname: string
+    cpu_percent: number | null
+    cpu_cores: number
+    load1: number
+    load5: number
+    load15: number
+    uptime_sec: number
+    memory_total_bytes: number
+    memory_used_bytes: number
+    memory_percent: number
+  }
+  docker: {
+    available: boolean
+    error?: string
+    project?: string
+    containers: SystemContainer[]
+  }
+}
+
 type Summary = {
   period_hours: number
   since: string
@@ -388,7 +508,9 @@ const OUTCOME_VIS_LS_KEY = 'fence_dashboard_outcome_vis'
 const hours = ref(24)
 const busy = ref(false)
 const err = ref('')
+const sysErr = ref('')
 const summary = ref<Summary | null>(null)
+const sysHealth = ref<SystemHealth | null>(null)
 const hostsExpanded = ref(false)
 const uaExpanded = ref(false)
 const seriesVisible = ref<Record<string, boolean>>({})
@@ -500,6 +622,44 @@ function isIocAction(action: string) {
 function fmtCount(n: number) {
   return new Intl.NumberFormat('ru-RU').format(n)
 }
+
+function fmt(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('ru-RU')
+  } catch {
+    return iso
+  }
+}
+
+function fmtPct(n: number | null | undefined) {
+  if (n == null || Number.isNaN(n)) return '—'
+  return `${n.toFixed(1)}%`
+}
+
+function fmtLoad(n: number | undefined) {
+  if (n == null) return '—'
+  return n.toFixed(2)
+}
+
+function fmtBytes(n: number | undefined) {
+  if (!n) return '0 B'
+  if (n < 1024) return `${n} B`
+  if (n < 1 << 20) return `${(n / 1024).toFixed(1)} KiB`
+  if (n < 1 << 30) return `${(n / (1 << 20)).toFixed(1)} MiB`
+  return `${(n / (1 << 30)).toFixed(1)} GiB`
+}
+
+function fmtUptime(sec: number | undefined) {
+  if (!sec) return '—'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (d > 0) return `${d}д ${h}ч`
+  if (h > 0) return `${h}ч ${m}м`
+  return `${m}м`
+}
+
+const runningContainers = computed(() => sysHealth.value?.docker.containers.filter((c) => c.running).length ?? 0)
 
 const allHostRows = computed(() => summary.value?.by_host ?? [])
 const visibleHostRows = computed(() => {
@@ -1169,9 +1329,18 @@ async function renderMap(rows: CountryRow[]) {
 async function load() {
   busy.value = true
   err.value = ''
+  sysErr.value = ''
   try {
     const q = new URLSearchParams({ hours: String(hours.value) })
-    const data = await apiFetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`)
+    const [data, sys] = await Promise.all([
+      apiFetch<Summary>(`${apiUrl('/dashboard/summary')}?${q}`),
+      apiFetch<SystemHealth>(apiUrl('/dashboard/system')).catch((e: unknown) => {
+        const fe = e as { data?: { error?: string }; message?: string }
+        sysErr.value = fe?.data?.error || fe?.message || String(e)
+        return null
+      }),
+    ])
+    if (sys) sysHealth.value = sys
     const byCountry = dashboardByCountry(data)
     const byUserAgent = dashboardByUserAgent(data)
     summary.value = { ...data, by_country: byCountry, by_user_agent: byUserAgent }

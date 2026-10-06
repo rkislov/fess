@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Fence WAF Control API
+  title: FESS Control API
   version: 0.1.0
 servers:
   - url: https://localhost:8443/api/v1

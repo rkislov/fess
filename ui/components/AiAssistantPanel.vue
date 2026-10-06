@@ -51,7 +51,7 @@
       class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/20 backdrop-blur-sm"
     >
       <h3 class="text-base font-semibold text-white">Вопрос к ИИ</h3>
-      <p class="mt-1 text-sm text-slate-400">Задайте вопрос по Fence, политикам, журналам или инциденту — ответ появится ниже.</p>
+      <p class="mt-1 text-sm text-slate-400">Задайте вопрос по FESS, политикам, журналам или инциденту — ответ появится ниже.</p>
 
       <div class="mt-4 flex flex-wrap gap-4 text-sm">
         <label class="flex items-center gap-2 text-slate-300">

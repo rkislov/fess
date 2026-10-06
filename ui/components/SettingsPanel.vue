@@ -297,7 +297,7 @@ const siem = ref({
   export_waf_logs: true,
   export_proxy_logs: true,
   export_audit_logs: false,
-  device_vendor: 'Fence',
+  device_vendor: 'FESS',
   device_product: 'WAF',
   device_version: '1.0',
   poll_interval_sec: 30,

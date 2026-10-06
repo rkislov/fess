@@ -65,7 +65,7 @@
         </section>
 
         <section v-if="detail.matching_sites?.length" class="rounded-2xl border border-white/10 bg-slate-900/50 p-5">
-          <h3 class="text-sm font-medium text-slate-300">Сайты Fence</h3>
+          <h3 class="text-sm font-medium text-slate-300">Сайты FESS</h3>
           <ul class="mt-2 space-y-2 text-sm">
             <li
               v-for="s in detail.matching_sites"

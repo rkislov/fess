@@ -1,4 +1,9 @@
-# Fence WAF Blueprint
+# FESS — Frontend Security Server
+
+WAF и reverse proxy с живым обновлением политик, антивирусом, IOC и веб-панелью.
+
+**Автор:** Роман Сергеевич Кислов (Roman Sergeyevich Kislov)  
+**Лицензия:** [Apache License 2.0](LICENSE)
 
 Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with on-the-fly policy updates, no service restart, and a web UI.
 

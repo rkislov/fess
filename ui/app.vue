@@ -24,7 +24,7 @@
             🛡️
           </div>
           <div>
-            <h1 class="text-lg font-semibold tracking-tight text-white sm:text-xl">Fence — панель управления</h1>
+            <h1 class="text-lg font-semibold tracking-tight text-white sm:text-xl">FESS — Frontend Security Server</h1>
             <p class="mt-0.5 text-xs text-slate-400 sm:text-sm">
               Дашборд, сайты и ИИ — настройки защиты в разделе «Настройки»
             </p>

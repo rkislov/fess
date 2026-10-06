@@ -94,8 +94,11 @@ services:
       FENCE_SKIP_DB_MIGRATE: ${FENCE_SKIP_DB_MIGRATE:-}
       FENCE_METRICS_DB_INTERVAL: ${FENCE_METRICS_DB_INTERVAL:-}
       POLICY_API_METRICS_ADDR: ${POLICY_API_METRICS_ADDR:-:9092}
+      FENCE_DOCKER_SOCK: ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}
+      FENCE_DOCKER_PROJECT: ${FENCE_DOCKER_PROJECT:-}
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
+      - ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     ports:
       - "${FENCE_POLICY_API_PORT:-8082}:8082"
       - "${FENCE_POLICY_API_METRICS_PORT:-9092}:9092"

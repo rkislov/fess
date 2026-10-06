@@ -20,8 +20,8 @@
         >
           🛡️
         </div>
-        <h1 class="text-2xl font-semibold tracking-tight text-white">Fence</h1>
-        <p class="mt-2 text-sm text-slate-400">Панель управления WAF — политики, защита от вредоносного ПО, сайты</p>
+        <h1 class="text-2xl font-semibold tracking-tight text-white">FESS</h1>
+        <p class="mt-2 text-sm text-slate-400">Frontend Security Server — панель управления WAF, антивирусом и сайтами</p>
       </div>
 
       <form
