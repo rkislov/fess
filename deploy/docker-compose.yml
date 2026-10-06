@@ -96,8 +96,8 @@ services:
       context: ..
       dockerfile: services/policy-api/Dockerfile
       args:
-        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
-        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+        GOPROXY: ${GOPROXY:-https://goproxy.io,https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-off}
     image: fess/policy-api:local
     environment:
       <<: *fence-data-env
@@ -161,8 +161,8 @@ services:
       context: ..
       dockerfile: services/waf-gateway/Dockerfile
       args:
-        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
-        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+        GOPROXY: ${GOPROXY:-https://goproxy.io,https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-off}
     image: fess/waf-gateway:local
     environment:
       <<: *fence-data-env

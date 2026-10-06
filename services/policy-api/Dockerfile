@@ -1,15 +1,19 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.25-alpine AS builder
 
-# If proxy.golang.org times out (common on restricted networks), set at build:
-#   docker compose -f deploy/docker-compose.yml build --build-arg GOPROXY=https://goproxy.io,direct
-ARG GOPROXY=https://proxy.golang.org,direct
-ARG GOSUMDB=sum.golang.org
+# Official proxy.golang.org is often unreachable (DNS timeout). Override via compose/env:
+#   GOPROXY=https://goproxy.io,direct
+ARG GOPROXY=https://goproxy.io,https://goproxy.cn,direct
+ARG GOSUMDB=off
 ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}
 
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN apk add --no-cache git ca-certificates \
+  && go mod download \
+  || GOPROXY=https://goproxy.io,direct GOSUMDB=off go mod download \
+  || GOPROXY=https://goproxy.cn,direct GOSUMDB=off go mod download \
+  || GOPROXY=direct GOSUMDB=off go mod download
 
 COPY . .
 # Multi-arch: BuildKit sets TARGETARCH (e.g. arm64 on Apple Silicon). Fallback uses builder uname.

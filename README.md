@@ -214,7 +214,7 @@ API:
 ### Docker compose notes
 
 - **`Exception in thread ... compose ... KeyError: 'id'`** или **`'name' does not match any of the regexes: '^x-'`** — это **`docker-compose` v1** (Python). Нужен **Compose V2**: `docker compose` (плагин Docker). Имя проекта — `COMPOSE_PROJECT_NAME=fess` в `deploy/.env`.
-- **`go mod download` … `proxy.golang.org` … `i/o timeout`** — из build-контейнера нет доступа к официальному Go module proxy. В `deploy/.env` задайте зеркало, например `GOPROXY=https://goproxy.io,direct`, и пересоберите.
+- **`go mod download` … `proxy.golang.org` … `i/o timeout`** — в `deploy/.env` должно быть `GOPROXY=https://goproxy.io,https://goproxy.cn,direct` и `GOSUMDB=off` (**без** `proxy.golang.org` первым). Затем `git pull` и пересборка. Если правите `.env`, а ARG в логе всё ещё `proxy.golang.org` — старый Dockerfile; нужен `git pull`. Для v1 явно: `docker-compose -f deploy/docker-compose.yml build --build-arg GOPROXY=https://goproxy.io,direct --build-arg GOSUMDB=off`.
 - **`Redis ... vm.overcommit_memory`** — host kernel tuning; often ignorable locally.
 - **`CLAMAV_CLAMD_PORT`** in **`policy-api`**: **`0`** (по умолчанию в compose) отключает probe **`VERSION`** к clamd по TCP; ICAP на порту **1344** проверяется отдельно. Укажите **3310**, если clamd слушает TCP на том же хосте, что и ICAP, и вы хотите версию в UI.
 
