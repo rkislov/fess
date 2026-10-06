@@ -140,7 +140,7 @@
             <h3 class="text-sm font-semibold text-white">Внутренний антивирус (ICAP)</h3>
             <p class="mt-0.5 text-xs text-slate-500">ClamAV / ICAP — проверенные тела запросов за период</p>
           </div>
-          <img src="/brand/splash.jpg" alt="" class="h-8 w-8 rounded-md object-cover object-[12%_center] ring-1 ring-white/10" />
+          <img src="/brand/splash-mark.jpg" alt="" width="32" height="32" class="h-8 w-8 rounded-md object-cover ring-1 ring-white/10" />
         </div>
         <p class="mt-4 font-mono text-3xl font-semibold tabular-nums text-emerald-300">
           {{ fmtCount(malwareScans.icap_checked) }}

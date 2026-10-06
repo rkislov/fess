@@ -40,7 +40,8 @@ export default defineNuxtConfig({
         },
       ],
       link: [
-        { rel: 'icon', type: 'image/jpeg', href: '/brand/splash.jpg' },
+        { rel: 'icon', type: 'image/jpeg', href: '/brand/splash-mark.jpg' },
+        { rel: 'apple-touch-icon', href: '/brand/splash-mark.jpg' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {

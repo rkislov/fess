@@ -39,9 +39,11 @@
       <div class="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-start gap-3">
           <img
-            src="/brand/splash.jpg"
+            src="/brand/splash-mark.jpg"
             alt=""
-            class="h-11 w-11 shrink-0 rounded-xl object-cover object-[12%_center] shadow-md ring-1 ring-black/10"
+            width="44"
+            height="44"
+            class="h-11 w-11 shrink-0 rounded-xl object-cover shadow-md ring-1 ring-black/10"
           />
           <div>
             <h1
