@@ -233,7 +233,6 @@
     <ThreatFeedPanel v-else-if="sub === 'qfeed'" />
     <BotProtectionPanel v-else-if="sub === 'bots'" />
     <RateLimitPanel v-else-if="sub === 'ratelimit'" />
-    <LoggingPanel v-else-if="sub === 'logging'" />
     <ExceptionsPanel v-else-if="sub === 'exceptions'" />
   </div>
 </template>
@@ -257,7 +256,6 @@ type SubId =
   | 'qfeed'
   | 'bots'
   | 'ratelimit'
-  | 'logging'
   | 'exceptions'
 
 const appearanceSection = [{ id: 'appearance' as const, label: 'Оформление', icon: '🎨' }]
@@ -275,7 +273,6 @@ const securitySections = [
   { id: 'qfeed' as const, label: 'IOC / ThreatFox', icon: '📡' },
   { id: 'bots' as const, label: 'Боты', icon: '🤖' },
   { id: 'ratelimit' as const, label: 'Rate limit', icon: '⏱️' },
-  { id: 'logging' as const, label: 'Журналы', icon: '📝' },
   { id: 'exceptions' as const, label: 'Исключения', icon: '🛡️' },
 ]
 

@@ -53,7 +53,7 @@
               FESS — Frontend Security Server
             </h1>
             <p class="mt-0.5 text-[0.72rem] font-bold uppercase tracking-[0.28em] text-[#e11d2e]">
-              Дашборд · сайты · УЦ
+              Дашборд · сайты · УЦ · журналы
             </p>
           </div>
         </div>
@@ -102,6 +102,7 @@
       <SitesPanel v-else-if="tab === 'sites'" />
       <CertificatesPanel v-else-if="tab === 'ca'" />
       <SettingsPanel v-else-if="tab === 'settings'" />
+      <LoggingPanel v-else-if="tab === 'logs'" />
     </main>
 
     <WafEventsExplorerPanel
@@ -144,7 +145,7 @@ function onOpenWafEvent(id: number) {
   openWafEventDetail(id, eventsParams.value)
 }
 
-type TabId = 'dashboard' | 'sites' | 'ca' | 'settings'
+type TabId = 'dashboard' | 'sites' | 'ca' | 'settings' | 'logs'
 
 const tab = ref<TabId>('dashboard')
 const tabs: { id: TabId; label: string; icon: string }[] = [
@@ -152,5 +153,6 @@ const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'sites', label: 'Сайты', icon: '🌐' },
   { id: 'ca', label: 'УЦ', icon: '🔐' },
   { id: 'settings', label: 'Настройки', icon: '⚙️' },
+  { id: 'logs', label: 'Журналы', icon: '📝' },
 ]
 </script>
