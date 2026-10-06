@@ -20,10 +20,13 @@ RUN set -eux; \
   CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${GOARCH}" go build -o /out/waf-gateway ./services/waf-gateway
 
 FROM alpine:3.20
-RUN adduser -D -g "" appuser
+RUN apk add --no-cache libcap \
+  && adduser -D -g "" appuser
 RUN mkdir -p /var/lib/fence/geoip && chown appuser:appuser /var/lib/fence/geoip
 WORKDIR /app
 COPY --from=builder /out/waf-gateway /usr/local/bin/waf-gateway
+# Allow non-root bind to :80 / :443
+RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/waf-gateway
 USER appuser
-EXPOSE 8080 8443
+EXPOSE 80 443
 ENTRYPOINT ["/usr/local/bin/waf-gateway"]

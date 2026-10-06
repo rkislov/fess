@@ -166,8 +166,8 @@ services:
     image: fess/waf-gateway:local
     environment:
       <<: *fence-data-env
-      WAF_LISTEN_ADDR: ${WAF_LISTEN_ADDR:-:8080}
-      WAF_TLS_LISTEN_ADDR: ${WAF_TLS_LISTEN_ADDR:-:8443}
+      WAF_LISTEN_ADDR: ${WAF_LISTEN_ADDR:-:80}
+      WAF_TLS_LISTEN_ADDR: ${WAF_TLS_LISTEN_ADDR:-:443}
       UPSTREAM_URL: ${UPSTREAM_URL:-}
       WAF_FAIL_MODE: ${WAF_FAIL_MODE:-open}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-/var/lib/fence/geoip/GeoLite2-Country.mmdb}
@@ -177,9 +177,11 @@ services:
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip:ro
     ports:
-      - "${FENCE_WAF_HTTP_PORT:-8080}:8080"
-      - "${FENCE_WAF_HTTPS_PORT:-8443}:8443"
+      - "${FENCE_WAF_HTTP_PORT:-80}:80"
+      - "${FENCE_WAF_HTTPS_PORT:-443}:443"
       - "${FENCE_WAF_METRICS_PORT:-9091}:9091"
+    cap_add:
+      - NET_BIND_SERVICE
     restart: unless-stopped
     depends_on:
       postgres:

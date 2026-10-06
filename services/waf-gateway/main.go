@@ -32,8 +32,8 @@ import (
 
 func main() {
 	target := strings.TrimSpace(getenv("UPSTREAM_URL", ""))
-	listen := getenv("WAF_LISTEN_ADDR", ":8080")
-	tlsListen := getenv("WAF_TLS_LISTEN_ADDR", "")
+	listen := getenv("WAF_LISTEN_ADDR", ":80")
+	tlsListen := getenv("WAF_TLS_LISTEN_ADDR", ":443")
 	pgDSN := getenv("POSTGRES_DSN", "postgres://fence:fence@localhost:5432/fence?sslmode=disable")
 	redisAddr := getenv("REDIS_ADDR", "localhost:6379")
 	failMode := getenv("WAF_FAIL_MODE", "open")

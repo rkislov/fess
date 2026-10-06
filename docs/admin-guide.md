@@ -43,8 +43,8 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | Сервис | URL по умолчанию |
 |--------|------------------|
 | Панель UI | http://localhost:5173 |
-| WAF (HTTP) | http://localhost:8080 |
-| WAF (HTTPS) | https://localhost:8443 |
+| WAF (HTTP) | http://localhost:80 (или http://localhost) |
+| WAF (HTTPS) | https://localhost:443 (или https://localhost) |
 | Policy API | http://localhost:8082 |
 | Метрики gateway | http://localhost:9091/metrics |
 | Метрики policy-api | http://localhost:9092/metrics |
@@ -93,8 +93,8 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 | Переменная | По умолчанию | Описание |
 |------------|--------------|----------|
-| `WAF_LISTEN_ADDR` | `:8080` | HTTP listener |
-| `WAF_TLS_LISTEN_ADDR` | `:8443` | HTTPS (SNI + PEM из БД); пусто = только HTTP |
+| `WAF_LISTEN_ADDR` | `:80` | HTTP listener |
+| `WAF_TLS_LISTEN_ADDR` | `:443` | HTTPS (SNI + PEM из БД); пусто = только HTTP |
 | `UPSTREAM_URL` | пусто | Если Host не совпал ни с одним сайтом — заставка FESS (стрит-арт). Укажите URL, только если нужен запасной reverse-proxy. |
 | `WAF_FAIL_MODE` | `open` | `open` — при недоступности policy/Redis пропускать; `closed` — 503 |
 | `WAF_TRUSTED_PROXIES` | см. example | CIDR **TCP-пиров** к шлюзу (Nginx/LB) для разбора X-Forwarded-For |
@@ -177,8 +177,8 @@ API: `GET/PUT /api/v1/settings/rate-limit`. При сохранении сист
 - **priority:** меньшее число — раньше в цепочке.
 - **policy_id:** если задан — только эта политика; иначе все включённые.
 - **Бэкенды:** `base_url` (`http://` / `https://`), `tls_skip_verify` для lab.
-- **TLS на шлюзе:** PEM цепочка + ключ в записи сайта; listener `WAF_TLS_LISTEN_ADDR`.
-- На границе сети: `80:8080`, `443:8443` на сервис `waf-gateway`.
+- **TLS на шлюзе:** PEM цепочка + ключ в записи сайта (или сертификат из УЦ); listener `WAF_TLS_LISTEN_ADDR` (по умолчанию `:443`).
+- По умолчанию шлюз слушает **80/443** внутри контейнера; проброс на хост — `FENCE_WAF_HTTP_PORT` / `FENCE_WAF_HTTPS_PORT` (тоже 80/443).
 - Если Host не совпал — HTML-заставка FESS (стрит-арт, автор Роман Сергеевич Кислов). Те же муралы на страницах 403/429/502/503 и challenge ботов. Демо-контейнер httpbin из стека убран.
 
 Публикация маршрутизации: Redis `routing_updated`.

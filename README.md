@@ -9,7 +9,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 
 ## Скриншоты
 
-Файлы лежат в [`docs/screenshots/`](docs/screenshots/). Снято с локального стека: панель `http://localhost:5173`, шлюз `http://localhost:8080`. В панели можно переключить **тёмную**, **светлую** или **системную** тему (стрит-арт остаётся фоном).
+Файлы лежат в [`docs/screenshots/`](docs/screenshots/). Снято с локального стека: панель `http://localhost:5173`, шлюз `http://localhost:80`. В панели можно переключить **тёмную**, **светлую** или **системную** тему (стрит-арт остаётся фоном).
 
 **Вход — тёмная тема**
 
@@ -52,12 +52,12 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 
 Автор: Роман Сергеевич Кислов (Roman Sergeyevich Kislov) · Apache-2.0.
 
-Чтобы увидеть заставку на `:8080`, catch-all сайт `*` в seed отключён. Чтобы воспроизвести 403 после сидов:
+Чтобы увидеть заставку на `:80`, catch-all сайт `*` в seed отключён. Чтобы воспроизвести 403 после сидов:
 
 ```bash
 docker compose -f deploy/docker-compose.yml exec -T postgres \
   psql -U fence -d fence < db/seeds.sql
-curl --path-as-is -i 'http://127.0.0.1:8080/foo/../secret'
+curl --path-as-is -i 'http://127.0.0.1/foo/../secret'
 ```
 
 ## Monorepo Layout
@@ -93,8 +93,8 @@ curl --path-as-is -i 'http://127.0.0.1:8080/foo/../secret'
 
 ## HTTPS and edge ports
 
-- HTTP listener: `WAF_LISTEN_ADDR` (default `:8080`). Optional TLS listener: `WAF_TLS_LISTEN_ADDR` (empty = disabled; in `deploy/docker-compose.yml` example it is `:8443`).
-- Typical host mapping for “standard” external ports: `- "80:8080"` and `- "443:8443"` on `waf-gateway` (the container process listens on high ports; binding 80/443 on the host is fine).
+- HTTP listener: `WAF_LISTEN_ADDR` (default `:80`). TLS listener: `WAF_TLS_LISTEN_ADDR` (default `:443`; empty = HTTP only).
+- Host publish defaults: `FENCE_WAF_HTTP_PORT=80` and `FENCE_WAF_HTTPS_PORT=443` (container also listens on 80/443).
 - Per-site PEM (full chain + private key) is configured in the UI; the gateway picks a certificate by SNI using the same host patterns as routing.
 - If the DB volume was created before TLS support, restart **policy-api** so embedded SQL migrations apply (`db/007_site_tls.sql`), or run that file once manually if you use an old API binary without the migration embedded.
 
@@ -255,7 +255,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Do
 ## Service Endpoints
 
 - UI (Nginx + static Nuxt build): `http://localhost:5173`
-- WAF Gateway: `http://localhost:8080`
+- WAF Gateway: `http://localhost:80` (HTTPS `:443`)
 - Policy API (direct): `http://localhost:8082`
 - **Real client IP behind a load balancer:** on `waf-gateway`, set **`WAF_TRUSTED_PROXIES`** to comma-separated **CIDRs of the immediate TCP hop(s) to this gateway** (who you see as **TCP peer** in proxy access logs when this is unset). Only then are `X-Forwarded-For` (first non-trusted IP left-to-right), `X-Real-IP`, `True-Client-IP`, and `CF-Connecting-IP` used for **`proxy_access_logs.client_ip`**, **`waf_logs.source_ip`**, GeoIP, and structured access logs. If the TCP peer is **not** in that list, inbound forwarded headers are ignored for resolving the client (spoofing-safe). **Toward backends**, the gateway always sets **`X-Real-IP`** to that effective client; **`X-Forwarded-For`** is filled when empty, **replaced entirely** when `WAF_TRUSTED_PROXIES` is unset (so clients cannot inject a fake chain through Fence), and **left unchanged** when it was already set by a trusted hop. **`X-Forwarded-Proto`** is added when missing.
 - **Dashboard map / `country_code` in access logs:** set **`GEOIP_MMDB_PATH`** on `waf-gateway` to a MaxMind **GeoLite2 Country** `.mmdb` file (or rely on **`CF-IPCountry`** from Cloudflare). In **`deploy/docker-compose.yml`** a named volume **`fence_geoip_data`** is mounted at **`/var/lib/fence/geoip`** on **`policy-api`** (read-write) and **`waf-gateway`** (read-only) with **`GEOIP_MMDB_PATH=/var/lib/fence/geoip/GeoLite2-Country.mmdb`**. Install the file from the UI (**Malware → GeoIP**: upload or HTTPS fetch) or copy it into the volume manually, then the gateway reloads the reader via Redis (`geoip_mmdb_updated`) without a container restart. If the file is missing, the gateway logs a GeoIP open error and country stays empty until fixed.
