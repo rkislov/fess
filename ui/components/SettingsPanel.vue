@@ -25,8 +25,22 @@
       </button>
     </div>
 
+    <section v-if="sub === 'appearance'" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
+      <h3 class="text-sm font-semibold text-white">Оформление</h3>
+      <p class="mt-0.5 text-xs text-slate-500">
+        Стрит-арт остаётся фоном. Светлая тема осветляет вуаль и карточки. Выбор хранится в этом браузере.
+      </p>
+      <div class="mt-4">
+        <ThemeToggle />
+      </div>
+      <p class="mt-3 text-xs text-slate-500">
+        Сейчас:
+        <span class="font-medium text-slate-300">{{ appearanceHint }}</span>
+      </p>
+    </section>
+
     <!-- Admin: users -->
-    <section v-if="sub === 'users' && isAdmin" class="space-y-6">
+    <section v-else-if="sub === 'users' && isAdmin" class="space-y-6">
       <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
         <h3 class="text-sm font-semibold text-white">Пользователи</h3>
         <p class="mt-0.5 text-xs text-slate-500">Локальные учётные записи и записи после входа через LDAP</p>
@@ -136,7 +150,10 @@
       </button>
     </section>
 
-    <AiSettingsPanel v-else-if="sub === 'ai' && isAdmin" />
+    <div v-else-if="sub === 'ai'" class="space-y-6">
+      <AiSettingsPanel v-if="isAdmin" />
+      <AiAssistantPanel />
+    </div>
 
     <!-- Admin: SIEM -->
     <section v-else-if="sub === 'siem' && isAdmin" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
@@ -227,8 +244,10 @@ import type { AuthUser } from '~/composables/useUiAuth'
 const { apiUrl, apiFetch } = useApi()
 const auth = useUiAuth()
 const isAdmin = computed(() => auth.isAdmin())
+const { preference: themePref, resolved: themeResolved } = useUiTheme()
 
 type SubId =
+  | 'appearance'
   | 'users'
   | 'auth'
   | 'siem'
@@ -240,6 +259,8 @@ type SubId =
   | 'ratelimit'
   | 'logging'
   | 'exceptions'
+
+const appearanceSection = [{ id: 'appearance' as const, label: 'Оформление', icon: '🎨' }]
 
 const adminSections = [
   { id: 'users' as const, label: 'Пользователи', icon: '👤' },
@@ -258,7 +279,18 @@ const securitySections = [
   { id: 'exceptions' as const, label: 'Исключения', icon: '🛡️' },
 ]
 
-const visibleSections = computed(() => (isAdmin.value ? [...adminSections, ...securitySections] : securitySections))
+const visibleSections = computed(() =>
+  isAdmin.value
+    ? [...appearanceSection, ...adminSections, ...securitySections]
+    : [...appearanceSection, ...securitySections],
+)
+
+const appearanceHint = computed(() => {
+  const pref =
+    themePref.value === 'light' ? 'светлая' : themePref.value === 'dark' ? 'тёмная' : 'как в системе'
+  const now = themeResolved.value === 'light' ? 'светлая' : 'тёмная'
+  return `${pref} (сейчас на экране: ${now})`
+})
 
 const sub = ref<SubId>('policies')
 

@@ -226,7 +226,7 @@ func applyThreatFeedGate(
 	}
 	if doBlock {
 		writeProxyAccessLog(r.Context(), db, r, mr, "threat_feed_block", ipRes)
-		http.Error(w, "blocked by threat intelligence feed", http.StatusForbidden)
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "Индикатор угрозы", "Адрес есть в блоклисте ThreatFox.")
 		return threatFeedGateResult{Responded: true}
 	}
 	if snap.GW.LogHits {

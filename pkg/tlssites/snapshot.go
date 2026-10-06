@@ -46,6 +46,10 @@ func (s *Store) Current() Snapshot {
 func (s *Store) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	sni := strings.TrimSpace(strings.ToLower(hello.ServerName))
 	snap := s.Current()
+	if sni == "" && len(snap.Entries) == 1 {
+		c := snap.Entries[0].Cert
+		return &c, nil
+	}
 	for _, e := range snap.Entries {
 		if routing.HostMatch(e.HostPattern, sni) {
 			c := e.Cert
@@ -59,13 +63,18 @@ func (s *Store) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, er
 func LoadSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 	var out Snapshot
 	rows, err := db.QueryContext(ctx, `
-SELECT host_pattern, COALESCE(tls_cert_pem, ''), COALESCE(tls_key_pem, '')
-FROM sites
-WHERE enabled = TRUE
-  AND tls_enabled = TRUE
-  AND length(trim(COALESCE(tls_cert_pem, ''))) > 0
-  AND length(trim(COALESCE(tls_key_pem, ''))) > 0
-ORDER BY priority ASC, created_at ASC`)
+SELECT s.host_pattern,
+  COALESCE(NULLIF(trim(c.cert_pem), ''), COALESCE(s.tls_cert_pem, '')),
+  COALESCE(NULLIF(trim(c.key_pem), ''), COALESCE(s.tls_key_pem, ''))
+FROM sites s
+LEFT JOIN certificates c ON c.id = s.certificate_id
+WHERE s.enabled = TRUE
+  AND s.tls_enabled = TRUE
+  AND (
+    (length(trim(COALESCE(c.cert_pem, ''))) > 0 AND length(trim(COALESCE(c.key_pem, ''))) > 0)
+    OR (length(trim(COALESCE(s.tls_cert_pem, ''))) > 0 AND length(trim(COALESCE(s.tls_key_pem, ''))) > 0)
+  )
+ORDER BY s.priority ASC, s.created_at ASC`)
 	if err != nil {
 		return out, fmt.Errorf("tls sites query: %w", err)
 	}

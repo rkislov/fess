@@ -117,6 +117,7 @@ func main() {
 	go runThreatFeedBootstrap(context.Background(), db, rdb)
 	go runSIEMExporter(context.Background(), db)
 	go runPrometheusDBCollector(context.Background(), db)
+	go runACMERenewPoller(context.Background(), db, rdb)
 
 	metricsAddr := getenv("POLICY_API_METRICS_ADDR", ":9092")
 	prommetrics.ListenAndServe(metricsAddr)
@@ -280,6 +281,15 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/owasp/import", func(w http.ResponseWriter, r *http.Request) {
 		importOWASPHandler(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/certificates", func(w http.ResponseWriter, r *http.Request) {
+		certificatesHandler(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/certificates/", func(w http.ResponseWriter, r *http.Request) {
+		certificateByIDHandler(w, r, db, rdb)
+	})
+	mux.HandleFunc("/api/v1/settings/acme", func(w http.ResponseWriter, r *http.Request) {
+		acmeSettingsHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/sites", func(w http.ResponseWriter, r *http.Request) {
 		sitesCollectionHandler(w, r, db, rdb)

@@ -7,8 +7,7 @@
         <div>
           <h2 class="text-lg font-semibold text-white">Состояние платформы FESS</h2>
           <p class="mt-1 text-sm text-slate-400">
-            Нагрузка хоста (CPU, память, load) и контейнеры стека. Для статуса Docker смонтируйте
-            <span class="font-mono text-slate-300">/var/run/docker.sock</span> в policy-api.
+            Нагрузка хоста (CPU, память, load) и контейнеры стека FESS.
           </p>
         </div>
         <p v-if="sysHealth" class="font-mono text-[11px] text-slate-500">
@@ -141,7 +140,7 @@
             <h3 class="text-sm font-semibold text-white">Внутренний антивирус (ICAP)</h3>
             <p class="mt-0.5 text-xs text-slate-500">ClamAV / ICAP — проверенные тела запросов за период</p>
           </div>
-          <span class="text-lg" aria-hidden="true">🛡️</span>
+          <img src="/brand/splash.jpg" alt="" class="h-8 w-8 rounded-md object-cover object-[12%_center] ring-1 ring-white/10" />
         </div>
         <p class="mt-4 font-mono text-3xl font-semibold tabular-nums text-emerald-300">
           {{ fmtCount(malwareScans.icap_checked) }}
@@ -425,6 +424,7 @@ import type { Map as LeafMap, CircleMarker } from 'leaflet'
 import type { Chart as ChartType } from 'chart.js'
 
 const { apiUrl, apiFetch } = useApi()
+const { resolved: uiTheme } = useUiTheme()
 const { openWafEventsExplorer, openWafEventDetail } = useHashAppView()
 
 type CountRow = { key: string; count: number }
@@ -712,6 +712,30 @@ const OUTCOME_SERIES_COLORS: Record<string, string> = {
   geo_block: 'rgb(34, 197, 94)',
 }
 
+function isLightTheme() {
+  return import.meta.client && document.documentElement.classList.contains('theme-light')
+}
+
+function chartTick() {
+  return isLightTheme() ? '#57534e' : '#94a3b8'
+}
+
+function chartTickStrong() {
+  return isLightTheme() ? '#1c1917' : '#cbd5e1'
+}
+
+function chartGrid() {
+  return isLightTheme() ? 'rgba(28,25,23,0.12)' : 'rgba(148,163,184,0.12)'
+}
+
+function chartGridSoft() {
+  return isLightTheme() ? 'rgba(28,25,23,0.08)' : 'rgba(148,163,184,0.08)'
+}
+
+function chartDoughnutBorder() {
+  return isLightTheme() ? '#faf7f1' : '#0f172a'
+}
+
 function seriesColor(id: string, fallbackIdx = 0) {
   if (OUTCOME_SERIES_COLORS[id]) return OUTCOME_SERIES_COLORS[id]
   const palette = ['rgb(94, 234, 212)', 'rgb(129, 140, 248)', 'rgb(251, 146, 60)', 'rgb(190, 242, 100)']
@@ -985,8 +1009,8 @@ async function buildBar(
         },
       },
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.12)' } },
-        y: { ticks: { color: '#cbd5e1', maxRotation: 0 }, grid: { display: false } },
+        x: { ticks: { color: chartTick() }, grid: { color: chartGrid() } },
+        y: { ticks: { color: chartTickStrong(), maxRotation: 0 }, grid: { display: false } },
       },
     },
   })
@@ -1037,17 +1061,17 @@ async function buildTrafficLineChart(canvas: HTMLCanvasElement, labels: string[]
       scales: {
         x: {
           ticks: {
-            color: '#94a3b8',
+            color: chartTick(),
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 14,
           },
-          grid: { color: 'rgba(148,163,184,0.08)' },
+          grid: { color: chartGridSoft() },
         },
         y: {
           beginAtZero: true,
-          ticks: { color: '#94a3b8' },
-          grid: { color: 'rgba(148,163,184,0.12)' },
+          ticks: { color: chartTick() },
+          grid: { color: chartGrid() },
         },
       },
     },
@@ -1076,7 +1100,7 @@ async function buildDoughnut(
           data,
           backgroundColor: bg,
           borderWidth: 1,
-          borderColor: '#0f172a',
+          borderColor: chartDoughnutBorder(),
         },
       ],
     },
@@ -1085,7 +1109,7 @@ async function buildDoughnut(
       maintainAspectRatio: false,
       plugins: {
         legend: showLegend
-          ? { position: 'bottom', labels: { color: '#cbd5e1', boxWidth: 12 } }
+          ? { position: 'bottom', labels: { color: chartTickStrong(), boxWidth: 12 } }
           : { display: false },
       },
     },
@@ -1289,7 +1313,10 @@ async function renderMap(rows: CountryRow[]) {
   map.attributionControl.setPrefix(
     '<a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>',
   )
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  const tiles = isLightTheme()
+    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  L.tileLayer(tiles, {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     subdomains: 'abcd',
     maxZoom: 19,
@@ -1380,6 +1407,13 @@ watch(autoRefreshSec, () => {
     }
   }
   startRefreshTimer()
+})
+
+watch(uiTheme, () => {
+  if (!summary.value) return
+  void renderCharts(summary.value)
+  void renderTrafficChart(summary.value)
+  void renderMap(summary.value.by_country ?? [])
 })
 
 onBeforeUnmount(() => {

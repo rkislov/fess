@@ -16,7 +16,7 @@ RUN set -eux; \
 
 FROM alpine:3.20
 RUN apk add --no-cache wget
-RUN adduser -D -g "" appuser
+RUN adduser -D -g "" appuser && addgroup appuser root
 RUN mkdir -p /var/lib/fence/geoip && chown appuser:appuser /var/lib/fence/geoip
 WORKDIR /app
 COPY --from=builder /out/policy-api /usr/local/bin/policy-api

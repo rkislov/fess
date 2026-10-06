@@ -6,7 +6,141 @@
   html {
     @apply scroll-smooth;
   }
-  body {
-    @apply antialiased text-slate-200;
+  html.theme-dark,
+  html:not(.theme-light) {
+    color-scheme: dark;
   }
+  html.theme-light {
+    color-scheme: light;
+  }
+  body {
+    @apply antialiased;
+  }
+  html.theme-dark body,
+  html:not(.theme-light) body {
+    @apply bg-[#080809] text-slate-200;
+  }
+  html.theme-light body {
+    @apply bg-[#f4efe6] text-stone-800;
+  }
+}
+
+@layer components {
+  .fess-mural-veil {
+    background-image: linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0.5),
+      rgb(2 6 23 / 0.8),
+      rgb(2 6 23 / 0.92)
+    );
+  }
+  html.theme-light .fess-mural-veil {
+    background-image: linear-gradient(
+      to bottom,
+      rgb(255 250 244 / 0.78),
+      rgb(250 246 238 / 0.9),
+      rgb(247 243 235 / 0.96)
+    );
+  }
+  .fess-login-veil {
+    background-image: linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.55), #080809);
+  }
+  html.theme-light .fess-login-veil {
+    background-image: linear-gradient(
+      to bottom,
+      rgb(255 252 248 / 0.35),
+      rgb(255 250 244 / 0.78),
+      rgb(247 243 235 / 0.96)
+    );
+  }
+}
+
+/* Карточки и поля панелей: текущие классы slate рассчитаны на тёмную тему. */
+html.theme-light [class*='bg-slate-950'] {
+  background-color: rgb(255 252 248 / 0.94) !important;
+}
+html.theme-light [class*='bg-slate-900'] {
+  background-color: rgb(255 255 255 / 0.84) !important;
+}
+html.theme-light [class*='bg-slate-800'] {
+  background-color: rgb(250 247 241 / 0.95) !important;
+}
+html.theme-light [class*='bg-slate-700'] {
+  background-color: rgb(231 226 217) !important;
+}
+
+html.theme-light [class*='text-slate-1'],
+html.theme-light [class*='text-slate-2'] {
+  color: #1c1917 !important;
+}
+html.theme-light [class*='text-slate-3'] {
+  color: #44403c !important;
+}
+html.theme-light [class*='text-slate-4'] {
+  color: #57534e !important;
+}
+html.theme-light [class*='text-slate-5'],
+html.theme-light [class*='text-slate-6'] {
+  color: #78716c !important;
+}
+
+html.theme-light h1.text-white,
+html.theme-light h2.text-white,
+html.theme-light h3.text-white,
+html.theme-light h4.text-white,
+html.theme-light p.text-white,
+html.theme-light span.text-white,
+html.theme-light label.text-white,
+html.theme-light div.text-white,
+html.theme-light td.text-white,
+html.theme-light th.text-white,
+html.theme-light li.text-white,
+html.theme-light dt.text-white,
+html.theme-light dd.text-white,
+html.theme-light strong.text-white {
+  color: #1c1917 !important;
+}
+
+html.theme-light button[class*='bg-teal-'],
+html.theme-light button[class*='bg-emerald-'],
+html.theme-light button[class*='bg-violet-'],
+html.theme-light button[class*='bg-rose-'],
+html.theme-light button[class*='from-teal-'],
+html.theme-light button[class*='from-emerald-'],
+html.theme-light a[class*='bg-teal-'],
+html.theme-light a[class*='bg-emerald-'] {
+  color: #fff !important;
+}
+
+.fess-logout-btn {
+  border-color: rgb(255 255 255 / 0.22);
+  background: rgb(0 0 0 / 0.45);
+  color: #f4f1ea;
+}
+html.theme-light .fess-logout-btn {
+  border-color: rgb(28 25 23 / 0.35) !important;
+  background: rgb(255 255 255 / 0.95) !important;
+  color: #1c1917 !important;
+}
+html.theme-light .fess-logout-btn:hover {
+  border-color: #e11d2e !important;
+  background: #e11d2e !important;
+  color: #fff !important;
+}
+
+html.theme-light [class*='border-slate'] {
+  border-color: rgb(28 25 23 / 0.14) !important;
+}
+html.theme-light [class*='border-white'] {
+  border-color: rgb(28 25 23 / 0.12) !important;
+}
+
+html.theme-light input:not([type='checkbox']):not([type='radio']),
+html.theme-light select,
+html.theme-light textarea {
+  color: #1c1917;
+}
+
+html.theme-light ::placeholder {
+  color: #a8a29e;
 }

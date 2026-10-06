@@ -1,82 +1,97 @@
 <template>
   <div
-    class="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950/40 to-slate-950 px-4 py-12"
+    class="relative flex min-h-screen flex-col overflow-hidden bg-cover bg-center bg-no-repeat"
+    :class="isLight ? 'bg-[#f4efe6] text-stone-800' : 'bg-[#080809] text-[#f4f1ea]'"
+    style="background-image: url('/brand/splash.jpg')"
   >
-    <div
-      class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(99,102,241,0.22),transparent)]"
-    />
-    <div
-      class="pointer-events-none absolute -right-32 top-1/4 h-72 w-72 rounded-full bg-teal-500/10 blur-3xl"
-    />
-    <div
-      class="pointer-events-none absolute -left-32 bottom-1/4 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl"
-    />
-
-    <div class="relative w-full max-w-md">
-      <div class="mb-8 text-center">
-        <div
-          class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-indigo-500 text-2xl shadow-lg shadow-indigo-900/40"
-          aria-hidden="true"
+    <div class="flex min-h-screen flex-col justify-end fess-login-veil">
+      <main class="mx-auto w-full max-w-xl px-6 pb-8 pt-16 sm:px-8">
+        <p class="text-[0.72rem] font-bold uppercase tracking-[0.38em] text-[#e11d2e]">FESS</p>
+        <h1
+          class="mt-2 text-[clamp(2.4rem,8vw,4.4rem)] font-extrabold uppercase leading-[0.95] tracking-tight [text-shadow:0_2px_0_rgb(0_0_0_/_0.35)]"
+          :class="isLight ? 'text-stone-900' : 'text-white'"
         >
-          🛡️
-        </div>
-        <h1 class="text-2xl font-semibold tracking-tight text-white">FESS</h1>
-        <p class="mt-2 text-sm text-slate-400">Frontend Security Server — панель управления WAF, антивирусом и сайтами</p>
-      </div>
+          Войти
+        </h1>
+        <p class="mt-3 max-w-md text-[1.05rem]" :class="isLight ? 'text-stone-700' : 'text-[#ddd7cc]'">
+          Frontend Security Server — панель управления WAF, антивирусом и сайтами.
+        </p>
 
-      <form
-        class="rounded-2xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-md"
-        @submit.prevent="submit"
+        <form class="mt-8 max-w-md space-y-4" @submit.prevent="submit">
+          <p
+            v-if="err"
+            class="rounded border border-rose-500/40 bg-rose-950/70 px-3 py-2 text-sm text-rose-100"
+          >
+            {{ err }}
+          </p>
+
+          <label class="block">
+            <span
+              class="text-xs font-semibold uppercase tracking-wider"
+              :class="isLight ? 'text-stone-500' : 'text-[#9a958c]'"
+            >Логин</span>
+            <input
+              v-model="username"
+              type="text"
+              autocomplete="username"
+              class="mt-1.5 w-full border px-4 py-3 outline-none focus:border-[#e11d2e]"
+              :class="
+                isLight
+                  ? 'border-stone-900/15 bg-white/80 text-stone-900 placeholder:text-stone-400'
+                  : 'border-white/15 bg-black/55 text-[#f4f1ea] placeholder:text-[#6e6a63]'
+              "
+              placeholder="Введите логин"
+            />
+          </label>
+
+          <label class="block">
+            <span
+              class="text-xs font-semibold uppercase tracking-wider"
+              :class="isLight ? 'text-stone-500' : 'text-[#9a958c]'"
+            >Пароль</span>
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              class="mt-1.5 w-full border px-4 py-3 outline-none focus:border-[#e11d2e]"
+              :class="
+                isLight
+                  ? 'border-stone-900/15 bg-white/80 text-stone-900 placeholder:text-stone-400'
+                  : 'border-white/15 bg-black/55 text-[#f4f1ea] placeholder:text-[#6e6a63]'
+              "
+              placeholder="Введите пароль"
+            />
+          </label>
+
+          <button
+            type="submit"
+            class="mt-2 inline-flex min-w-[10rem] items-center justify-center bg-[#e11d2e] px-5 py-3 text-sm font-bold uppercase tracking-wider text-white hover:bg-[#c41826] disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="busy"
+          >
+            {{ busy ? 'Вход…' : 'Войти' }}
+          </button>
+        </form>
+      </main>
+
+      <footer
+        class="flex flex-col gap-3 border-t px-6 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-8"
+        :class="isLight ? 'border-stone-900/10 text-stone-500' : 'border-white/10 text-[#8c877e]'"
       >
-        <p v-if="err" class="mb-4 rounded-lg border border-rose-500/30 bg-rose-950/50 px-3 py-2 text-sm text-rose-200">
-          {{ err }}
+        <p>
+          Стрит-арт для FESS · автор
+          <strong class="font-semibold" :class="isLight ? 'text-stone-800' : 'text-[#d8d2c6]'">Роман Сергеевич Кислов</strong>
+          (Roman Sergeyevich Kislov) · Apache-2.0
         </p>
-
-        <label class="block">
-          <span class="text-sm font-medium text-slate-300">Логин</span>
-          <input
-            v-model="username"
-            type="text"
-            autocomplete="username"
-            class="mt-1.5 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-4 py-3 text-slate-100 outline-none ring-2 ring-transparent transition placeholder:text-slate-600 focus:border-teal-500/50 focus:ring-teal-500/25"
-            placeholder="Введите логин"
-          />
-        </label>
-
-        <label class="mt-5 block">
-          <span class="text-sm font-medium text-slate-300">Пароль</span>
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            class="mt-1.5 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-4 py-3 text-slate-100 outline-none ring-2 ring-transparent transition placeholder:text-slate-600 focus:border-teal-500/50 focus:ring-teal-500/25"
-            placeholder="Введите пароль"
-          />
-        </label>
-
-        <button
-          type="submit"
-          class="mt-8 w-full rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-teal-900/30 transition hover:from-teal-400 hover:to-emerald-500 focus:outline-none focus:ring-2 focus:ring-teal-400/50 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="busy"
-        >
-          {{ busy ? 'Вход…' : 'Войти' }}
-        </button>
-
-        <p class="mt-6 text-center text-xs leading-relaxed text-slate-500">
-          По умолчанию после первого запуска:
-          <code class="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">admin</code>
-          /
-          <code class="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">fence</code>
-          <br />
-          <span class="text-slate-600">Поддерживаются локальная и доменная (LDAP) авторизация — настройка в разделе «Настройки».</span>
-        </p>
-      </form>
+        <ThemeToggle compact />
+      </footer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 const auth = useUiAuth()
+const { resolved } = useUiTheme()
+const isLight = computed(() => resolved.value === 'light')
 const username = ref('')
 const password = ref('')
 const err = ref('')

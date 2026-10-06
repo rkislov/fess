@@ -26,8 +26,12 @@ func reloadRoutingTable(db *sql.DB, defaultUpstream *url.URL, store *routing.Sto
 		log.Printf("routing reload failed: %v", err)
 		return
 	}
+	def := "(splash)"
+	if snap.Default != nil {
+		def = snap.Default.String()
+	}
 	store.Swap(snap)
-	log.Printf("routing table loaded sites=%d default=%s", len(snap.Sites), snap.Default.String())
+	log.Printf("routing table loaded sites=%d default=%s", len(snap.Sites), def)
 }
 
 func reloadTLSTable(db *sql.DB, tlsStore *tlssites.Store) {
@@ -180,6 +184,10 @@ func (t *backendTLSPickTransport) RoundTrip(req *http.Request) (*http.Response, 
 func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRes *clientip.Resolver) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		FlushInterval: 100 * time.Millisecond,
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			log.Printf("upstream error: %v", err)
+			writeFESSError(w, http.StatusBadGateway, pageError, "Бэкенд недоступен", "FESS не смог связаться с upstream. Проверьте сайт и бэкенд в панели.")
+		},
 		Director: func(req *http.Request) {
 			originalHost := publicHostHeader(req, ipRes)
 			originalScheme := requestScheme(req)
@@ -187,6 +195,9 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 			target := mr.Backend
 			if target == nil {
 				target = defaultUpstream
+			}
+			if target == nil {
+				target = &url.URL{Scheme: "http", Host: "127.0.0.1:9"}
 			}
 			skip := mr.TLSSkipVerify && target != nil && target.Scheme == "https"
 			ctx := routing.WithTLSSkipVerify(req.Context(), skip)

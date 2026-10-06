@@ -272,7 +272,7 @@ func botFinish(
 	}
 	if blocked {
 		writeProxyAccessLog(r.Context(), db, r, mr, outcome, ipRes)
-		http.Error(w, "blocked by bot protection", http.StatusForbidden)
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "Похоже на бота", "Защита FESS отклонила этот запрос.")
 		return botProtectionGateResult{Responded: true}
 	}
 	return botProtectionGateResult{ProxyOutcomeHint: outcome}
@@ -294,9 +294,7 @@ func botChallenge(
 	writeBotProtectionLog(r.Context(), db, r, "bot_challenge", false, ipRes, map[string]any{"score": score.Score, "detail": detail})
 	writeProxyAccessLog(r.Context(), db, r, mr, "bot_challenge", ipRes)
 	verifyURL := botprotection.BuildChallengeVerifyURL(r, snap.Cfg.Challenge, ipRes.ClientHost(r))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte(botprotection.ChallengePageHTML(verifyURL)))
+	writeFESSChallenge(w, verifyURL)
 	return botProtectionGateResult{Responded: true}
 }
 

@@ -258,6 +258,17 @@ func dockerSockPath() string {
 	return "/var/run/docker.sock"
 }
 
+func dockerSockError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if os.IsPermission(err) || strings.Contains(msg, "permission denied") {
+		return "нет прав на сокет Docker (policy-api должен быть в группе владельца сокета; на Linux задайте DOCKER_GID)"
+	}
+	return msg
+}
+
 func collectDockerHealth(ctx context.Context) dockerHealth {
 	sock := dockerSockPath()
 	out := dockerHealth{Socket: sock, Containers: []containerHealth{}}
@@ -279,7 +290,7 @@ func collectDockerHealth(ctx context.Context) dockerHealth {
 	}
 	resp, err := cli.Do(req)
 	if err != nil {
-		out.Error = err.Error()
+		out.Error = dockerSockError(err)
 		return out
 	}
 	defer resp.Body.Close()

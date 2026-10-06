@@ -100,7 +100,7 @@ func applyRateLimitGate(
 	}
 	writeRateLimitLog(r.Context(), db, r, mr, ipRes, detail, cfg)
 	writeProxyAccessLog(r.Context(), db, r, mr, "rate_limit", ipRes)
-	http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+	writeFESSError(w, http.StatusTooManyRequests, pageError, "Слишком много запросов", "Сработал rate limit FESS. Подождите и повторите попытку.")
 	return rateLimitGateResult{Responded: true}
 }
 

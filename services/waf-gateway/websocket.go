@@ -41,7 +41,7 @@ func serveWebSocketUpgrade(
 	}
 	if !mr.WebSocketEnabled {
 		writeProxyAccessLog(r.Context(), db, r, mr, "websocket_disabled", ipRes)
-		http.Error(w, "WebSocket is not enabled for this backend/path", http.StatusForbidden)
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "WebSocket выключен", "Для этого пути WebSocket не разрешён.")
 		return
 	}
 
@@ -76,7 +76,7 @@ func serveWebSocketUpgrade(
 
 	switch effectiveAction {
 	case "block":
-		http.Error(w, "blocked by WAF policy", http.StatusForbidden)
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "Заблокировано политикой", "Правило WAF отклонило этот WebSocket.")
 	case "redirect":
 		target := decision.RedirectURL
 		if target == "" {
@@ -84,10 +84,16 @@ func serveWebSocketUpgrade(
 		}
 		http.Redirect(w, r, target, http.StatusFound)
 	case "replace":
+		if maybeServeSplash(w, r, mr, db, ipRes) {
+			return
+		}
 		proxy.ServeHTTP(w, r)
 	default:
 		if decision.Action == "deny_on_error" && strings.EqualFold(failMode, "close") {
-			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			writeFESSError(w, http.StatusServiceUnavailable, pageError, "Временно недоступно", "FESS не смог применить политику (fail-closed).")
+			return
+		}
+		if maybeServeSplash(w, r, mr, db, ipRes) {
 			return
 		}
 		proxy.ServeHTTP(w, r)

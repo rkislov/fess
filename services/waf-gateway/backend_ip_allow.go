@@ -22,6 +22,6 @@ func enforceBackendIPAllow(w http.ResponseWriter, r *http.Request, mr routing.Ma
 		return true
 	}
 	writeProxyAccessLog(r.Context(), db, r, mr, "backend_ip_deny", ipRes)
-	http.Error(w, "forbidden: client IP not allowed for this path", http.StatusForbidden)
+	writeFESSError(w, http.StatusForbidden, pageBlocked, "Доступ запрещён", "Ваш IP не входит в список разрешённых для этого пути.")
 	return false
 }

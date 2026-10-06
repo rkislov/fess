@@ -78,7 +78,7 @@ export function useUiAuth() {
 
   async function bootstrapEnvLogin(): Promise<boolean> {
     const u = String(config.public.uiUser ?? 'admin').trim()
-    const p = String(config.public.uiPassword ?? 'fence')
+    const p = String(config.public.uiPassword ?? 'fessfess')
     const r = await loginWithCredentials(u, p)
     return r.ok
   }
@@ -101,7 +101,7 @@ export function useUiAuth() {
     user.value = null
     sessionStorage.removeItem(SESSION_KEY)
 
-    // UI-gate выкл.: тихий вход локальным пользователем из env (admin/fence).
+    // UI-gate выкл.: тихий вход локальным пользователем из env (admin/fessfess).
     if (!gateEnabled()) {
       await bootstrapEnvLogin()
     }

@@ -47,9 +47,9 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | Метрики gateway | http://localhost:9091/metrics |
 | Метрики policy-api | http://localhost:9092/metrics |
 
-**Первый вход в API:** при пустой таблице `users` создаётся пользователь `admin` с паролем `fence` (смените в UI → Настройки → Пользователи).
+**Первый вход в API:** при пустой таблице `users` создаётся пользователь `admin` с паролем `fessfess` (смените в UI → Настройки → Пользователи). Экран входа **не** показывает логин и пароль.
 
-**Демо-экран UI:** логин `admin` / `fence` задаётся переменными `FENCE_UI_*` при **сборке** образа ui; это отдельный от JWT механизм (см. раздел 8).
+**Демо-экран UI:** `FENCE_UI_*` используются только для тихого входа, если `FENCE_UI_AUTH_ENABLED=false` (см. раздел 8).
 
 ---
 
@@ -93,7 +93,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 |------------|--------------|----------|
 | `WAF_LISTEN_ADDR` | `:8080` | HTTP listener |
 | `WAF_TLS_LISTEN_ADDR` | `:8443` | HTTPS (SNI + PEM из БД); пусто = только HTTP |
-| `UPSTREAM_URL` | `http://httpbin:8080` | Fallback, если Host не совпал ни с одним сайтом |
+| `UPSTREAM_URL` | пусто | Если Host не совпал ни с одним сайтом — заставка FESS (стрит-арт). Укажите URL, только если нужен запасной reverse-proxy. |
 | `WAF_FAIL_MODE` | `open` | `open` — при недоступности policy/Redis пропускать; `closed` — 503 |
 | `WAF_TRUSTED_PROXIES` | см. example | CIDR **TCP-пиров** к шлюзу (Nginx/LB) для разбора X-Forwarded-For |
 | `WAF_METRICS_ADDR` | `:9091` | Prometheus |
@@ -126,6 +126,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | Пользователи / LDAP | `users`, `auth_settings` | RBAC, LDAP |
 | SIEM | `siem_export_settings` | TCP syslog / CEF |
 | IP bypass | `ip_bypass_rules` | Исключения из WAF |
+| Оформление UI | `localStorage` (`fess-ui-theme`) | Светлая / тёмная / как в системе; стрит-арт остаётся фоном |
 | Bot protection | настройки сайта | Защита от ботов |
 | Rate limit | `rate_limit_settings`, `backends.rate_limit_override`, `backend_paths.rate_limit_override` | Лимит RPS: система → бэкенд → путь |
 
@@ -176,6 +177,7 @@ API: `GET/PUT /api/v1/settings/rate-limit`. При сохранении сист
 - **Бэкенды:** `base_url` (`http://` / `https://`), `tls_skip_verify` для lab.
 - **TLS на шлюзе:** PEM цепочка + ключ в записи сайта; listener `WAF_TLS_LISTEN_ADDR`.
 - На границе сети: `80:8080`, `443:8443` на сервис `waf-gateway`.
+- Если Host не совпал — HTML-заставка FESS (стрит-арт, автор Роман Сергеевич Кислов). Те же муралы на страницах 403/429/502/503 и challenge ботов. Демо-контейнер httpbin из стека убран.
 
 Публикация маршрутизации: Redis `routing_updated`.
 
@@ -274,7 +276,7 @@ UI → **Настройки → SIEM**: TCP хост/порт, формат CEF/
 
 Общие query-параметры: `q` (поиск по полям), `hours` (`0` = всё время), фильтры по колонкам (см. README).
 
-**Дашборд:** RPS, топ правил, карта (нужен GeoIP). Блок **«Состояние платформы FESS»** — CPU/память/load хоста и список контейнеров compose (нужен сокет `FENCE_DOCKER_SOCK`, по умолчанию `/var/run/docker.sock` смонтирован в policy-api).
+**Дашборд:** RPS, топ правил, карта (нужен GeoIP). Блок **«Состояние платформы FESS»** — CPU/память/load хоста и список контейнеров compose. Сокет `FENCE_DOCKER_SOCK` смонтирован в policy-api; процесс `appuser` входит в группу `root`, чтобы читать сокет Docker Desktop (`root:root` 660). На Linux задайте **`DOCKER_GID`** (`stat -c '%g' /var/run/docker.sock`). Проект Compose: `fess`.
 
 **Prometheus:** `/metrics` на портах 9091 (gateway) и 9092 (policy-api).
 

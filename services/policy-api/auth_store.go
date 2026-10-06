@@ -20,7 +20,7 @@ func ensureDefaultAdmin(ctx context.Context, db *sql.DB) error {
 	if n > 0 {
 		return nil
 	}
-	hash, err := auth.HashPassword("fence")
+	hash, err := auth.HashPassword("fessfess")
 	if err != nil {
 		return err
 	}

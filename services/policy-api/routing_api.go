@@ -247,7 +247,9 @@ WHERE id=$1::uuid`,
 func listSites(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id::text, name, host_pattern, priority, enabled, COALESCE(policy_id::text, ''), tls_enabled,
-  (length(trim(COALESCE(tls_cert_pem, ''))) > 0 AND length(trim(COALESCE(tls_key_pem, ''))) > 0) AS tls_has_certificate,
+  (length(trim(COALESCE(tls_cert_pem, ''))) > 0 AND length(trim(COALESCE(tls_key_pem, ''))) > 0
+    OR certificate_id IS NOT NULL) AS tls_has_certificate,
+  COALESCE(certificate_id::text, ''),
   created_at, updated_at
 FROM sites
 ORDER BY priority ASC, created_at ASC`)
@@ -265,13 +267,14 @@ ORDER BY priority ASC, created_at ASC`)
 		PolicyID          string    `json:"policy_id"`
 		TLSEnabled        bool      `json:"tls_enabled"`
 		TLSHasCertificate bool      `json:"tls_has_certificate"`
+		CertificateID     string    `json:"certificate_id"`
 		CreatedAt         time.Time `json:"created_at"`
 		UpdatedAt         time.Time `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
-		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.TLSEnabled, &it.TLSHasCertificate, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.TLSEnabled, &it.TLSHasCertificate, &it.CertificateID, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

@@ -72,6 +72,8 @@ type MatchResult struct {
 	MatchedPathPrefix   string // normalized prefix used for this backend ("" = default)
 	BackendRateOverride ratelimit.Override
 	PathRateOverride    ratelimit.Override
+	// Splash is true when no virtual host matched — gateway shows the FESS mural instead of a default upstream.
+	Splash bool
 }
 
 // Match returns upstream URL and optional policy filter for the HTTP Host header and request path.
@@ -103,7 +105,7 @@ func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 			}
 		}
 	}
-	return MatchResult{Backend: s.Default, PolicyID: ""}
+	return MatchResult{Backend: s.Default, PolicyID: "", Splash: true}
 }
 
 func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {

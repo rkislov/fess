@@ -27,6 +27,9 @@ func truncateUTF8(s string, maxBytes int) string {
 }
 
 func writeProxyAccessLog(ctx context.Context, db *sql.DB, r *http.Request, mr routing.MatchResult, outcome string, ipRes *clientip.Resolver) {
+	if db == nil || r == nil {
+		return
+	}
 	host := publicHostHeader(r, ipRes)
 	up := ""
 	if mr.Backend != nil {

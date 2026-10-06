@@ -25,21 +25,26 @@ import (
 	"fence/pkg/prommetrics"
 	"fence/pkg/routing"
 	"fence/pkg/tlssites"
+
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
-	target := getenv("UPSTREAM_URL", "http://localhost:8081")
+	target := strings.TrimSpace(getenv("UPSTREAM_URL", ""))
 	listen := getenv("WAF_LISTEN_ADDR", ":8080")
 	tlsListen := getenv("WAF_TLS_LISTEN_ADDR", "")
 	pgDSN := getenv("POSTGRES_DSN", "postgres://fence:fence@localhost:5432/fence?sslmode=disable")
 	redisAddr := getenv("REDIS_ADDR", "localhost:6379")
 	failMode := getenv("WAF_FAIL_MODE", "open")
 
-	upstream, err := url.Parse(target)
-	if err != nil {
-		log.Fatalf("invalid UPSTREAM_URL: %v", err)
+	var upstream *url.URL
+	if target != "" && !strings.EqualFold(target, "splash") && !strings.EqualFold(target, "fess") {
+		u, err := url.Parse(target)
+		if err != nil {
+			log.Fatalf("invalid UPSTREAM_URL: %v", err)
+		}
+		upstream = u
 	}
 	db, err := sql.Open("postgres", pgDSN)
 	if err != nil {
@@ -107,6 +112,12 @@ func main() {
 	prommetrics.ListenAndServe(metricsAddr)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveACMEHTTP01(w, r, db) {
+			return
+		}
+		if serveBrandAsset(w, r) {
+			return
+		}
 		mr := routeStore.Current().Match(publicHostHeader(r, ipRes), r.URL.Path)
 		if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
 			return
@@ -135,6 +146,9 @@ func main() {
 		}
 
 		if isStaticAssetRequest(r) {
+			if maybeServeSplash(w, r, mr, db, ipRes) {
+				return
+			}
 			serveStaticFastPath(w, r, mr, db, proxy, ipRes, gateTF.ProxyOutcomeHint)
 			return
 		}
@@ -151,11 +165,11 @@ func main() {
 		}
 		body, err := readRequestBody(r, maxRead)
 		if err != nil {
-			code := http.StatusBadRequest
 			if strings.Contains(err.Error(), "exceeds max_bytes") {
-				code = http.StatusRequestEntityTooLarge
+				writeFESSError(w, http.StatusRequestEntityTooLarge, pageError, "Слишком большой запрос", "Тело запроса превысило лимит сканирования FESS.")
+				return
 			}
-			http.Error(w, err.Error(), code)
+			writeFESSError(w, http.StatusBadRequest, pageError, "Некорректный запрос", "FESS не смог прочитать тело запроса.")
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
@@ -172,7 +186,7 @@ func main() {
 				if shouldBlock {
 					writeThreatFeedLog(r.Context(), db, r, true, ipRes)
 					writeProxyAccessLog(r.Context(), db, r, mr, "threat_feed_block", ipRes)
-					http.Error(w, "request blocked: file hash in threat intelligence blocklist", http.StatusForbidden)
+					writeFESSError(w, http.StatusForbidden, pageBlocked, "Заблокировано", "Хэш файла совпал с индикатором ThreatFox.")
 					return
 				}
 				writeThreatFeedLog(r.Context(), db, r, false, ipRes)
@@ -185,7 +199,7 @@ func main() {
 			if !v.Clean {
 				writeMalwareLog(r.Context(), db, r, v, ipRes)
 				writeProxyAccessLog(r.Context(), db, r, mr, "malware_block", ipRes)
-				http.Error(w, "request blocked by malware scanner", http.StatusForbidden)
+				writeFESSError(w, http.StatusForbidden, pageBlocked, "Вредоносный файл", "Антивирус FESS остановил этот запрос.")
 				return
 			}
 		}
@@ -221,7 +235,7 @@ func main() {
 
 		switch effectiveAction {
 		case "block":
-			http.Error(w, "blocked by WAF policy", http.StatusForbidden)
+			writeFESSError(w, http.StatusForbidden, pageBlocked, "Заблокировано политикой", "Правило WAF отклонило этот запрос.")
 			return
 		case "redirect":
 			target := decision.RedirectURL
@@ -231,12 +245,17 @@ func main() {
 			http.Redirect(w, r, target, http.StatusFound)
 			return
 		case "replace":
-			// Replace action mutates request body in evaluator pipeline in later milestones.
+			if maybeServeSplash(w, r, mr, db, ipRes) {
+				return
+			}
 			proxy.ServeHTTP(w, r)
 			return
 		default:
 			if decision.Action == "deny_on_error" && strings.EqualFold(failMode, "close") {
-				http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+				writeFESSError(w, http.StatusServiceUnavailable, pageError, "Временно недоступно", "FESS не смог применить политику (fail-closed).")
+				return
+			}
+			if maybeServeSplash(w, r, mr, db, ipRes) {
 				return
 			}
 			proxy.ServeHTTP(w, r)

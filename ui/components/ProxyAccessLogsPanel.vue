@@ -201,6 +201,7 @@ function labelOutcome(o: string) {
     waf_block: 'Блок WAF',
     redirect: 'Редирект',
     malware_block: 'Антивирус',
+    splash: 'Заставка FESS',
     rate_limit: 'Rate limit',
   }
   return m[o] || o

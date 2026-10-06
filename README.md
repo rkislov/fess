@@ -7,6 +7,46 @@ WAF и reverse proxy с живым обновлением политик, ант
 
 Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with on-the-fly policy updates, no service restart, and a web UI.
 
+## Скриншоты
+
+Файлы лежат в [`docs/screenshots/`](docs/screenshots/). Снято с локального стека: панель `http://localhost:5173`, шлюз `http://localhost:8080`. В панели можно переключить **тёмную**, **светлую** или **системную** тему (стрит-арт остаётся фоном).
+
+**Вход — тёмная тема**
+
+![Вход в панель FESS, тёмная тема](docs/screenshots/ui-login.png)
+
+**Вход — светлая тема**
+
+![Вход в панель FESS, светлая тема](docs/screenshots/ui-login-light.png)
+
+**Дашборд — тёмная тема**
+
+![Дашборд FESS, тёмная тема](docs/screenshots/ui-dashboard-dark.png)
+
+**Дашборд — светлая тема**
+
+![Дашборд FESS, светлая тема](docs/screenshots/ui-dashboard-light.png)
+
+**Заставка шлюза (HTTP 200, нет совпадения Host)**
+
+![Заставка FESS](docs/screenshots/page-splash.png)
+
+**Бэкенд недоступен (HTTP 502)**
+
+![Ошибка 502](docs/screenshots/page-error-502.png)
+
+**Блокировка WAF (HTTP 403)**
+
+![Блокировка WAF 403](docs/screenshots/page-blocked-403.png)
+
+Чтобы увидеть заставку на `:8080`, catch-all сайт `*` в seed отключён. Чтобы воспроизвести 403 после сидов:
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T postgres \
+  psql -U fence -d fence < db/seeds.sql
+curl --path-as-is -i 'http://127.0.0.1:8080/foo/../secret'
+```
+
 ## Monorepo Layout
 
 - `services/waf-gateway` - reverse proxy and enforcement engine
@@ -20,6 +60,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 - `db/003_sites_backends.sql` - sites + backends tables and seed
 - `db/007_site_tls.sql` - optional TLS PEM columns on `sites`
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
+- `docs/screenshots/` - скриншоты панели и страниц шлюза (см. раздел выше)
 - `docs/openapi.yaml` - REST API contract
 - `docs/blueprint.md` - architecture and rollout plan
 - `docs/admin-guide.md` - **руководство администратора** (развёртывание, UI, `.env`)
@@ -72,7 +113,7 @@ docker compose -f deploy/docker-compose.yml exec -T postgres \
 
 Or with a local client: `psql "postgres://fence:fence@localhost:5432/fence?sslmode=disable" -f db/003_sites_backends.sql`.
 
-**Persistence:** `deploy/docker-compose.yml` mounts **named volumes** `postgres_data` (PostgreSQL cluster) and `redis_data` (Redis AOF under `/data`). Обычный перезапуск контейнеров (`docker compose restart` или `down` без `-v`) **не удаляет** эти данные. Чтобы полностью стереть БД и Redis и заново прогнать init-скрипты Postgres: `docker compose -f deploy/docker-compose.yml down -v`, затем `up -d` (флаг `-v` удаляет именованные тома проекта).
+**Persistence:** `deploy/docker-compose.yml` mounts **named volumes** `postgres_data` (PostgreSQL cluster) and `redis_data` (Redis AOF under `/data`). Имя проекта Compose — **`fess`**, поэтому на диске тома выглядят как `fess_postgres_data` / `fess_redis_data`. Обычный перезапуск контейнеров (`docker compose restart` или `down` без `-v`) **не удаляет** эти данные. Чтобы полностью стереть БД и Redis и заново прогнать init-скрипты Postgres: `docker compose -f deploy/docker-compose.yml down -v`, затем `up -d` (флаг `-v` удаляет именованные тома проекта). Если раньше стек крутился как проект `deploy`, тома `deploy_*` сами не подхватятся.
 
 Optional demo seed:
 
@@ -182,7 +223,7 @@ If the UI or API reports missing columns after `git pull`, **restart policy-api*
 ## Multi-platform Docker (arm64 / amd64)
 
 - **Go services** (`policy-api`, `waf-gateway`): Dockerfiles use BuildKit’s `TARGETARCH` (with a `uname -m` fallback) so the binary matches the image architecture (native **arm64** on Apple Silicon, **amd64** on typical servers).
-- **Demo upstream**: `mccutchen/go-httpbin` is multi-arch (replaces `kennethreitz/httpbin`).
+- **Demo upstream**: убран. Если Host не совпал с сайтом, шлюз показывает заставку FESS (стрит-арт, автор Роман Сергеевич Кислов). Запасной reverse-proxy задаётся через `UPSTREAM_URL` только при необходимости.
 - **Base images** (`postgres`, `redis`, `golang`, `alpine`, `node`, `nginx`) are official multi-arch manifests.
 - **`opencloudeu/clamav-icap`**: проверьте готовность архитектуры в [Docker Hub](https://hub.docker.com/r/opencloudeu/clamav-icap) (часто есть **amd64** и **arm64**).
 
@@ -191,7 +232,7 @@ To build and push a multi-arch manifest for Fence images (optional):
 ```bash
 cd /path/to/fence
 docker buildx create --use 2>/dev/null || true
-docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Dockerfile -t yourrepo/fence-policy-api:tag --push .
+docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Dockerfile -t yourrepo/fess-policy-api:tag --push .
 ```
 
 ## Service Endpoints
@@ -222,13 +263,11 @@ docker buildx build --platform linux/amd64,linux/arm64 -f services/policy-api/Do
 
 3. К **origin** (Nextcloud и т.д.) шлюз сам дописывает **`X-Real-IP`** и при необходимости **`X-Forwarded-For`** / **`X-Forwarded-Proto`** — см. описание в пункте про `WAF_TRUSTED_PROXIES` выше.
 
-- Demo upstream (`go-httpbin`, multi-arch / **arm64** friendly): `http://localhost:8081` → WAF uses `http://httpbin:8080` inside the stack.
-
 UI uses Nginx proxy and forwards `/api/*` to `policy-api`.
 
 **Конфигурация:** все переменные окружения для compose — в **`deploy/.env`** (шаблон **`deploy/.env.example`**). Секреты не коммитьте; файл `deploy/.env` в `.gitignore`.
 
-**UI sign-in (demo):** the static Nuxt app shows a login screen that only protects the browser session (credentials are checked in the client bundle). Defaults: `FENCE_UI_USER` / `FENCE_UI_PASSWORD` in `.env` (default `admin` / `fence`). **API auth:** JWT via `POST /api/v1/auth/login` — см. admin guide (`FENCE_JWT_SECRET`, пользователи в UI). Set `FENCE_UI_AUTH_ENABLED=false` to hide the demo login behind SSO.
+**UI sign-in:** экран входа не показывает учётные данные. По умолчанию после первого запуска API: пользователь `admin`, пароль `fessfess` (`FENCE_UI_USER` / `FENCE_UI_PASSWORD` в `.env` для тихого входа, если gate выключен). Смените пароль в UI. **API auth:** JWT via `POST /api/v1/auth/login` — см. admin guide (`FENCE_JWT_SECRET`). Set `FENCE_UI_AUTH_ENABLED=false` to hide the login screen behind SSO.
 
 ## Next Engineering Steps
 

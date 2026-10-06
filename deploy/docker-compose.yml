@@ -1,7 +1,13 @@
-# Локальный/стендовый стек Fence. Конфигурация: deploy/.env (см. deploy/.env.example).
+# Локальный/стендовый стек FESS. Конфигурация: deploy/.env (см. deploy/.env.example).
 # Compose подхватывает deploy/.env автоматически (каталог файла compose).
 # Запуск из корня репозитория:
 #   cp deploy/.env.example deploy/.env && docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Проект называется fess: контейнеры fess-postgres, fess-waf-gateway и т.д.
+# Старые тома deploy_* после смены имени проекта не подхватываются сами —
+# перенесите данные или укажите COMPOSE_PROJECT_NAME=deploy, пока мигрируете.
+
+name: fess
 
 x-fence-data-env: &fence-data-env
   POSTGRES_DSN: ${POSTGRES_DSN:-postgres://fence:fence@postgres:5432/fence?sslmode=disable}
@@ -9,6 +15,7 @@ x-fence-data-env: &fence-data-env
 
 services:
   postgres:
+    container_name: fess-postgres
     image: postgres:15
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fence}
@@ -45,14 +52,20 @@ services:
       - ../db/028_ai_settings.sql:/docker-entrypoint-initdb.d/028-ai-settings.sql:ro
       - ../db/029_threat_feed_file_hashes.sql:/docker-entrypoint-initdb.d/029-threat-feed-hashes.sql:ro
       - ../db/030_rate_limit.sql:/docker-entrypoint-initdb.d/030-rate-limit.sql:ro
+      - ../db/031_certificates.sql:/docker-entrypoint-initdb.d/031-certificates.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fence} -d ${POSTGRES_DB:-fence}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-fence} -d ${POSTGRES_DB:-fence}",
+        ]
       interval: 2s
       timeout: 5s
       retries: 15
       start_period: 20s
 
   redis:
+    container_name: fess-redis
     image: redis:7
     ports:
       - "${FENCE_REDIS_PORT:-6379}:6379"
@@ -74,10 +87,11 @@ services:
       start_period: 5s
 
   policy-api:
+    container_name: fess-policy-api
     build:
       context: ..
       dockerfile: services/policy-api/Dockerfile
-    image: fence/policy-api:local
+    image: fess/policy-api:local
     environment:
       <<: *fence-data-env
       POLICY_API_LISTEN_ADDR: ${POLICY_API_LISTEN_ADDR:-:8082}
@@ -95,7 +109,11 @@ services:
       FENCE_METRICS_DB_INTERVAL: ${FENCE_METRICS_DB_INTERVAL:-}
       POLICY_API_METRICS_ADDR: ${POLICY_API_METRICS_ADDR:-:9092}
       FENCE_DOCKER_SOCK: ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}
-      FENCE_DOCKER_PROJECT: ${FENCE_DOCKER_PROJECT:-}
+      FENCE_DOCKER_PROJECT: ${FENCE_DOCKER_PROJECT:-fess}
+    # Сокет Docker: на Desktop часто root:root 660 — даём appuser группу 0;
+    # на Linux добавьте GID сокета: DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    group_add:
+      - "${DOCKER_GID:-0}"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
       - ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
@@ -122,6 +140,7 @@ services:
         condition: service_started
 
   clamav-icap:
+    container_name: fess-clamav-icap
     image: opencloudeu/clamav-icap:latest
     restart: unless-stopped
     volumes:
@@ -130,15 +149,16 @@ services:
       - "${FENCE_CLAMAV_ICAP_PORT:-1344}:1344"
 
   waf-gateway:
+    container_name: fess-waf-gateway
     build:
       context: ..
       dockerfile: services/waf-gateway/Dockerfile
-    image: fence/waf-gateway:local
+    image: fess/waf-gateway:local
     environment:
       <<: *fence-data-env
       WAF_LISTEN_ADDR: ${WAF_LISTEN_ADDR:-:8080}
       WAF_TLS_LISTEN_ADDR: ${WAF_TLS_LISTEN_ADDR:-:8443}
-      UPSTREAM_URL: ${UPSTREAM_URL:-http://httpbin:8080}
+      UPSTREAM_URL: ${UPSTREAM_URL:-}
       WAF_FAIL_MODE: ${WAF_FAIL_MODE:-open}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-/var/lib/fence/geoip/GeoLite2-Country.mmdb}
       GEOIP_ASN_MMDB_PATH: ${GEOIP_ASN_MMDB_PATH:-/var/lib/fence/geoip/GeoLite2-ASN.mmdb}
@@ -159,12 +179,8 @@ services:
       clamav-icap:
         condition: service_started
 
-  httpbin:
-    image: mccutchen/go-httpbin:latest
-    ports:
-      - "${FENCE_HTTPBIN_PORT:-8081}:8080"
-
   ui:
+    container_name: fess-ui
     build:
       context: ..
       dockerfile: ui/Dockerfile
@@ -172,8 +188,8 @@ services:
         NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
         NUXT_PUBLIC_UI_AUTH_ENABLED: ${FENCE_UI_AUTH_ENABLED:-true}
         NUXT_PUBLIC_UI_USER: ${FENCE_UI_USER:-admin}
-        NUXT_PUBLIC_UI_PASSWORD: ${FENCE_UI_PASSWORD:-fence}
-    image: fence/ui:local
+        NUXT_PUBLIC_UI_PASSWORD: ${FENCE_UI_PASSWORD:-fessfess}
+    image: fess/ui:local
     ports:
       - "${FENCE_UI_PORT:-5173}:80"
     restart: unless-stopped

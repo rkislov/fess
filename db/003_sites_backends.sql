@@ -23,14 +23,14 @@ CREATE TABLE IF NOT EXISTS backends (
   CONSTRAINT backends_base_url_nonempty CHECK (length(trim(base_url)) > 0)
 );
 
--- Default catch-all for docker-compose (Host header often not set / arbitrary); tune in UI.
+-- Catch-all virtual host (disabled by default: unmatched Host shows FESS splash).
 INSERT INTO sites (id, name, host_pattern, priority, enabled)
 VALUES (
   '33333333-3333-3333-3333-333333333333',
   'default',
   '*',
   1000000,
-  TRUE
+  FALSE
 )
 ON CONFLICT (id) DO NOTHING;
 
