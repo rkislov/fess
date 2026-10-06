@@ -6,7 +6,7 @@
 
 - [README.md](../README.md) — обзор архитектуры и быстрый старт
 - [deploy/.env.example](../deploy/.env.example) — шаблон всех переменных окружения
-- [openapi.yaml](./openapi.yaml) — REST API (OpenAPI 3.0, версия **1.1.0**; с policy-api: `GET /api/v1/openapi.yaml`)
+- [openapi.yaml](./openapi.yaml) — REST API (OpenAPI 3.0, версия **1.1.1**; с policy-api: `GET /api/v1/openapi.yaml`)
 - [blueprint.md](./blueprint.md) — план развития и компоненты
 
 ---

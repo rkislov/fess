@@ -39,6 +39,19 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 
 ![Блокировка WAF 403](docs/screenshots/page-blocked-403.png)
 
+## Обои (стрит-арт, 4K)
+
+Чистые кадры мурала без интерфейса, 3840×2160, лежат в [`docs/wallpapers/4k/`](docs/wallpapers/4k/):
+
+| Файл | Сцена |
+|------|--------|
+| `fess-splash.jpg` | Крыса со щитом, FESS |
+| `fess-shield.jpg` | Тот же мотив, вариант с фонарём |
+| `fess-blocked.jpg` | BLOCKED, красная полоса **под** словом |
+| `fess-error.jpg` | ERROR |
+
+Автор: Роман Сергеевич Кислов (Roman Sergeyevich Kislov) · Apache-2.0.
+
 Чтобы увидеть заставку на `:8080`, catch-all сайт `*` в seed отключён. Чтобы воспроизвести 403 после сидов:
 
 ```bash
@@ -61,7 +74,8 @@ curl --path-as-is -i 'http://127.0.0.1:8080/foo/../secret'
 - `db/007_site_tls.sql` - optional TLS PEM columns on `sites`
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
 - `docs/screenshots/` - скриншоты панели и страниц шлюза (см. раздел выше)
-- `docs/openapi.yaml` - REST API contract (OpenAPI 3.0, **1.1.0**); live `GET http://localhost:8082/api/v1/openapi.yaml`
+- `docs/wallpapers/4k/` - обои 3840×2160 (только стрит-арт)
+- `docs/openapi.yaml` - REST API contract (OpenAPI 3.0, **1.1.1**); live `GET http://localhost:8082/api/v1/openapi.yaml`
 - `docs/blueprint.md` - architecture and rollout plan
 - `docs/admin-guide.md` - **руководство администратора** (развёртывание, UI, `.env`)
 - `deploy/.env.example` - шаблон переменных окружения для всего стека

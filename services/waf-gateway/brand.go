@@ -82,6 +82,13 @@ func writeFESSChallenge(w http.ResponseWriter, verifyURL string) {
 		"Если страница не открылась сама, нажмите «Продолжить».", verifyURL)
 }
 
+func brandArtFit(kind fessPageKind) string {
+	if kind == pageBlocked {
+		return "85% 42% / cover"
+	}
+	return "center / cover"
+}
+
 func writeFESSPage(w http.ResponseWriter, status int, kind fessPageKind, title, lead, extra, actionURL string) {
 	title = html.EscapeString(title)
 	lead = html.EscapeString(lead)
@@ -114,7 +121,7 @@ func writeFESSPage(w http.ResponseWriter, status int, kind fessPageKind, title, 
   body {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     color: #f4f1ea;
-    background: #0b0b0c url("%s") center / cover no-repeat fixed;
+    background: #0b0b0c url("%s") %s no-repeat fixed;
   }
   .veil {
     min-height: 100vh;
@@ -155,7 +162,7 @@ func writeFESSPage(w http.ResponseWriter, status int, kind fessPageKind, title, 
     </footer>
   </div>
 </body>
-</html>`, title, art, title, lead, extraPara(extra), code, btn, fessAuthor, fessAuthorEN)
+</html>`, title, art, brandArtFit(kind), title, lead, extraPara(extra), code, btn, fessAuthor, fessAuthorEN)
 }
 
 func extraPara(extra string) string {
