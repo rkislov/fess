@@ -125,6 +125,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
 	mux.Handle("/metrics", prommetrics.Handler())
+	mux.HandleFunc("/api/v1/openapi.yaml", openAPISpecHandler)
 	mux.HandleFunc("/api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		authLoginHandler(w, r, db, authSvc)
 	})

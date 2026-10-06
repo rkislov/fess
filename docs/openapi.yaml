@@ -1,17 +1,162 @@
 openapi: 3.0.3
 info:
   title: FESS Control API
-  version: 0.1.0
+  version: "1.1.0"
+  description: |
+    REST API of **policy-api** (default listen `:8082`). JWT Bearer for authenticated routes.
+    Roles: `admin`, `operator` (read + write), `viewer` (GET only).
+    Live spec: `GET /api/v1/openapi.yaml` (public).
+  contact:
+    name: Roman Sergeyevich Kislov
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-  - url: https://localhost:8443/api/v1
+  - url: http://localhost:8082
+    description: Local policy-api
+security:
+  - bearerAuth: []
+tags:
+  - name: meta
+  - name: auth
+  - name: users
+  - name: policies
+  - name: logs
+  - name: dashboard
+  - name: sites
+  - name: certificates
+  - name: settings
+  - name: owasp
+  - name: ai
 paths:
-  /policies:
+  /healthz:
     get:
-      summary: List policies
+      tags: [meta]
+      security: []
+      summary: Liveness
+      responses:
+        "200":
+          description: OK (text/plain `ok`)
+  /api/v1/openapi.yaml:
+    get:
+      tags: [meta]
+      security: []
+      summary: This OpenAPI document
+      responses:
+        "200":
+          description: YAML spec
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Login (local or LDAP)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Tokens and user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      security: []
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: New tokens
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Invalidate refresh token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
       responses:
         "200":
           description: OK
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Current user
+      responses:
+        "200":
+          description: User
+  /api/v1/users:
+    get:
+      tags: [users]
+      summary: List users (admin)
+      responses:
+        "200":
+          description: `{ items: [...] }`
     post:
+      tags: [users]
+      summary: Create local user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Created
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    put:
+      tags: [users]
+      summary: Update user (admin)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated
+  /api/v1/policies:
+    get:
+      tags: [policies]
+      summary: List policies
+      responses:
+        "200":
+          description: Policy list
+    post:
+      tags: [policies]
       summary: Create policy
       requestBody:
         required: true
@@ -22,92 +167,913 @@ paths:
       responses:
         "201":
           description: Created
-  /policies/{id}:
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/policies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    get:
+      tags: [policies]
+      summary: Policy snapshot with rules
+      responses:
+        "200":
+          description: Snapshot JSON
+        "404":
+          $ref: "#/components/responses/Error"
     put:
+      tags: [policies]
       summary: Update policy
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyUpdate"
       responses:
         "200":
           description: Updated
-  /policies/{id}/publish:
+  /api/v1/policies/{id}/rules:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
     post:
-      summary: Publish policy version
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "202":
-          description: Accepted
-  /policies/{id}/rules:
-    post:
-      summary: Create rule in policy
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      tags: [policies]
+      summary: Create rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuleWrite"
       responses:
         "201":
           description: Created
-  /rules/{id}:
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/policies/{id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    post:
+      tags: [policies]
+      summary: Publish policy (Redis `policy_updates`)
+      responses:
+        "202":
+          description: Accepted
+  /api/v1/rules/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
     put:
+      tags: [policies]
       summary: Update rule
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuleWrite"
       responses:
         "200":
           description: Updated
-  /logs:
-    get:
-      summary: Query detection logs
-      parameters:
-        - in: query
-          name: from
-          schema:
-            type: string
-        - in: query
-          name: to
-          schema:
-            type: string
-        - in: query
-          name: action
-          schema:
-            type: string
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 100
-            maximum: 200
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            default: 0
-            minimum: 0
+  /api/v1/rules/{id}/quick-action:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    post:
+      tags: [policies]
+      summary: Enable, disable, log_only, or block; then publish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [enable, disable, log_only, block]
       responses:
         "200":
           description: OK
+  /api/v1/owasp/packs:
+    get:
+      tags: [owasp]
+      summary: List embedded CRS-style packs
+      responses:
+        "200":
+          description: Pack metadata
+  /api/v1/owasp/pack:
+    get:
+      tags: [owasp]
+      summary: Export pack JSON
+      parameters:
+        - in: query
+          name: pack_id
+          required: true
+          schema:
+            type: string
+            example: crs-bundle-v1
+      responses:
+        "200":
+          description: Pack
+  /api/v1/owasp/import:
+    post:
+      tags: [owasp]
+      summary: Import pack into a new policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pack_id]
+              properties:
+                pack_id:
+                  type: string
+                policy_name:
+                  type: string
+                mode:
+                  type: string
+                  enum: [block, log]
+                priority:
+                  type: integer
+                publish:
+                  type: boolean
+                published_by:
+                  type: string
+      responses:
+        "201":
+          description: Imported
+  /api/v1/logs:
+    get:
+      tags: [logs]
+      summary: WAF detection log (`waf_logs`)
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Action"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated rows
+  /api/v1/proxy-access-logs:
+    get:
+      tags: [logs]
+      summary: Gateway access log
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated rows (`total`, `limit`, `offset`)
+  /api/v1/malware-scan-logs:
+    get:
+      tags: [logs]
+      summary: Antivirus scan journal
+      parameters:
+        - in: query
+          name: clean
+          schema:
+            type: string
+            enum: ["0", "1"]
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated rows
+  /api/v1/waf-rule-hits:
+    get:
+      tags: [logs]
+      summary: Aggregate hits by rule
+      parameters:
+        - $ref: "#/components/parameters/Hours"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Aggregates
+  /api/v1/waf-log-events:
+    get:
+      tags: [logs]
+      summary: WAF events list
+      parameters:
+        - $ref: "#/components/parameters/Hours"
+        - in: query
+          name: rule_id
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Action"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Events
+  /api/v1/waf-log-events/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags: [logs]
+      summary: Event detail
+      responses:
+        "200":
+          description: Detail
+  /api/v1/waf-log-events/{id}/ai-review:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      tags: [logs]
+      summary: AI review of one event
+      responses:
+        "200":
+          description: Analysis
+  /api/v1/waf-log-events/{id}/unblock:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      tags: [logs]
+      summary: Add client IP to bypass from this event
+      responses:
+        "200":
+          description: OK
+  /api/v1/ip-bypass:
+    get:
+      tags: [logs]
+      summary: List IP bypass rules
+      responses:
+        "200":
+          description: `{ items }`
+    post:
+      tags: [logs]
+      summary: Upsert bypass CIDR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cidr:
+                  type: string
+                ip:
+                  type: string
+                comment:
+                  type: string
+                ttl_hours:
+                  type: integer
+                source_waf_log_id:
+                  type: integer
+                  format: int64
+      responses:
+        "200":
+          description: `{ ok, cidr }`
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [logs]
+      summary: Delete bypass by CIDR in body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidr]
+              properties:
+                cidr:
+                  type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/dashboard/summary:
+    get:
+      tags: [dashboard]
+      summary: Traffic and WAF aggregates
+      parameters:
+        - $ref: "#/components/parameters/Hours"
+      responses:
+        "200":
+          description: Summary object
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/dashboard/system:
+    get:
+      tags: [dashboard]
+      summary: Host and Docker container health
+      responses:
+        "200":
+          description: System health
+  /api/v1/sites:
+    get:
+      tags: [sites]
+      summary: List sites
+      responses:
+        "200":
+          description: Sites
+    post:
+      tags: [sites]
+      summary: Create site
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteWrite"
+      responses:
+        "201":
+          description: Created
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/sites/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    put:
+      tags: [sites]
+      summary: Update site
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteWrite"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [sites]
+      summary: Delete site
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/sites/{id}/tls:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    get:
+      tags: [sites]
+      summary: TLS flags (no private key)
+      responses:
+        "200":
+          description: `{ tls_enabled, tls_has_certificate }`
+    put:
+      tags: [sites]
+      summary: Set site TLS PEM (legacy) or enable flag
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tls_enabled:
+                  type: boolean
+                tls_cert_pem:
+                  type: string
+                tls_key_pem:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+  /api/v1/sites/{id}/backends:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    get:
+      tags: [sites]
+      summary: List backends
+      responses:
+        "200":
+          description: Backends
+    post:
+      tags: [sites]
+      summary: Create backend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackendWrite"
+      responses:
+        "201":
+          description: Created
+  /api/v1/backends/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    put:
+      tags: [sites]
+      summary: Update backend
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackendWrite"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [sites]
+      summary: Delete backend
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/backends/{id}/paths:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    get:
+      tags: [sites]
+      summary: List path routes
+      responses:
+        "200":
+          description: Paths
+    post:
+      tags: [sites]
+      summary: Create path route
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackendPathWrite"
+      responses:
+        "201":
+          description: Created
+  /api/v1/backend-paths/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    put:
+      tags: [sites]
+      summary: Update path route
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackendPathWrite"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [sites]
+      summary: Delete path route
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/certificates:
+    get:
+      tags: [certificates]
+      summary: List certificates (no private keys)
+      responses:
+        "200":
+          description: Certificates
+    post:
+      tags: [certificates]
+      summary: Upload PEM, ACME issue, or self-signed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateCreate"
+      responses:
+        "201":
+          description: Created
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/certificates/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    get:
+      tags: [certificates]
+      summary: Certificate metadata
+      responses:
+        "200":
+          description: Certificate
+    delete:
+      tags: [certificates]
+      summary: Delete certificate
+      responses:
+        "204":
+          description: Deleted
+  /api/v1/certificates/{id}/renew:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    post:
+      tags: [certificates]
+      summary: ACME renew
+      responses:
+        "200":
+          description: Renewed
+  /api/v1/certificates/{id}/assign:
+    parameters:
+      - $ref: "#/components/parameters/UUID"
+    post:
+      tags: [certificates]
+      summary: Attach certificate to sites
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                site_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                tls_enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Assigned
+  /api/v1/settings/acme:
+    get:
+      tags: [certificates]
+      summary: ACME account settings (no secrets)
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [certificates]
+      summary: Update ACME directory, email, EAB, TOS
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                directory_url:
+                  type: string
+                email:
+                  type: string
+                tos_agreed:
+                  type: boolean
+                renew_before_days:
+                  type: integer
+                eab_kid:
+                  type: string
+                eab_hmac_key:
+                  type: string
+                reset_account:
+                  type: boolean
+      responses:
+        "200":
+          description: Settings
+  /api/v1/settings/auth:
+    get:
+      tags: [settings]
+      summary: Auth / LDAP settings
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Update auth settings (admin)
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/siem-export:
+    get:
+      tags: [settings]
+      summary: SIEM syslog/CEF export
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Update SIEM export
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/malware:
+    get:
+      tags: [settings]
+      summary: ICAP / external scanner
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Save malware settings (Redis `malware_settings_updated`)
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/malware/status:
+    get:
+      tags: [settings]
+      summary: Probe ICAP / clamd / external scanner
+      responses:
+        "200":
+          description: Status
+  /api/v1/settings/malware/freshclam-snippet:
+    get:
+      tags: [settings]
+      summary: freshclam.conf snippet
+      responses:
+        "200":
+          description: Text/JSON snippet
+  /api/v1/settings/threat-feed:
+    get:
+      tags: [settings]
+      summary: IOC / ThreatFox settings
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Save threat-feed settings
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/threat-feed/status:
+    get:
+      tags: [settings]
+      summary: Feed sync status
+      responses:
+        "200":
+          description: Status
+  /api/v1/settings/threat-feed/sync:
+    post:
+      tags: [settings]
+      summary: Trigger IOC sync
+      responses:
+        "200":
+          description: Started
+  /api/v1/settings/threat-feed/threatfox/full:
+    post:
+      tags: [settings]
+      summary: Full ThreatFox pull
+      responses:
+        "200":
+          description: Started
+  /api/v1/settings/threat-feed/upload:
+    post:
+      tags: [settings]
+      summary: Upload IOC list
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Imported
+  /api/v1/settings/bot-protection:
+    get:
+      tags: [settings]
+      summary: Bot protection config
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Save bot protection
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/bot-protection/status:
+    get:
+      tags: [settings]
+      summary: Bot protection status
+      responses:
+        "200":
+          description: Status
+  /api/v1/settings/bot-protection/upload:
+    post:
+      tags: [settings]
+      summary: Upload bot lists
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/bot-protection/asn-mmdb:
+    post:
+      tags: [settings]
+      summary: Upload ASN MMDB
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/rate-limit:
+    get:
+      tags: [settings]
+      summary: Global rate limit
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [settings]
+      summary: Save global rate limit
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/geoip/mmdb:
+    post:
+      tags: [settings]
+      summary: Upload GeoLite2 Country MMDB
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/geoip/fetch:
+    post:
+      tags: [settings]
+      summary: Download MMDB over HTTPS
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+      responses:
+        "200":
+          description: Saved
+  /api/v1/settings/ai:
+    get:
+      tags: [ai]
+      summary: AI settings (key redacted)
+      responses:
+        "200":
+          description: Settings
+    put:
+      tags: [ai]
+      summary: Save AI settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                base_url:
+                  type: string
+                model:
+                  type: string
+                api_key:
+                  type: string
+                http_timeout_sec:
+                  type: integer
+      responses:
+        "200":
+          description: Saved
+  /api/v1/ai/analyze:
+    post:
+      tags: [ai]
+      summary: Analyze recent logs and policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIAnalyzeRequest"
+      responses:
+        "200":
+          description: `{ analysis, model }`
+  /api/v1/ai/ask:
+    post:
+      tags: [ai]
+      summary: Free-form question with optional log context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/AIAnalyzeRequest"
+                - type: object
+                  required: [question]
+                  properties:
+                    question:
+                      type: string
+      responses:
+        "200":
+          description: Answer
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UUID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        default: 100
+        maximum: 200
+    Offset:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    Hours:
+      in: query
+      name: hours
+      schema:
+        type: integer
+        default: 24
+    From:
+      in: query
+      name: from
+      schema:
+        type: string
+        format: date-time
+    To:
+      in: query
+      name: to
+      schema:
+        type: string
+        format: date-time
+    Action:
+      in: query
+      name: action
+      schema:
+        type: string
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        user:
+          type: object
+          additionalProperties: true
+    UserCreate:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 6
+        display_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, viewer]
+    UserUpdate:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, viewer]
+        active:
+          type: boolean
+        password:
+          type: string
     PolicyCreate:
       type: object
-      required:
-        - name
-        - mode
+      required: [name, mode]
       properties:
         name:
           type: string
@@ -117,3 +1083,144 @@ components:
         priority:
           type: integer
           default: 100
+    PolicyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [block, log]
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+    RuleWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        action:
+          type: string
+          enum: [block, log, redirect, transform]
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        condition_json:
+          type: object
+          additionalProperties: true
+          description: path_exact, path_prefix, path_contains, path_regex, method, headers, IPs, …
+        transform_json:
+          type: object
+          additionalProperties: true
+    SiteWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        host_pattern:
+          type: string
+          description: Exact host, `*.example.com`, or `*`
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        policy_id:
+          type: string
+          format: uuid
+          description: Empty = all enabled policies
+    BackendWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        base_url:
+          type: string
+          example: http://origin:8080
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        tls_skip_verify:
+          type: boolean
+        rate_limit:
+          $ref: "#/components/schemas/RateLimitOverride"
+    BackendPathWrite:
+      type: object
+      properties:
+        path_prefix:
+          type: string
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        websocket_enabled:
+          type: boolean
+        timeout:
+          type: integer
+        idle_timeout:
+          type: integer
+        ip_allow_mode:
+          type: string
+        allowed_cidrs:
+          type: array
+          items:
+            type: string
+        rate_limit:
+          $ref: "#/components/schemas/RateLimitOverride"
+    RateLimitOverride:
+      type: object
+      nullable: true
+      properties:
+        inherit:
+          type: boolean
+        enabled:
+          type: boolean
+        requests_per_window:
+          type: integer
+        window_sec:
+          type: integer
+        scope:
+          type: string
+          enum: [ip, ip_host, ip_path, backend]
+    CertificateCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          description: upload | acme | selfsigned
+        domains:
+          type: array
+          items:
+            type: string
+        cert_pem:
+          type: string
+        key_pem:
+          type: string
+        auto_renew:
+          type: boolean
+        site_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        valid_days:
+          type: integer
+    AIAnalyzeRequest:
+      type: object
+      properties:
+        include_proxy_logs:
+          type: boolean
+        include_waf_logs:
+          type: boolean
+        include_policy_snapshot:
+          type: boolean
+        proxy_limit:
+          type: integer
+        waf_limit:
+          type: integer
+        extra_context:
+          type: string

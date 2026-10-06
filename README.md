@@ -61,7 +61,7 @@ curl --path-as-is -i 'http://127.0.0.1:8080/foo/../secret'
 - `db/007_site_tls.sql` - optional TLS PEM columns on `sites`
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
 - `docs/screenshots/` - скриншоты панели и страниц шлюза (см. раздел выше)
-- `docs/openapi.yaml` - REST API contract
+- `docs/openapi.yaml` - REST API contract (OpenAPI 3.0, **1.1.0**); live `GET http://localhost:8082/api/v1/openapi.yaml`
 - `docs/blueprint.md` - architecture and rollout plan
 - `docs/admin-guide.md` - **руководство администратора** (развёртывание, UI, `.env`)
 - `deploy/.env.example` - шаблон переменных окружения для всего стека
@@ -268,11 +268,3 @@ UI uses Nginx proxy and forwards `/api/*` to `policy-api`.
 **Конфигурация:** все переменные окружения для compose — в **`deploy/.env`** (шаблон **`deploy/.env.example`**). Секреты не коммитьте; файл `deploy/.env` в `.gitignore`.
 
 **UI sign-in:** экран входа не показывает учётные данные. По умолчанию после первого запуска API: пользователь `admin`, пароль `fessfess` (`FENCE_UI_USER` / `FENCE_UI_PASSWORD` в `.env` для тихого входа, если gate выключен). Смените пароль в UI. **API auth:** JWT via `POST /api/v1/auth/login` — см. admin guide (`FENCE_JWT_SECRET`). Set `FENCE_UI_AUTH_ENABLED=false` to hide the login screen behind SSO.
-
-## Next Engineering Steps
-
-1. Implement OpenAPI endpoints and request validation.
-2. Add policy compiler (regex/expr precompilation).
-3. Implement request pipeline (match -> action -> log).
-4. Integrate Redis pub/sub for live updates.
-5. Add auth + RBAC for UI/API.
