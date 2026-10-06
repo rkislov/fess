@@ -107,6 +107,8 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
+Команда **`docker-compose`** (v1) не подходит — используйте **`docker compose`**.
+
 Полное описание параметров и эксплуатации: **[docs/admin-guide.md](docs/admin-guide.md)**.
 
 ### Database migrations (automatic)
@@ -209,7 +211,7 @@ API:
 
 ### Docker compose notes
 
-- **`Exception in thread ... compose ... KeyError: 'id'`** — bug in obsolete **`docker-compose` v1**. Prefer **`docker compose`** (Compose V2).
+- **`Exception in thread ... compose ... KeyError: 'id'`** или **`'name' does not match any of the regexes: '^x-'`** — это **`docker-compose` v1** (Python). Нужен **Compose V2**: `docker compose` (плагин Docker). Имя проекта — `COMPOSE_PROJECT_NAME=fess` в `deploy/.env`.
 - **`Redis ... vm.overcommit_memory`** — host kernel tuning; often ignorable locally.
 - **`CLAMAV_CLAMD_PORT`** in **`policy-api`**: **`0`** (по умолчанию в compose) отключает probe **`VERSION`** к clamd по TCP; ICAP на порту **1344** проверяется отдельно. Укажите **3310**, если clamd слушает TCP на том же хосте, что и ICAP, и вы хотите версию в UI.
 

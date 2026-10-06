@@ -1,13 +1,17 @@
 # Локальный/стендовый стек FESS. Конфигурация: deploy/.env (см. deploy/.env.example).
 # Compose подхватывает deploy/.env автоматически (каталог файла compose).
 # Запуск из корня репозитория:
-#   cp deploy/.env.example deploy/.env && docker compose -f deploy/docker-compose.yml up -d --build
+#   cp deploy/.env.example deploy/.env
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# Нужен Compose V2 (`docker compose`). Пакет `docker-compose` v1 (Python) не поддерживается.
 #
-# Проект называется fess: контейнеры fess-postgres, fess-waf-gateway и т.д.
+# Имя проекта задаётся COMPOSE_PROJECT_NAME=fess в deploy/.env (контейнеры fess-*).
 # Старые тома deploy_* после смены имени проекта не подхватываются сами —
 # перенесите данные или укажите COMPOSE_PROJECT_NAME=deploy, пока мигрируете.
+#
+# version 2.4: healthcheck + depends_on.condition; Compose V2 ключ version игнорирует.
 
-name: fess
+version: "2.4"
 
 x-fence-data-env: &fence-data-env
   POSTGRES_DSN: ${POSTGRES_DSN:-postgres://fence:fence@postgres:5432/fence?sslmode=disable}

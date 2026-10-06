@@ -36,6 +36,8 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
+Нужен **Compose V2** (`docker compose`). Если установлена только связка `docker-compose` (v1), будет ошибка про ключ `name` или `KeyError: 'id'` — поставьте плагин Compose: `docker compose version`.
+
 После старта:
 
 | Сервис | URL по умолчанию |
