@@ -1,5 +1,7 @@
 # Локальная конфигурация (секреты)
 deploy/.env
+deploy/registry/.credentials.local
+deploy/registry/auth/htpasswd
 .env
 .env.local
 .env.*.local

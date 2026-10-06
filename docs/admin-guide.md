@@ -8,6 +8,7 @@
 - [deploy/.env.example](../deploy/.env.example) — шаблон всех переменных окружения
 - [openapi.yaml](./openapi.yaml) — REST API (OpenAPI 3.0, версия **1.1.1**; с policy-api: `GET /api/v1/openapi.yaml`)
 - [blueprint.md](./blueprint.md) — план развития и компоненты
+- [registry/README.md](../deploy/registry/README.md) — свой Docker Registry (pull без пароля, push с паролем, порт **5000** / ufw)
 
 ---
 
@@ -355,3 +356,17 @@ docker compose -f deploy/docker-compose.yml up -d policy-api waf-gateway ui
 ```
 
 При появлении новых файлов `db/NNN_*.sql` достаточно перезапуска policy-api — миграции применятся автоматически.
+
+---
+
+## 19. Свой Docker Registry
+
+Стек `deploy/registry`: **pull анонимно**, **push/delete только с паролем** (nginx `limit_except GET HEAD`). Порт хоста **5000**. На firewall:
+
+```bash
+ufw allow 22222/tcp
+ufw allow 5000/tcp comment 'FESS Docker Registry'
+ufw reload
+```
+
+Подробности и `docker login`: [deploy/registry/README.md](../deploy/registry/README.md).
