@@ -336,6 +336,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 | 401 на API | Войти через `/auth/login`, передать Bearer token |
 | Страна пустая на дашборде | Загрузить GeoLite2 Country в том geoip |
 | После `git pull` ошибки колонок | Пересобрать и перезапустить policy-api |
+| `go mod download` / `proxy.golang.org: i/o timeout` | В `deploy/.env` задать `GOPROXY=https://goproxy.io,direct` (или другое зеркало), затем `docker compose … build` |
 
 Логи контейнеров:
 
