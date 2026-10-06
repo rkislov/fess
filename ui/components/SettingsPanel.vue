@@ -3,31 +3,26 @@
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-      <div class="flex flex-wrap justify-end gap-2">
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <aside class="flex w-full shrink-0 flex-col gap-1 lg:w-52">
+        <p class="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Платформа</p>
         <button
           v-for="s in platformSections"
           :key="s.id"
           type="button"
-          class="rounded-lg px-3 py-2 text-sm font-medium transition"
-          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
+          class="rounded-lg px-3 py-2 text-left text-sm font-medium transition"
+          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'"
           @click="sub = s.id"
         >
           {{ s.icon }} {{ s.label }}
         </button>
-      </div>
-      <div
-        v-if="platformSections.length && securitySectionsVisible.length"
-        class="hidden h-6 w-px bg-slate-700/80 sm:block"
-        aria-hidden="true"
-      />
-      <div class="flex flex-wrap justify-end gap-2">
+        <p class="mb-1 mt-3 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Защита</p>
         <button
           v-for="s in securitySectionsVisible"
           :key="s.id"
           type="button"
-          class="rounded-lg px-3 py-2 text-sm font-medium transition"
-          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
+          class="rounded-lg px-3 py-2 text-left text-sm font-medium transition"
+          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'"
           @click="sub = s.id"
         >
           {{ s.icon }} {{ s.label }}
@@ -35,15 +30,15 @@
         <button
           v-if="sub === 'users' || sub === 'auth' || sub === 'siem' || sub === 'ai'"
           type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+          class="mt-2 rounded-lg bg-slate-800 px-3 py-2 text-left text-sm hover:bg-slate-700"
           :disabled="busy"
           @click="loadAdmin"
         >
           Обновить
         </button>
-      </div>
-    </div>
+      </aside>
 
+      <div class="min-w-0 flex-1 space-y-6">
     <section v-if="sub === 'appearance'" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-semibold text-white">Оформление</h3>
       <p class="mt-0.5 text-xs text-slate-500">
@@ -253,6 +248,8 @@
     <BotProtectionPanel v-else-if="sub === 'bots'" />
     <RateLimitPanel v-else-if="sub === 'ratelimit'" />
     <ExceptionsPanel v-else-if="sub === 'exceptions'" />
+      </div>
+    </div>
   </div>
 </template>
 

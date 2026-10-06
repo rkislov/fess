@@ -3,7 +3,7 @@
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-col gap-2 sm:max-w-xs">
       <button
         type="button"
         class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
