@@ -3,26 +3,45 @@
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <div class="flex flex-wrap gap-2">
-      <button
-        v-for="s in visibleSections"
-        :key="s.id"
-        type="button"
-        class="rounded-lg px-3 py-2 text-sm font-medium transition"
-        :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
-        @click="sub = s.id"
-      >
-        {{ s.icon }} {{ s.label }}
-      </button>
-      <button
-        v-if="sub === 'users' || sub === 'auth' || sub === 'siem' || sub === 'ai'"
-        type="button"
-        class="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-        :disabled="busy"
-        @click="loadAdmin"
-      >
-        Обновить
-      </button>
+    <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+      <div class="flex flex-wrap justify-end gap-2">
+        <button
+          v-for="s in platformSections"
+          :key="s.id"
+          type="button"
+          class="rounded-lg px-3 py-2 text-sm font-medium transition"
+          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
+          @click="sub = s.id"
+        >
+          {{ s.icon }} {{ s.label }}
+        </button>
+      </div>
+      <div
+        v-if="platformSections.length && securitySectionsVisible.length"
+        class="hidden h-6 w-px bg-slate-700/80 sm:block"
+        aria-hidden="true"
+      />
+      <div class="flex flex-wrap justify-end gap-2">
+        <button
+          v-for="s in securitySectionsVisible"
+          :key="s.id"
+          type="button"
+          class="rounded-lg px-3 py-2 text-sm font-medium transition"
+          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'"
+          @click="sub = s.id"
+        >
+          {{ s.icon }} {{ s.label }}
+        </button>
+        <button
+          v-if="sub === 'users' || sub === 'auth' || sub === 'siem' || sub === 'ai'"
+          type="button"
+          class="rounded-lg bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+          :disabled="busy"
+          @click="loadAdmin"
+        >
+          Обновить
+        </button>
+      </div>
     </div>
 
     <section v-if="sub === 'appearance'" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
@@ -276,11 +295,13 @@ const securitySections = [
   { id: 'exceptions' as const, label: 'Исключения', icon: '🛡️' },
 ]
 
-const visibleSections = computed(() =>
-  isAdmin.value
-    ? [...appearanceSection, ...adminSections, ...securitySections]
-    : [...appearanceSection, ...securitySections],
+const platformSections = computed(() =>
+  isAdmin.value ? [...appearanceSection, ...adminSections] : [...appearanceSection],
 )
+
+const securitySectionsVisible = computed(() => securitySections)
+
+const visibleSections = computed(() => [...platformSections.value, ...securitySectionsVisible.value])
 
 const appearanceHint = computed(() => {
   const pref =
