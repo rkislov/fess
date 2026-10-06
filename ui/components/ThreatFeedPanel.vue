@@ -26,9 +26,27 @@
       <h2 class="text-base font-semibold text-white">Источник IOC</h2>
       <p class="mt-1.5 text-sm text-slate-400">
         Централизованно с
-        <a href="https://fess.kislovs.ru" class="text-teal-400 hover:underline" target="_blank" rel="noopener">FESS Feed</a>
-        или свои ключи ThreatFox / URL (Q-Feeds).
+        <a href="https://feed.kislovs.ru" class="text-teal-400 hover:underline" target="_blank" rel="noopener">feed.kislovs.ru</a>
+        (FESS Feed) или свои ключи ThreatFox / URL (Q-Feeds).
       </p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a
+          href="https://feed.kislovs.ru"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-600"
+        >
+          Кабинет подписки
+        </a>
+        <a
+          href="https://feed.kislovs.ru/register"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center rounded-lg border border-teal-700/70 bg-slate-950 px-4 py-2 text-sm text-teal-100 hover:bg-slate-900"
+        >
+          Оформить / продлить
+        </a>
+      </div>
       <div class="mt-4 flex flex-col gap-2 text-sm text-slate-300">
         <label class="flex items-center gap-2">
           <input v-model="providerMode" type="radio" value="fess_feed" class="border-slate-600" @change="onProviderChange" />
@@ -48,9 +66,34 @@
     <section v-if="providerMode === 'fess_feed'" class="rounded-2xl border border-teal-900/40 bg-slate-900/50 p-5 sm:p-6">
       <h2 class="text-base font-semibold text-white">FESS Feed</h2>
       <p class="mt-1.5 text-sm text-slate-400">
-        Текстовые списки IP и хэшей, те же источники (ThreatFox, Q-Feeds). Ключ из
-        <a href="https://feed.kislovs.ru/register" class="text-teal-400 hover:underline" target="_blank" rel="noopener">кабинета подписки</a>.
+        Текстовые списки IP и хэшей. Ключ берётся в кабинете на feed.kislovs.ru и вставляется ниже.
       </p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a
+          href="https://feed.kislovs.ru"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-600"
+        >
+          Открыть кабинет
+        </a>
+        <a
+          href="https://feed.kislovs.ru/register"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center rounded-lg border border-teal-700/70 bg-slate-950 px-3 py-1.5 text-sm text-teal-100 hover:bg-slate-900"
+        >
+          Регистрация / подписка
+        </a>
+        <a
+          href="https://feed.kislovs.ru/login"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center rounded-lg border border-slate-600 bg-slate-950 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-900"
+        >
+          Войти
+        </a>
+      </div>
       <label class="mt-4 block text-xs text-slate-500">
         Базовый URL
         <input v-model="cfg.fess_feed_base_url" placeholder="https://feed.kislovs.ru" class="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm" />

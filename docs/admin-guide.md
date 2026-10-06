@@ -235,9 +235,9 @@ API: `GET/PUT /api/v1/settings/rate-limit`. При сохранении сист
 
 ## 9. ThreatFox, Q-Feeds и FESS Feed
 
-UI → **Настройки → IOC**:
+UI → **Настройки → IOC / FESS Feed**:
 
-- **FESS Feed** (рекомендуется для подписки): базовый URL `https://feed.kislovs.ru`, ключ из кабинета [feed.kislovs.ru](https://feed.kislovs.ru). Текстовые файлы IP и хэшей; зеркало ClamAV — `https://feed.kislovs.ru/clamav/<ключ>` в **Антивирус → ClamAV mirror**.
+- **FESS Feed** (рекомендуется): кнопки **Кабинет подписки** / **Оформить** ведут на [feed.kislovs.ru](https://feed.kislovs.ru). Базовый URL `https://feed.kislovs.ru`, API-ключ из кабинета. Зеркало ClamAV — `https://feed.kislovs.ru/clamav/<ключ>` в **Антивирус → ClamAV mirror**.
 - **ThreatFox** — свой Auth-Key abuse.ch.
 - **URL / Q-Feeds** — свой токен и URL.
 
