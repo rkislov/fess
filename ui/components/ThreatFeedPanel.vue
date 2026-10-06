@@ -22,23 +22,68 @@
       </button>
     </div>
 
-    <!-- ThreatFox -->
-    <section class="rounded-2xl border border-orange-900/35 bg-slate-900/50 p-5 sm:p-6">
+    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-white">Источник IOC</h2>
+      <p class="mt-1.5 text-sm text-slate-400">
+        Централизованно с
+        <a href="https://fess.kislovs.ru" class="text-teal-400 hover:underline" target="_blank" rel="noopener">FESS Feed</a>
+        или свои ключи ThreatFox / URL (Q-Feeds).
+      </p>
+      <div class="mt-4 flex flex-col gap-2 text-sm text-slate-300">
+        <label class="flex items-center gap-2">
+          <input v-model="providerMode" type="radio" value="fess_feed" class="border-slate-600" @change="onProviderChange" />
+          FESS Feed (feed.kislovs.ru)
+        </label>
+        <label class="flex items-center gap-2">
+          <input v-model="providerMode" type="radio" value="threatfox" class="border-slate-600" @change="onProviderChange" />
+          ThreatFox (свой Auth-Key)
+        </label>
+        <label class="flex items-center gap-2">
+          <input v-model="providerMode" type="radio" value="url" class="border-slate-600" @change="onProviderChange" />
+          URL / Q-Feeds (свой токен)
+        </label>
+      </div>
+    </section>
+
+    <section v-if="providerMode === 'fess_feed'" class="rounded-2xl border border-teal-900/40 bg-slate-900/50 p-5 sm:p-6">
+      <h2 class="text-base font-semibold text-white">FESS Feed</h2>
+      <p class="mt-1.5 text-sm text-slate-400">
+        Текстовые списки IP и хэшей, те же источники (ThreatFox, Q-Feeds). Ключ из
+        <a href="https://feed.kislovs.ru/register" class="text-teal-400 hover:underline" target="_blank" rel="noopener">кабинета подписки</a>.
+      </p>
+      <label class="mt-4 block text-xs text-slate-500">
+        Базовый URL
+        <input v-model="cfg.fess_feed_base_url" placeholder="https://feed.kislovs.ru" class="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm" />
+      </label>
+      <label class="mt-3 block text-xs text-slate-500">
+        API-ключ подписки
+        <input
+          v-model="cfg.api_key"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="apiKeySet ? 'Оставьте пустым, чтобы не менять' : 'ff_…'"
+          class="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm"
+        />
+      </label>
+      <button
+        type="button"
+        class="mt-4 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50"
+        :disabled="busy || (!apiKeySet && !cfg.api_key)"
+        @click="syncIncremental"
+      >
+        Синхронизировать сейчас
+      </button>
+      <p v-if="feedStatus?.fess_feed_ready" class="mt-3 text-xs text-emerald-300">Ключ задан</p>
+    </section>
+
+    <section v-if="providerMode === 'threatfox'" class="rounded-2xl border border-orange-900/35 bg-slate-900/50 p-5 sm:p-6">
       <h2 class="text-base font-semibold text-white">ThreatFox (abuse.ch)</h2>
       <p class="mt-1.5 text-sm leading-relaxed text-slate-400">
-        Синхронизируются IP/CIDR и хэши файлов (<span class="font-mono text-slate-500">md5_hash</span>,
-        <span class="font-mono text-slate-500">sha256_hash</span>). Хэши проверяются в цепочке антивируса до ICAP/HTTP-сканера.
-        Auth-Key —
+        Свой Auth-Key —
         <a href="https://auth.abuse.ch/" target="_blank" rel="noopener" class="text-teal-400 hover:underline">auth.abuse.ch</a>.
         Авто-синхронизация — <strong class="font-normal text-slate-300">2 раза в сутки</strong>.
       </p>
-
-      <label class="mt-4 flex items-center gap-2 text-sm text-slate-300">
-        <input v-model="useThreatFox" type="checkbox" class="rounded border-slate-600" @change="onProviderChange" />
-        Использовать ThreatFox
-      </label>
-
-      <div v-if="useThreatFox" class="mt-4 space-y-4 border-t border-white/5 pt-4">
+      <div class="mt-4 space-y-4 border-t border-white/5 pt-4">
         <label class="block text-xs text-slate-500">
           Auth-Key (токен)
           <input
@@ -183,12 +228,12 @@
         Синхронизация по URL (Q-Feeds и др.)
       </summary>
       <div class="space-y-4 border-t border-white/5 px-5 pb-5 pt-3">
-        <p class="text-xs text-slate-500">Отключите ThreatFox выше. Авто — не чаще 2 раз в сутки.</p>
+        <p class="text-xs text-slate-500">Режим URL. Авто — не чаще 2 раз в сутки.</p>
         <input
           v-model="cfg.feed_url"
           placeholder="https://api.qfeeds.com/api.php?…"
           class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm"
-          :disabled="useThreatFox"
+          :disabled="providerMode !== 'url'"
         />
         <div class="grid gap-3 sm:grid-cols-2">
           <label class="text-xs text-slate-500">
@@ -214,7 +259,7 @@
         <button
           type="button"
           class="rounded-lg border border-teal-700/80 px-4 py-2 text-sm text-teal-100 hover:bg-slate-900 disabled:opacity-50"
-          :disabled="busy || useThreatFox"
+          :disabled="busy || providerMode !== 'url'"
           @click="syncUrl"
         >
           Синхронизировать URL
@@ -235,6 +280,8 @@ type ThreatFeedCfg = {
   log_hits: boolean
   provider: string
   feed_url: string
+  hash_feed_url: string
+  fess_feed_base_url: string
   poll_interval_sec: number
   http_timeout_sec: number
   sources: string[]
@@ -252,6 +299,7 @@ type ThreatFeedStatus = {
   block: boolean
   provider?: string
   threatfox_ready?: boolean
+  fess_feed_ready?: boolean
   last_attempt_at?: string
   last_success_at?: string
   last_error?: string
@@ -270,8 +318,10 @@ function defaultCfg(): ThreatFeedCfg {
     enabled: false,
     block: true,
     log_hits: true,
-    provider: 'threatfox',
+    provider: 'fess_feed',
     feed_url: '',
+    hash_feed_url: '',
+    fess_feed_base_url: 'https://feed.kislovs.ru',
     poll_interval_sec: 43200,
     http_timeout_sec: 600,
     sources: [],
@@ -279,12 +329,12 @@ function defaultCfg(): ThreatFeedCfg {
     csv_indicator_column: '',
     csv_source_column: '',
     api_key: '',
-    api_key_header: 'Auth-Key',
+    api_key_header: 'X-Api-Key',
   }
 }
 
 const cfg = ref<ThreatFeedCfg>(defaultCfg())
-const useThreatFox = ref(true)
+const providerMode = ref<'fess_feed' | 'threatfox' | 'url'>('fess_feed')
 const apiKeySet = ref(false)
 const feedStatus = ref<ThreatFeedStatus | null>(null)
 const err = ref('')
@@ -294,10 +344,9 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const pickedFile = ref<File | null>(null)
 
 function onProviderChange() {
-  cfg.value.provider = useThreatFox.value ? 'threatfox' : 'url'
-  if (useThreatFox.value) {
-    cfg.value.api_key_header = 'Auth-Key'
-  }
+  cfg.value.provider = providerMode.value
+  if (providerMode.value === 'threatfox') cfg.value.api_key_header = 'Auth-Key'
+  if (providerMode.value === 'fess_feed') cfg.value.api_key_header = 'X-Api-Key'
 }
 
 function fmtTs(s?: string) {
@@ -332,8 +381,13 @@ function flashOk(msg: string) {
 function currentSettingsBody() {
   return {
     ...cfg.value,
-    provider: useThreatFox.value ? 'threatfox' : 'url',
-    api_key_header: useThreatFox.value ? 'Auth-Key' : cfg.value.api_key_header || 'Authorization',
+    provider: providerMode.value,
+    api_key_header:
+      providerMode.value === 'threatfox'
+        ? 'Auth-Key'
+        : providerMode.value === 'fess_feed'
+          ? 'X-Api-Key'
+          : cfg.value.api_key_header || 'Authorization',
     sources: [] as string[],
   }
 }
@@ -355,11 +409,11 @@ async function load() {
     apiKeySet.value = !!data.api_key_set
     const { api_key_set: _k, ...rest } = data
     cfg.value = { ...defaultCfg(), ...rest }
-    useThreatFox.value = !rest.provider || rest.provider === 'threatfox'
-    if (useThreatFox.value) {
-      cfg.value.provider = 'threatfox'
-      cfg.value.api_key_header = 'Auth-Key'
-    }
+    if (rest.provider === 'url') providerMode.value = 'url'
+    else if (rest.provider === 'threatfox') providerMode.value = 'threatfox'
+    else providerMode.value = 'fess_feed'
+    cfg.value.provider = providerMode.value
+    onProviderChange()
     await loadStatus().catch(flashErr)
   } catch (e) {
     flashErr(e)
@@ -413,7 +467,7 @@ async function syncIncremental() {
     await apiFetch(apiUrl('/settings/threat-feed'), { method: 'PUT', body: currentSettingsBody() })
     await apiFetch(apiUrl('/settings/threat-feed/sync'), { method: 'POST' })
     await load()
-    flashOk('Синхронизация ThreatFox выполнена')
+    flashOk(providerMode.value === 'fess_feed' ? 'Синхронизация FESS Feed выполнена' : 'Синхронизация ThreatFox выполнена')
   } catch (e) {
     flashErr(e)
     await loadStatus().catch(() => {})

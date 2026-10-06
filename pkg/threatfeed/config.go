@@ -17,15 +17,17 @@ type Config struct {
 	Enabled         bool     `json:"enabled"`
 	Block           bool     `json:"block"`
 	LogHits         bool     `json:"log_hits"`
-	Provider        string   `json:"provider"` // "threatfox" or "url" (empty: infer from feed_url)
+	Provider        string   `json:"provider"` // "fess_feed", "threatfox" or "url"
 	FeedURL         string   `json:"feed_url"`
+	HashFeedURL     string   `json:"hash_feed_url"`
+	FessFeedBaseURL string   `json:"fess_feed_base_url"`
 	PollIntervalSec int      `json:"poll_interval_sec"`
 	HTTPTimeoutSec  int      `json:"http_timeout_sec"`
-	Sources         []string `json:"sources"` // allowlist by feed "source" field; empty = all sources
-	Format          string   `json:"format"`  // auto, csv, plain, ndjson
+	Sources         []string `json:"sources"`
+	Format          string   `json:"format"`
 	CSVIndicatorCol string   `json:"csv_indicator_column"`
 	CSVSourceCol    string   `json:"csv_source_column"`
-	APIKey          string   `json:"api_key"` // ThreatFox Auth-Key when provider=threatfox
+	APIKey          string   `json:"api_key"`
 	APIKeyHeader    string   `json:"api_key_header"`
 }
 
@@ -39,6 +41,7 @@ func DefaultConfig() Config {
 		Sources:         nil,
 		Format:          "auto",
 		APIKeyHeader:    "Authorization",
+		FessFeedBaseURL: DefaultFessFeedBaseURL,
 	}
 }
 
@@ -64,27 +67,68 @@ func ParseConfig(raw []byte) (Config, error) {
 		f = "auto"
 	}
 	c.Format = f
+	if strings.TrimSpace(c.FessFeedBaseURL) == "" {
+		c.FessFeedBaseURL = DefaultFessFeedBaseURL
+	}
+	c.FessFeedBaseURL = strings.TrimRight(strings.TrimSpace(c.FessFeedBaseURL), "/")
 	if strings.TrimSpace(c.APIKeyHeader) == "" {
-		if c.UsesThreatFox() {
+		switch {
+		case c.UsesThreatFox():
 			c.APIKeyHeader = "Auth-Key"
-		} else {
+		case c.UsesFessFeed():
+			c.APIKeyHeader = "X-Api-Key"
+		default:
 			c.APIKeyHeader = "Authorization"
 		}
 	}
 	return c, nil
 }
 
-// UsesThreatFox reports whether sync should use ThreatFox API/export.
 func (c Config) UsesThreatFox() bool {
 	return strings.EqualFold(strings.TrimSpace(c.Provider), ThreatFoxProvider)
 }
 
-// AutoSyncConfigured reports whether background sync can run (ThreatFox auth or feed URL).
+func (c Config) UsesFessFeed() bool {
+	p := strings.ToLower(strings.TrimSpace(c.Provider))
+	return p == FessFeedProvider || p == "feed"
+}
+
 func (c Config) AutoSyncConfigured() bool {
-	if c.UsesThreatFox() {
+	if c.UsesThreatFox() || c.UsesFessFeed() {
 		return strings.TrimSpace(c.APIKey) != ""
 	}
 	return strings.TrimSpace(c.FeedURL) != ""
+}
+
+func (c Config) ResolvedFessFeedBase() string {
+	b := strings.TrimRight(strings.TrimSpace(c.FessFeedBaseURL), "/")
+	if b == "" {
+		return DefaultFessFeedBaseURL
+	}
+	return b
+}
+
+func (c Config) ResolvedIPFeedURL() string {
+	if u := strings.TrimSpace(c.FeedURL); u != "" && !c.UsesFessFeed() {
+		return u
+	}
+	if u := strings.TrimSpace(c.FeedURL); c.UsesFessFeed() && u != "" {
+		return u
+	}
+	if c.UsesFessFeed() {
+		return c.ResolvedFessFeedBase() + "/feeds/v1/ips.txt"
+	}
+	return strings.TrimSpace(c.FeedURL)
+}
+
+func (c Config) ResolvedHashFeedURL() string {
+	if u := strings.TrimSpace(c.HashFeedURL); u != "" {
+		return u
+	}
+	if c.UsesFessFeed() {
+		return c.ResolvedFessFeedBase() + "/feeds/v1/hashes.txt"
+	}
+	return ""
 }
 
 func (c Config) SourcesAllowlist() map[string]struct{} {

@@ -29,6 +29,9 @@ const (
 )
 
 func syncThreatFeedFromConfigRouter(ctx context.Context, db *sql.DB, cfg threatfeed.Config) error {
+	if cfg.UsesFessFeed() {
+		return syncFessFeed(ctx, db, cfg)
+	}
 	if cfg.UsesThreatFox() {
 		return syncThreatFoxIncremental(ctx, db, cfg)
 	}

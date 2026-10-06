@@ -8,9 +8,11 @@ import (
 )
 
 const (
-	ThreatFoxProvider     = "threatfox"
-	ThreatFoxAPIEndpoint  = "https://threatfox-api.abuse.ch/api/v1/"
-	ThreatFoxFullExportV2 = "https://threatfox-api.abuse.ch/v2/files/exports/%s/full.csv.zip"
+	ThreatFoxProvider      = "threatfox"
+	FessFeedProvider       = "fess_feed"
+	DefaultFessFeedBaseURL = "https://feed.kislovs.ru"
+	ThreatFoxAPIEndpoint   = "https://threatfox-api.abuse.ch/api/v1/"
+	ThreatFoxFullExportV2  = "https://threatfox-api.abuse.ch/v2/files/exports/%s/full.csv.zip"
 )
 
 // ExtractIPsFromThreatFoxIOC returns parsable IPs/CIDRs from a ThreatFox IOC value and type.

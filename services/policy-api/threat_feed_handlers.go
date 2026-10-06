@@ -26,6 +26,7 @@ type threatFeedStatusResponse struct {
 	Block            bool   `json:"block"`
 	Provider         string `json:"provider,omitempty"`
 	ThreatFoxReady   bool   `json:"threatfox_ready"`
+	FessFeedReady    bool   `json:"fess_feed_ready"`
 	LastAttemptAtRFC string `json:"last_attempt_at,omitempty"`
 	LastSuccessAtRFC string `json:"last_success_at,omitempty"`
 	LastError        string `json:"last_error,omitempty"`
@@ -144,6 +145,7 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 		Block:            cfg.Block,
 		Provider:         cfg.Provider,
 		ThreatFoxReady:   cfg.UsesThreatFox() && strings.TrimSpace(cfg.APIKey) != "",
+		FessFeedReady:    cfg.UsesFessFeed() && strings.TrimSpace(cfg.APIKey) != "",
 		RowsLastIngested: rowsIng,
 		IndicatorCount:   cnt,
 		FileHashCount:    hashCnt,
