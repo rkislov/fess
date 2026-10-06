@@ -37,7 +37,7 @@ Production-oriented blueprint for a dynamic Web Application Firewall (WAF) with 
 
 **Блокировка WAF (HTTP 403)**
 
-![Блокировка WAF 403](docs/screenshots/page-blocked-403.png)
+![Блокировка WAF 403](docs/screenshots/page-waf-blocked-403.png)
 
 ## Обои (стрит-арт, 4K)
 
