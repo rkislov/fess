@@ -188,25 +188,35 @@
               <div v-show="wizardStep === 3" class="space-y-3">
                 <h3 class="text-sm font-medium text-slate-300">HTTPS (необязательно)</h3>
                 <p class="text-xs text-slate-500">
-                  Терминация TLS на waf-gateway по SNI. Сертификат должен покрывать тот же хост, что и шаблон сайта. Порты см. README
-                  (HTTP <code class="text-slate-400">WAF_LISTEN_ADDR</code>, HTTPS <code class="text-slate-400">WAF_TLS_LISTEN_ADDR</code>).
+                  Терминация TLS на waf-gateway по SNI. Выберите сертификат из УЦ или вставьте PEM.
                 </p>
                 <label class="flex items-center gap-2 text-sm text-slate-400">
                   <input v-model="wizard.tls_enabled" type="checkbox" class="rounded border-slate-600" />
                   Включить HTTPS для этого сайта после создания
                 </label>
-                <textarea
-                  v-model="wizard.tls_cert_pem"
-                  rows="6"
-                  placeholder="-----BEGIN CERTIFICATE----- ... (полная цепочка PEM)"
-                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-                />
-                <textarea
-                  v-model="wizard.tls_key_pem"
-                  rows="4"
-                  placeholder="-----BEGIN PRIVATE KEY----- ..."
-                  class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-                />
+                <label v-if="wizard.tls_enabled" class="block text-xs text-slate-400">
+                  Сертификат из УЦ
+                  <select v-model="wizard.certificate_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                    <option value="">— вручную (PEM) —</option>
+                    <option v-for="c in caCerts" :key="c.id" :value="c.id">
+                      {{ c.name }} · {{ (c.domains || []).join(', ') || c.source }}
+                    </option>
+                  </select>
+                </label>
+                <template v-if="wizard.tls_enabled && !wizard.certificate_id">
+                  <textarea
+                    v-model="wizard.tls_cert_pem"
+                    rows="6"
+                    placeholder="-----BEGIN CERTIFICATE----- ... (полная цепочка PEM)"
+                    class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                  />
+                  <textarea
+                    v-model="wizard.tls_key_pem"
+                    rows="4"
+                    placeholder="-----BEGIN PRIVATE KEY----- ..."
+                    class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                  />
+                </template>
               </div>
 
               <div class="mt-6 flex flex-wrap items-center gap-2">
@@ -295,31 +305,50 @@
                 <div class="rounded-xl border border-white/5 bg-slate-950/40 p-4">
                   <h3 class="text-sm font-medium text-slate-300">HTTPS (TLS на шлюзе)</h3>
                   <p class="mt-1 text-xs text-slate-500">
-                    Ключ и сертификат хранятся в БД; при сохранении шлюз подхватывает их без перезапуска. Содержимое сертификата по API не
-                    отдаётся — при замене вставьте PEM заново.
+                    Выберите сертификат из раздела <span class="text-slate-400">УЦ</span> или вставьте PEM вручную. Шлюз подхватывает без перезапуска.
                   </p>
                   <div class="mt-4 space-y-3">
                     <p class="text-xs text-slate-500">
                       Состояние:
-                      <span v-if="tlsMeta.tls_has_certificate" class="text-emerald-400">сертификат загружен</span>
+                      <span v-if="tlsMeta.tls_has_certificate" class="text-emerald-400">
+                        сертификат задан
+                        <template v-if="tlsMeta.certificate_name"> ({{ tlsMeta.certificate_name }})</template>
+                      </span>
                       <span v-else class="text-amber-400/90">сертификат не задан</span>
                     </p>
                     <label class="flex items-center gap-2 text-sm text-slate-400">
                       <input v-model="tlsForm.enabled" type="checkbox" class="rounded border-slate-600" />
                       TLS включён для этого сайта
                     </label>
-                    <textarea
-                      v-model="tlsForm.cert_pem"
-                      rows="5"
-                      placeholder="PEM сертификата (цепочка), вставьте чтобы задать или обновить"
-                      class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-                    />
-                    <textarea
-                      v-model="tlsForm.key_pem"
-                      rows="3"
-                      placeholder="Приватный ключ PEM (пусто = не менять существующий ключ)"
-                      class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
-                    />
+                    <label class="block text-xs text-slate-400">
+                      Сертификат из УЦ
+                      <select v-model="tlsForm.certificate_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
+                        <option value="">— вручную (PEM ниже) —</option>
+                        <option v-for="c in caCerts" :key="c.id" :value="c.id">
+                          {{ c.name }} · {{ (c.domains || []).join(', ') || c.source }} · {{ c.status }}
+                        </option>
+                      </select>
+                    </label>
+                    <p v-if="!caCerts.length" class="text-[11px] text-amber-200/80">
+                      В УЦ пока нет сертификатов — создайте в разделе «УЦ», затем выберите здесь.
+                    </p>
+                    <template v-if="!tlsForm.certificate_id">
+                      <textarea
+                        v-model="tlsForm.cert_pem"
+                        rows="5"
+                        placeholder="PEM сертификата (цепочка), вставьте чтобы задать или обновить"
+                        class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                      />
+                      <textarea
+                        v-model="tlsForm.key_pem"
+                        rows="3"
+                        placeholder="Приватный ключ PEM (пусто = не менять существующий ключ)"
+                        class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+                      />
+                    </template>
+                    <p v-else class="text-[11px] text-slate-500">
+                      Будет использован PEM из выбранного сертификата УЦ (в т.ч. ACME / самоподписанный).
+                    </p>
                     <button type="button" class="rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600" :disabled="busy" @click="saveTls">
                       Сохранить TLS
                     </button>
@@ -504,10 +533,25 @@ const wizard = reactive({
   tls_enabled: false,
   tls_cert_pem: '',
   tls_key_pem: '',
+  certificate_id: '',
 })
 
-const tlsMeta = reactive({ tls_enabled: false, tls_has_certificate: false })
-const tlsForm = reactive({ enabled: false, cert_pem: '', key_pem: '' })
+type CaCert = {
+  id: string
+  name: string
+  source: string
+  domains: string[]
+  status: string
+}
+
+const caCerts = ref<CaCert[]>([])
+const tlsMeta = reactive({
+  tls_enabled: false,
+  tls_has_certificate: false,
+  certificate_id: '',
+  certificate_name: '',
+})
+const tlsForm = reactive({ enabled: false, cert_pem: '', key_pem: '', certificate_id: '' })
 
 const newBackend = reactive({
   name: '',
@@ -659,12 +703,14 @@ function openAddWizard() {
   resetWizard()
   sitePanelMode.value = 'create'
   sitePanelOpen.value = true
+  void loadCaCerts()
 }
 
 function openEditModal(s: Site) {
   applySelection(s.id)
   sitePanelMode.value = 'edit'
   sitePanelOpen.value = true
+  void loadCaCerts()
 }
 
 function closeSitePanel() {
@@ -686,6 +732,7 @@ function resetWizard() {
   wizard.tls_enabled = false
   wizard.tls_cert_pem = ''
   wizard.tls_key_pem = ''
+  wizard.certificate_id = ''
 }
 
 function goWizardStep(n: number) {
@@ -722,8 +769,8 @@ async function finalizeWizard() {
     flashErr(new Error('Укажите имя и URL бэкенда'))
     return
   }
-  if (wizard.tls_enabled && (!wizard.tls_cert_pem.trim() || !wizard.tls_key_pem.trim())) {
-    flashErr(new Error('Для HTTPS нужны PEM сертификата и ключа'))
+  if (wizard.tls_enabled && !wizard.certificate_id && (!wizard.tls_cert_pem.trim() || !wizard.tls_key_pem.trim())) {
+    flashErr(new Error('Для HTTPS выберите сертификат УЦ или укажите PEM'))
     return
   }
 
@@ -755,11 +802,14 @@ async function finalizeWizard() {
     if (withTls) {
       await apiFetch(apiUrl(`/sites/${siteId}/tls`), {
         method: 'PUT',
-        body: {
-          tls_enabled: true,
-          tls_cert_pem: wizard.tls_cert_pem.trim(),
-          tls_key_pem: wizard.tls_key_pem.trim(),
-        },
+        body: wizard.certificate_id
+          ? { tls_enabled: true, certificate_id: wizard.certificate_id }
+          : {
+              tls_enabled: true,
+              tls_cert_pem: wizard.tls_cert_pem.trim(),
+              tls_key_pem: wizard.tls_key_pem.trim(),
+              certificate_id: '',
+            },
       })
     }
     resetWizard()
@@ -817,12 +867,29 @@ async function loadBackends(siteId: string) {
   backends.value = (data.items || []).map(normBackend)
 }
 
+async function loadCaCerts() {
+  try {
+    const data = await apiFetch<{ items: CaCert[] }>(apiUrl('/certificates'))
+    caCerts.value = data.items || []
+  } catch {
+    caCerts.value = []
+  }
+}
+
 async function loadTlsMeta(siteId: string) {
   try {
-    const data = await apiFetch<{ tls_enabled: boolean; tls_has_certificate: boolean }>(apiUrl(`/sites/${siteId}/tls`))
+    const data = await apiFetch<{
+      tls_enabled: boolean
+      tls_has_certificate: boolean
+      certificate_id?: string
+      certificate_name?: string
+    }>(apiUrl(`/sites/${siteId}/tls`))
     tlsMeta.tls_enabled = data.tls_enabled
     tlsMeta.tls_has_certificate = data.tls_has_certificate
+    tlsMeta.certificate_id = data.certificate_id || ''
+    tlsMeta.certificate_name = data.certificate_name || ''
     tlsForm.enabled = data.tls_enabled
+    tlsForm.certificate_id = data.certificate_id || ''
     tlsForm.cert_pem = ''
     tlsForm.key_pem = ''
   } catch (e) {
@@ -912,9 +979,9 @@ async function saveTls() {
     return
   }
 
-  if (!tlsMeta.tls_has_certificate) {
+  if (!tlsForm.certificate_id && !tlsMeta.tls_has_certificate) {
     if (!tlsForm.cert_pem.trim() || !tlsForm.key_pem.trim()) {
-      flashErr(new Error('При первом включении TLS укажите PEM сертификата и ключа'))
+      flashErr(new Error('Выберите сертификат из УЦ или укажите PEM'))
       return
     }
   }
@@ -922,9 +989,14 @@ async function saveTls() {
   busy.value = true
   err.value = ''
   try {
-    const body: Record<string, unknown> = { tls_enabled: true }
-    if (tlsForm.cert_pem.trim()) body.tls_cert_pem = tlsForm.cert_pem.trim()
-    if (tlsForm.key_pem.trim()) body.tls_key_pem = tlsForm.key_pem.trim()
+    const body: Record<string, unknown> = {
+      tls_enabled: true,
+      certificate_id: tlsForm.certificate_id || '',
+    }
+    if (!tlsForm.certificate_id) {
+      if (tlsForm.cert_pem.trim()) body.tls_cert_pem = tlsForm.cert_pem.trim()
+      if (tlsForm.key_pem.trim()) body.tls_key_pem = tlsForm.key_pem.trim()
+    }
     await apiFetch(apiUrl(`/sites/${selected.value.id}/tls`), { method: 'PUT', body })
     tlsForm.cert_pem = ''
     tlsForm.key_pem = ''
@@ -1076,6 +1148,7 @@ async function addBackend() {
 onMounted(() => {
   loadPolicies().catch(flashErr)
   loadSites().catch(flashErr)
+  loadCaCerts().catch(flashErr)
 })
 
 function onSitePanelEscape(e: KeyboardEvent) {

@@ -171,16 +171,21 @@ func backendByIDHandler(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb 
 }
 
 type siteTLSPutRequest struct {
-	TLSEnabled *bool   `json:"tls_enabled"`
-	TLSCertPem *string `json:"tls_cert_pem"`
-	TLSKeyPem  *string `json:"tls_key_pem"`
+	TLSEnabled    *bool   `json:"tls_enabled"`
+	TLSCertPem    *string `json:"tls_cert_pem"`
+	TLSKeyPem     *string `json:"tls_key_pem"`
+	CertificateID *string `json:"certificate_id"` // nil = не менять; "" = отвязать; uuid = взять PEM из УЦ
 }
 
 func getSiteTLS(w http.ResponseWriter, r *http.Request, db *sql.DB, siteID string) {
 	var en bool
-	var cert, key sql.NullString
+	var cert, key, certID, certName sql.NullString
 	err := db.QueryRowContext(r.Context(), `
-SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, siteID).Scan(&en, &cert, &key)
+SELECT s.tls_enabled, s.tls_cert_pem, s.tls_key_pem,
+  COALESCE(s.certificate_id::text, ''), COALESCE(c.name, '')
+FROM sites s
+LEFT JOIN certificates c ON c.id = s.certificate_id
+WHERE s.id=$1::uuid`, siteID).Scan(&en, &cert, &key, &certID, &certName)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "site not found"})
 		return
@@ -189,18 +194,21 @@ SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, sit
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	has := strings.TrimSpace(cert.String) != "" && strings.TrimSpace(key.String) != ""
+	has := (strings.TrimSpace(cert.String) != "" && strings.TrimSpace(key.String) != "") || strings.TrimSpace(certID.String) != ""
 	writeJSON(w, http.StatusOK, map[string]any{
 		"tls_enabled":         en,
 		"tls_has_certificate": has,
+		"certificate_id":      strings.TrimSpace(certID.String),
+		"certificate_name":    strings.TrimSpace(certName.String),
 	})
 }
 
 func putSiteTLS(w http.ResponseWriter, r *http.Request, db *sql.DB, rdb *redis.Client, siteID string, payload siteTLSPutRequest) {
 	var curEn bool
-	var curCert, curKey sql.NullString
+	var curCert, curKey, curCertID sql.NullString
 	err := db.QueryRowContext(r.Context(), `
-SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, siteID).Scan(&curEn, &curCert, &curKey)
+SELECT tls_enabled, tls_cert_pem, tls_key_pem, COALESCE(certificate_id::text, '')
+FROM sites WHERE id=$1::uuid`, siteID).Scan(&curEn, &curCert, &curKey, &curCertID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "site not found"})
 		return
@@ -215,33 +223,72 @@ SELECT tls_enabled, tls_cert_pem, tls_key_pem FROM sites WHERE id=$1::uuid`, sit
 		en = *payload.TLSEnabled
 	}
 	cert := curCert.String
+	key := curKey.String
+	certID := strings.TrimSpace(curCertID.String)
+
+	if payload.CertificateID != nil {
+		certID = strings.TrimSpace(*payload.CertificateID)
+		if certID != "" {
+			if _, err := uuid.Parse(certID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid certificate_id"})
+				return
+			}
+			var cPem, kPem string
+			err = db.QueryRowContext(r.Context(), `
+SELECT COALESCE(cert_pem, ''), COALESCE(key_pem, '') FROM certificates WHERE id=$1::uuid`, certID).Scan(&cPem, &kPem)
+			if err == sql.ErrNoRows {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "certificate not found"})
+				return
+			}
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			if strings.TrimSpace(cPem) == "" || strings.TrimSpace(kPem) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "у выбранного сертификата УЦ нет PEM (ещё не выпущен?)"})
+				return
+			}
+			cert = cPem
+			key = kPem
+		}
+	}
+
 	if payload.TLSCertPem != nil {
 		cert = *payload.TLSCertPem
+		if payload.CertificateID == nil {
+			certID = "" // ручная замена PEM отвязывает УЦ
+		}
 	}
-	key := curKey.String
 	if payload.TLSKeyPem != nil {
 		key = *payload.TLSKeyPem
+		if payload.CertificateID == nil {
+			certID = ""
+		}
 	}
 
 	if en && (strings.TrimSpace(cert) == "" || strings.TrimSpace(key) == "") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tls_enabled requires non-empty tls_cert_pem and tls_key_pem"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tls_enabled requires certificate from УЦ or non-empty tls_cert_pem and tls_key_pem"})
 		return
 	}
 
 	_, err = db.ExecContext(r.Context(), `
-UPDATE sites SET tls_enabled=$2, tls_cert_pem=NULLIF(trim($3), ''), tls_key_pem=NULLIF(trim($4), ''), updated_at=NOW()
+UPDATE sites SET tls_enabled=$2,
+  tls_cert_pem=NULLIF(trim($3), ''),
+  tls_key_pem=NULLIF(trim($4), ''),
+  certificate_id=NULLIF(trim($5), '')::uuid,
+  updated_at=NOW()
 WHERE id=$1::uuid`,
-		siteID, en, strings.TrimSpace(cert), strings.TrimSpace(key))
+		siteID, en, strings.TrimSpace(cert), strings.TrimSpace(key), certID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeAuditLog(r.Context(), db, "system", "update", "site_tls", siteID, nil, map[string]any{"tls_enabled": en})
+	writeAuditLog(r.Context(), db, "system", "update", "site_tls", siteID, nil, map[string]any{"tls_enabled": en, "certificate_id": certID})
 	if err := publishRoutingUpdate(r.Context(), rdb); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": siteID, "updated": true})
+	writeJSON(w, http.StatusOK, map[string]any{"id": siteID, "updated": true, "certificate_id": certID})
 }
 
 func listSites(w http.ResponseWriter, r *http.Request, db *sql.DB) {
