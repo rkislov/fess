@@ -21,6 +21,12 @@ func TestOpenAPISpecHandler(t *testing.T) {
 	if !strings.Contains(body, "/api/v1/certificates") {
 		t.Fatal("spec missing certificates path")
 	}
+	if !strings.Contains(body, "/api/v1/dashboard/containers/update-all") {
+		t.Fatal("spec missing container update path")
+	}
+	if !strings.Contains(body, `version: "1.2.0"`) {
+		t.Fatal("spec version should be 1.2.0")
+	}
 	if !strings.Contains(rec.Header().Get("Content-Type"), "yaml") {
 		t.Fatalf("content-type %q", rec.Header().Get("Content-Type"))
 	}

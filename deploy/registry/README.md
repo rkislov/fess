@@ -36,13 +36,13 @@ ufw status
 в `/etc/docker/daemon.json`, затем `systemctl restart docker`.
 
 ```bash
-# pull — без логина
+# pull — без логина (так ставится FESS)
+docker compose -f deploy/docker-compose.yml pull
 docker pull 85.137.24.140:5000/fess/policy-api:latest
 
-# push — нужен логин
+# публикация всех образов стека (нужен логин на push)
 docker login 85.137.24.140:5000 -u fess
-docker tag fess/policy-api:local 85.137.24.140:5000/fess/policy-api:latest
-docker push 85.137.24.140:5000/fess/policy-api:latest
+./deploy/registry/publish-images.sh
 ```
 
 ## Смена пароля

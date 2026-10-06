@@ -77,7 +77,7 @@ curl --path-as-is -i 'http://127.0.0.1/foo/../secret'
 - `db/005_proxy_access_logs.sql` - журнал запросов через шлюз (host → upstream); миграции `006`…`011` дополняют поля (протокол, страна, **user_agent** и т.д.)
 - `docs/screenshots/` - скриншоты панели и страниц шлюза (см. раздел выше)
 - `docs/wallpapers/4k/` - обои 3840×2160 + `fess-wallpapers-4k.zip`
-- `docs/openapi.yaml` - REST API contract (OpenAPI 3.0, **1.1.1**); live `GET http://localhost:8082/api/v1/openapi.yaml`
+- `docs/openapi.yaml` - REST API contract (OpenAPI 3.0, **1.2.0**); live `GET http://localhost:8082/api/v1/openapi.yaml`
 - `docs/blueprint.md` - architecture and rollout plan
 - `docs/admin-guide.md` - **руководство администратора** (развёртывание, UI, `.env`)
 - `deploy/.env.example` - шаблон переменных окружения для всего стека
@@ -100,14 +100,38 @@ curl --path-as-is -i 'http://127.0.0.1/foo/../secret'
 - Per-site PEM (full chain + private key) is configured in the UI; the gateway picks a certificate by SNI using the same host patterns as routing.
 - If the DB volume was created before TLS support, restart **policy-api** so embedded SQL migrations apply (`db/007_site_tls.sql`), or run that file once manually if you use an old API binary without the migration embedded.
 
-## Quick Start (Docker)
+## Quick Start (Docker, образы из своего registry)
+
+На сервере приложения **не собирайте** Go — тяните готовые образы с `85.137.24.140:5000`.
+
+1. В `/etc/docker/daemon.json`:
+
+```json
+{
+  "insecure-registries": ["85.137.24.140:5000"]
+}
+```
+
+затем `sudo systemctl restart docker`.
+
+2. Репозиторий и `.env`:
 
 ```bash
+git clone https://github.com/rkislov/fess.git && cd fess
 cp deploy/.env.example deploy/.env
-# Отредактируйте deploy/.env (пароли, FENCE_JWT_SECRET, при необходимости ИИ)
-
-docker compose -f deploy/docker-compose.yml up -d --build
+# пароли, FENCE_JWT_SECRET; FENCE_REGISTRY уже указывает на 85.137.24.140:5000
 ```
+
+3. Скачать **все** контейнеры из registry и запустить (без `--build`):
+
+```bash
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Публикация новых сборок в registry (с машины, где есть GOPROXY / Docker Hub): `docker login 85.137.24.140:5000 -u fess` и `./deploy/registry/publish-images.sh`. Обновление на узле — снова `pull` + `up -d` или кнопки **Обновить** на дашборде (роль admin).
+
+Сборка из исходников (разработка): `docker compose -f deploy/docker-compose.yml up -d --build`.
 
 Команда **`docker-compose`** (v1) не подходит — используйте **`docker compose`**.
 

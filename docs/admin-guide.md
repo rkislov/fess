@@ -6,7 +6,7 @@
 
 - [README.md](../README.md) — обзор архитектуры и быстрый старт
 - [deploy/.env.example](../deploy/.env.example) — шаблон всех переменных окружения
-- [openapi.yaml](./openapi.yaml) — REST API (OpenAPI 3.0, версия **1.1.1**; с policy-api: `GET /api/v1/openapi.yaml`)
+- [openapi.yaml](./openapi.yaml) — REST API (OpenAPI 3.0, версия **1.2.0**; с policy-api: `GET /api/v1/openapi.yaml`)
 - [blueprint.md](./blueprint.md) — план развития и компоненты
 - [registry/README.md](../deploy/registry/README.md) — свой Docker Registry (pull без пароля, push с паролем, порт **5000** / ufw)
 
@@ -29,13 +29,18 @@
 
 ## 2. Быстрый старт с `.env`
 
+Образы стека берутся из **своего Docker Registry** (`FENCE_REGISTRY`, по умолчанию `85.137.24.140:5000`). На Docker-демоне нужен `insecure-registries` для этого хоста (HTTP).
+
 ```bash
 cd /path/to/fence
 cp deploy/.env.example deploy/.env
 # Отредактируйте deploy/.env: пароли, FENCE_JWT_SECRET, при необходимости FENCE_AI_API_KEY
 
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
 ```
+
+Не используйте `--build` на продакшен-сервере: так снова понадобится `go mod download`. Сборка и `docker push` — скрипт [deploy/registry/publish-images.sh](../deploy/registry/publish-images.sh).
 
 Нужен **Compose V2** (`docker compose`). Если установлена только связка `docker-compose` (v1), будет ошибка про ключ `name` или `KeyError: 'id'` — поставьте плагин Compose: `docker compose version`.
 
@@ -278,7 +283,7 @@ UI → **Настройки → SIEM**: TCP хост/порт, формат CEF/
 
 Общие query-параметры: `q` (поиск по полям), `hours` (`0` = всё время), фильтры по колонкам (см. README).
 
-**Дашборд:** RPS, топ правил, карта (нужен GeoIP). Блок **«Состояние платформы FESS»** — CPU/память/load хоста и список контейнеров compose. Сокет `FENCE_DOCKER_SOCK` смонтирован в policy-api; процесс `appuser` входит в группу `root`, чтобы читать сокет Docker Desktop (`root:root` 660). На Linux задайте **`DOCKER_GID`** (`stat -c '%g' /var/run/docker.sock`). Проект Compose: `fess`.
+**Дашборд:** RPS, топ правил, карта (нужен GeoIP). Блок **«Состояние платформы FESS»** — CPU/память/load хоста, список контейнеров и **проверка версий** в registry. Кнопки **Обновить** / **Обновить все** (роль **admin**) делают `docker pull` и пересоздают контейнер. Сокет Docker смонтирован в policy-api **на запись**. На Linux задайте **`DOCKER_GID`**. Проект Compose: `fess`.
 
 **Prometheus:** `/metrics` на портах 9091 (gateway) и 9092 (policy-api).
 
@@ -351,9 +356,11 @@ docker compose -f deploy/docker-compose.yml logs -f policy-api waf-gateway
 
 ```bash
 git pull
-docker compose -f deploy/docker-compose.yml build policy-api waf-gateway ui
-docker compose -f deploy/docker-compose.yml up -d policy-api waf-gateway ui
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
 ```
+
+Либо в UI дашборда (admin) — **Обновить все**. Сборка на сервере не нужна, если образы уже в registry.
 
 При появлении новых файлов `db/NNN_*.sql` достаточно перезапуска policy-api — миграции применятся автоматически.
 

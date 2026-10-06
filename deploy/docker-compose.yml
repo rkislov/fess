@@ -1,8 +1,10 @@
 # Локальный/стендовый стек FESS. Конфигурация: deploy/.env (см. deploy/.env.example).
 # Compose подхватывает deploy/.env автоматически (каталог файла compose).
-# Запуск из корня репозитория:
+# Запуск из корня репозитория (образы из своего registry, без сборки на сервере):
 #   cp deploy/.env.example deploy/.env
-#   docker compose -f deploy/docker-compose.yml up -d --build
+#   docker compose -f deploy/docker-compose.yml pull
+#   docker compose -f deploy/docker-compose.yml up -d
+# Сборка с нуля (разработка): docker compose -f deploy/docker-compose.yml up -d --build
 # Нужен Compose V2 (`docker compose`). Пакет `docker-compose` v1 (Python) не поддерживается.
 #
 # Имя проекта задаётся COMPOSE_PROJECT_NAME=fess в deploy/.env (контейнеры fess-*).
@@ -20,7 +22,7 @@ x-fence-data-env: &fence-data-env
 services:
   postgres:
     container_name: fess-postgres
-    image: postgres:15
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/library/postgres:${FENCE_POSTGRES_IMAGE_TAG:-15}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fence}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fence}
@@ -70,7 +72,7 @@ services:
 
   redis:
     container_name: fess-redis
-    image: redis:7
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/library/redis:${FENCE_REDIS_IMAGE_TAG:-7}
     ports:
       - "${FENCE_REDIS_PORT:-6379}:6379"
     volumes:
@@ -98,7 +100,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.io,https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-off}
-    image: fess/policy-api:local
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/fess/policy-api:${FENCE_IMAGE_TAG:-latest}
     environment:
       <<: *fence-data-env
       POLICY_API_LISTEN_ADDR: ${POLICY_API_LISTEN_ADDR:-:8082}
@@ -117,13 +119,16 @@ services:
       POLICY_API_METRICS_ADDR: ${POLICY_API_METRICS_ADDR:-:9092}
       FENCE_DOCKER_SOCK: ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}
       FENCE_DOCKER_PROJECT: ${FENCE_DOCKER_PROJECT:-fess}
+      FENCE_REGISTRY: ${FENCE_REGISTRY:-85.137.24.140:5000}
+      FENCE_REGISTRY_SCHEME: ${FENCE_REGISTRY_SCHEME:-http}
+      FENCE_IMAGE_TAG: ${FENCE_IMAGE_TAG:-latest}
     # Сокет Docker: на Desktop часто root:root 660 — даём appuser группу 0;
     # на Linux добавьте GID сокета: DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
     group_add:
       - "${DOCKER_GID:-0}"
     volumes:
       - fence_geoip_data:/var/lib/fence/geoip
-      - ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ${FENCE_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
       - "${FENCE_POLICY_API_PORT:-8082}:8082"
       - "${FENCE_POLICY_API_METRICS_PORT:-9092}:9092"
@@ -148,7 +153,7 @@ services:
 
   clamav-icap:
     container_name: fess-clamav-icap
-    image: opencloudeu/clamav-icap:latest
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/opencloudeu/clamav-icap:${FENCE_CLAMAV_IMAGE_TAG:-latest}
     restart: unless-stopped
     volumes:
       - clamav_defs:/var/lib/clamav
@@ -163,7 +168,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.io,https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-off}
-    image: fess/waf-gateway:local
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/fess/waf-gateway:${FENCE_IMAGE_TAG:-latest}
     environment:
       <<: *fence-data-env
       WAF_LISTEN_ADDR: ${WAF_LISTEN_ADDR:-:80}
@@ -201,7 +206,7 @@ services:
         NUXT_PUBLIC_UI_AUTH_ENABLED: ${FENCE_UI_AUTH_ENABLED:-true}
         NUXT_PUBLIC_UI_USER: ${FENCE_UI_USER:-admin}
         NUXT_PUBLIC_UI_PASSWORD: ${FENCE_UI_PASSWORD:-fessfess}
-    image: fess/ui:local
+    image: ${FENCE_REGISTRY:-85.137.24.140:5000}/fess/ui:${FENCE_IMAGE_TAG:-latest}
     ports:
       - "${FENCE_UI_PORT:-5173}:80"
     restart: unless-stopped

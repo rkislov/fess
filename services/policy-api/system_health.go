@@ -61,22 +61,28 @@ type dockerHealth struct {
 	Error      string            `json:"error,omitempty"`
 	Socket     string            `json:"socket,omitempty"`
 	Project    string            `json:"project,omitempty"`
+	Registry   string            `json:"registry,omitempty"`
 	Containers []containerHealth `json:"containers"`
 }
 
 type containerHealth struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Service       string   `json:"service"`
-	Image         string   `json:"image"`
-	State         string   `json:"state"`
-	Status        string   `json:"status"`
-	Health        string   `json:"health"`
-	Running       bool     `json:"running"`
-	CPUPercent    *float64 `json:"cpu_percent"`
-	MemoryUsageB  uint64   `json:"memory_usage_bytes"`
-	MemoryLimitB  uint64   `json:"memory_limit_bytes"`
-	MemoryPercent *float64 `json:"memory_percent"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Service          string   `json:"service"`
+	Image            string   `json:"image"`
+	State            string   `json:"state"`
+	Status           string   `json:"status"`
+	Health           string   `json:"health"`
+	Running          bool     `json:"running"`
+	CPUPercent       *float64 `json:"cpu_percent"`
+	MemoryUsageB     uint64   `json:"memory_usage_bytes"`
+	MemoryLimitB     uint64   `json:"memory_limit_bytes"`
+	MemoryPercent    *float64 `json:"memory_percent"`
+	UpdateImage      string   `json:"update_image,omitempty"`
+	LocalDigest      string   `json:"local_digest,omitempty"`
+	RemoteDigest     string   `json:"remote_digest,omitempty"`
+	UpdateAvailable  bool     `json:"update_available"`
+	UpdateError      string   `json:"update_error,omitempty"`
 }
 
 func systemHealthHandler(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +288,7 @@ func collectDockerHealth(ctx context.Context) dockerHealth {
 		project = detectComposeProject(ctx, cli)
 	}
 	out.Project = project
+	out.Registry = fenceRegistryHost()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/containers/json?all=true", nil)
 	if err != nil {
@@ -337,7 +344,39 @@ func collectDockerHealth(ctx context.Context) dockerHealth {
 		fillContainerStats(ctx, cli, c.ID, &item)
 		out.Containers = append(out.Containers, item)
 	}
+	fillContainerUpdates(ctx, cli, out.Containers)
 	return out
+}
+
+func fillContainerUpdates(ctx context.Context, cli *http.Client, items []containerHealth) {
+	if len(items) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	for i := range items {
+		wg.Add(1)
+		go func(item *containerHealth) {
+			defer wg.Done()
+			item.UpdateImage = updateImageName(item.Image)
+			repo, tag := registryRepoAndTag(item.Image)
+			img, err := inspectDockerImage(ctx, cli, item.Image)
+			if err == nil {
+				item.LocalDigest = digestFromRepoDigests(img.RepoDigests, repo)
+			}
+			rctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+			defer cancel()
+			remote, err := fetchRegistryDigest(rctx, repo, tag)
+			if err != nil {
+				item.UpdateError = err.Error()
+				return
+			}
+			item.RemoteDigest = remote
+			if item.LocalDigest == "" || !strings.EqualFold(item.LocalDigest, remote) {
+				item.UpdateAvailable = true
+			}
+		}(&items[i])
+	}
+	wg.Wait()
 }
 
 func looksLikeFESSContainer(c dockerContainerJSON) bool {

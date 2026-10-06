@@ -7,12 +7,24 @@
         <div>
           <h2 class="text-lg font-semibold text-white">Состояние платформы FESS</h2>
           <p class="mt-1 text-sm text-slate-400">
-            Нагрузка хоста (CPU, память, load) и контейнеры стека FESS.
+            Нагрузка хоста (CPU, память, load) и контейнеры стека FESS. Новые версии образов сравниваются с registry
+            <span class="font-mono text-slate-500">{{ sysHealth?.docker?.registry || '—' }}</span>.
           </p>
         </div>
-        <p v-if="sysHealth" class="font-mono text-[11px] text-slate-500">
-          {{ fmt(sysHealth.collected_at) }}
-        </p>
+        <div class="flex flex-col items-end gap-2">
+          <p v-if="sysHealth" class="font-mono text-[11px] text-slate-500">
+            {{ fmt(sysHealth.collected_at) }}
+          </p>
+          <button
+            v-if="isAdmin && updatesCount > 0"
+            type="button"
+            class="rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-600 disabled:opacity-50"
+            :disabled="updatingAll || updatingId != null"
+            @click="updateAllContainers"
+          >
+            {{ updatingAll ? 'Обновление…' : `Обновить все (${updatesCount})` }}
+          </button>
+        </div>
       </div>
       <p v-if="sysErr" class="mt-3 rounded-lg border border-amber-500/25 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
         {{ sysErr }}
@@ -46,15 +58,18 @@
         </div>
       </div>
       <div v-if="sysHealth?.docker?.error" class="mt-3 text-xs text-amber-200/90">{{ sysHealth.docker.error }}</div>
+      <p v-if="updateMsg" class="mt-3 text-xs text-teal-200/90">{{ updateMsg }}</p>
       <div v-if="sysHealth?.docker?.containers?.length" class="mt-4 overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
             <tr class="border-b border-slate-700 text-xs text-slate-500">
               <th class="py-2 pr-3">Сервис</th>
               <th class="py-2 pr-3">Состояние</th>
+              <th class="py-2 pr-3">Версия</th>
               <th class="py-2 pr-3">CPU</th>
               <th class="py-2 pr-3">Память</th>
-              <th class="py-2">Статус</th>
+              <th class="py-2 pr-3">Статус</th>
+              <th v-if="isAdmin" class="py-2"> </th>
             </tr>
           </thead>
           <tbody>
@@ -71,6 +86,15 @@
                   {{ c.health || c.state }}
                 </span>
               </td>
+              <td class="py-2 pr-3">
+                <span
+                  class="rounded-md px-2 py-0.5 text-xs"
+                  :class="c.update_available ? 'bg-amber-950/80 text-amber-200' : (c.update_error ? 'bg-slate-800 text-slate-400' : 'bg-emerald-950/80 text-emerald-300')"
+                  :title="c.update_error || c.update_image || c.image"
+                >
+                  {{ versionLabel(c) }}
+                </span>
+              </td>
               <td class="py-2 pr-3 font-mono text-xs tabular-nums">{{ fmtPct(c.cpu_percent) }}</td>
               <td class="py-2 pr-3 font-mono text-xs tabular-nums">
                 <template v-if="c.memory_usage_bytes">{{ fmtBytes(c.memory_usage_bytes) }}</template>
@@ -78,6 +102,16 @@
                 <span v-if="c.memory_percent != null" class="text-slate-500"> ({{ c.memory_percent.toFixed(0) }}%)</span>
               </td>
               <td class="max-w-[16rem] truncate py-2 text-xs text-slate-500" :title="c.status">{{ c.status }}</td>
+              <td v-if="isAdmin" class="py-2 pl-2">
+                <button
+                  type="button"
+                  class="rounded-md bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+                  :disabled="updatingAll || updatingId != null || !c.update_available"
+                  @click="updateOneContainer(c)"
+                >
+                  {{ updatingId === c.id ? '…' : 'Обновить' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -426,6 +460,8 @@ import type { Chart as ChartType } from 'chart.js'
 const { apiUrl, apiFetch } = useApi()
 const { resolved: uiTheme } = useUiTheme()
 const { openWafEventsExplorer, openWafEventDetail } = useHashAppView()
+const { isAdmin: isAdminFn, user } = useUiAuth()
+const isAdmin = computed(() => user.value?.role === 'admin' || isAdminFn())
 
 type CountRow = { key: string; count: number }
 type HostRow = { host: string; count: number }
@@ -457,6 +493,11 @@ type SystemContainer = {
   memory_usage_bytes: number
   memory_limit_bytes: number
   memory_percent: number | null
+  update_image?: string
+  local_digest?: string
+  remote_digest?: string
+  update_available?: boolean
+  update_error?: string
 }
 
 type SystemHealth = {
@@ -477,6 +518,7 @@ type SystemHealth = {
     available: boolean
     error?: string
     project?: string
+    registry?: string
     containers: SystemContainer[]
   }
 }
@@ -660,6 +702,64 @@ function fmtUptime(sec: number | undefined) {
 }
 
 const runningContainers = computed(() => sysHealth.value?.docker.containers.filter((c) => c.running).length ?? 0)
+const updatesCount = computed(() => sysHealth.value?.docker.containers.filter((c) => c.update_available).length ?? 0)
+const updatingAll = ref(false)
+const updatingId = ref<string | null>(null)
+const updateMsg = ref('')
+
+function versionLabel(c: SystemContainer) {
+  if (c.update_error && !c.remote_digest) return 'registry недоступен'
+  if (c.update_available) {
+    const d = (c.remote_digest || '').replace(/^sha256:/, '').slice(0, 12)
+    return d ? `есть обновление (${d})` : 'есть обновление'
+  }
+  return 'актуально'
+}
+
+async function updateOneContainer(c: SystemContainer) {
+  updatingId.value = c.id
+  updateMsg.value = ''
+  try {
+    const res = await apiFetch<{ ok?: boolean; message?: string; error?: string }>(
+      apiUrl(`/dashboard/containers/${encodeURIComponent(c.id)}/update`),
+      { method: 'POST' },
+    )
+    updateMsg.value = res.message || `Обновлён ${c.service || c.name}`
+    await loadSystemOnly()
+  } catch (e: unknown) {
+    const fe = e as { data?: { error?: string }; message?: string }
+    updateMsg.value = fe?.data?.error || fe?.message || String(e)
+  } finally {
+    updatingId.value = null
+  }
+}
+
+async function updateAllContainers() {
+  updatingAll.value = true
+  updateMsg.value = ''
+  try {
+    const res = await apiFetch<{ ok?: boolean; message?: string }>(apiUrl('/dashboard/containers/update-all'), {
+      method: 'POST',
+    })
+    updateMsg.value = res.message || 'Обновление контейнеров запущено'
+    setTimeout(() => {
+      void loadSystemOnly()
+    }, 4000)
+  } catch (e: unknown) {
+    const fe = e as { data?: { error?: string }; message?: string }
+    updateMsg.value = fe?.data?.error || fe?.message || String(e)
+  } finally {
+    updatingAll.value = false
+  }
+}
+
+async function loadSystemOnly() {
+  try {
+    sysHealth.value = await apiFetch<SystemHealth>(apiUrl('/dashboard/system'))
+  } catch {
+    /* ignore */
+  }
+}
 
 const allHostRows = computed(() => summary.value?.by_host ?? [])
 const visibleHostRows = computed(() => {

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FESS Control API
-  version: "1.1.1"
+  version: "1.2.0"
   description: |
     REST API of **policy-api** (default listen `:8082`). JWT Bearer for authenticated routes.
     Roles: `admin`, `operator` (read + write), `viewer` (GET only).
@@ -475,10 +475,43 @@ paths:
   /api/v1/dashboard/system:
     get:
       tags: [dashboard]
-      summary: Host and Docker container health
+      summary: Host and Docker container health (includes registry update flags)
       responses:
         "200":
-          description: System health
+          description: System health with per-container update_available digests
+  /api/v1/dashboard/containers/update-all:
+    post:
+      tags: [dashboard]
+      summary: Pull and recreate all FESS stack containers with newer registry digests (admin)
+      responses:
+        "200":
+          description: Update results
+        "202":
+          description: Update started (includes policy-api self-restart)
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          description: Update already in progress
+  /api/v1/dashboard/containers/{id}/update:
+    post:
+      tags: [dashboard]
+      summary: Pull and recreate one container from registry (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Container short id, name, or compose service
+      responses:
+        "200":
+          description: Update result
+        "202":
+          description: Update started (policy-api self-restart)
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/v1/sites:
     get:
       tags: [sites]

@@ -191,6 +191,8 @@ func main() {
 	mux.HandleFunc("/api/v1/dashboard/system", func(w http.ResponseWriter, r *http.Request) {
 		systemHealthHandler(w, r)
 	})
+	mux.HandleFunc("/api/v1/dashboard/containers/", dashboardContainersHandler)
+	mux.HandleFunc("/api/v1/dashboard/containers/update-all", dashboardContainersHandler)
 	mux.HandleFunc("/api/v1/settings/malware/status", func(w http.ResponseWriter, r *http.Request) {
 		malwareStatusHandler(w, r, db)
 	})
