@@ -301,8 +301,6 @@ const platformSections = computed(() =>
 
 const securitySectionsVisible = computed(() => securitySections)
 
-const visibleSections = computed(() => [...platformSections.value, ...securitySectionsVisible.value])
-
 const appearanceHint = computed(() => {
   const pref =
     themePref.value === 'light' ? 'светлая' : themePref.value === 'dark' ? 'тёмная' : 'как в системе'
