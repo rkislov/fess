@@ -7,11 +7,22 @@ import argparse, datetime, json, os, pathlib, platform, subprocess, tempfile, ti
 P=argparse.ArgumentParser(description=__doc__)
 P.add_argument('--seconds',type=int,default=12)
 P.add_argument('--repeats',type=int,default=3)
+P.add_argument('--repeat-offset',type=int,default=0)
 P.add_argument('--pps',type=int,default=50000)
+P.add_argument('--levels',default='',help='comma-separated PPS ramp; includes no-attack baseline')
+P.add_argument('--generator-cpus',default='',help='reserve CPUs for packet sender, all other processes use remaining CPUs')
 P.add_argument('--mode',choices=['generic','native'],default='generic')
 P.add_argument('--output',default='benchmarks/xdp-linux-results.json')
 A=P.parse_args()
-assert os.geteuid()==0 and 1<=A.seconds<=60 and 1<=A.repeats<=10 and 1<=A.pps<=100000
+assert 0<=A.repeat_offset<=9
+assert os.geteuid()==0 and 1<=A.seconds<=60 and 1<=A.repeats<=10 and 1<=A.pps<=2000000
+levels=[int(x) for x in A.levels.split(',')] if A.levels else []
+assert all(1<=x<=2000000 for x in levels) and levels==sorted(set(levels))
+original_affinity=sorted(os.sched_getaffinity(0))
+generator_cpus=[int(x) for x in A.generator_cpus.split(',')] if A.generator_cpus else []
+service_cpus=[x for x in original_affinity if x not in generator_cpus]
+assert not generator_cpus or (set(generator_cpus)<=set(original_affinity) and service_cpus)
+if generator_cpus:os.sched_setaffinity(0,service_cpus)
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 BIN={n:str(ROOT/'dist'/n) for n in ['fess','fess-xdp','fess-load','fess-rawload','fess-xdpstats']}
 suffix=str(os.getpid());host='fxh'+suffix;peer='fxp'+suffix;ns='fess-bench-'+suffix
@@ -35,8 +46,8 @@ def netstats():
   names=h.split();vals=v.split()
   if names[0]=='TcpExt:':result={k:int(v) for k,v in zip(names[1:],vals[1:]) if k in ['ListenDrops','ListenOverflows','SyncookiesSent','TCPReqQFullDoCookies','TCPReqQFullDrop']}
  return result
-REPORT={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'machine':{'platform':platform.platform(),'cpus':os.cpu_count(),'affinity':sorted(os.sched_getaffinity(0)),'cpu_model':next((l.split(':',1)[1].strip() for l in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if l.startswith('model name')),'unknown')},'mode':A.mode,'seconds':A.seconds,'repeats':A.repeats,'requested_pps':A.pps,'runs':[],
- 'conditions':['Linux GitHub Actions shared runner; veth, no physical NIC throughput claim.','FESS, upstream, HTTP and packet generators share CPUs; measured offered PPS can differ between pairs.','HTTP: 16 closed-loop clients, keep-alive, SQLite batch journal, one nonmatching WAF rule; ClamAV/rate/bots disabled.','Attack: valid IPv4 SYN or empty UDP to protected port 18080 from isolated 192.0.2.3. Legitimate HTTP uses 192.0.2.2.','CIDR cases deny attack source. Rate cases: 10000 PPS and 1000 SYN/s per IP; legitimate 192.0.2.2 explicitly allowed to isolate attack protection.','3 paired repetitions, alternating off/on order. Fresh FESS/SQLite each probe. One second HTTP warmup before measurement.','Counters cover measured flood and HTTP drain, captured before journal flush. Log totals checked after flush. CPU metrics are whole-host CPU and FESS process, not isolated networking CPU.']}
+REPORT={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'machine':{'platform':platform.platform(),'cpus':os.cpu_count(),'affinity':sorted(os.sched_getaffinity(0)),'cpu_model':next((l.split(':',1)[1].strip() for l in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if l.startswith('model name')),'unknown')},'mode':A.mode,'seconds':A.seconds,'repeats':A.repeats,'repeat_offset':A.repeat_offset,'requested_pps':A.pps,'levels':levels,'original_affinity':original_affinity,'service_cpus':service_cpus,'generator_cpus':generator_cpus,'source_commit':cmd('git','rev-parse','HEAD').stdout.strip(),'runs':[],
+ 'conditions':['Linux GitHub Actions shared runner; veth, no physical NIC throughput claim.','Same Linux host for all steps. Generator CPU affinity and service affinity are recorded; measured PPS can differ between off/on pairs.','HTTP: 16 closed-loop clients, keep-alive, SQLite batch journal, one nonmatching WAF rule; ClamAV/rate/bots disabled.','Attack: valid IPv4 SYN or empty UDP to protected port 18080 from isolated 192.0.2.3. Legitimate HTTP uses 192.0.2.2.','CIDR cases deny attack source. Rate cases: 10000 PPS and 1000 SYN/s per IP; legitimate 192.0.2.2 explicitly allowed to isolate attack protection.',f'{A.repeats} paired repetitions, alternating off/on order. Fresh FESS/SQLite each probe. One second HTTP warmup before measurement.','Counters cover measured flood and HTTP drain, captured before journal flush. Log totals checked after flush. CPU metrics are whole-host CPU and FESS process, not isolated networking CPU.']}
 output=pathlib.Path(A.output).resolve()
 def save():output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(REPORT,indent=2))
 try:
@@ -49,8 +60,9 @@ try:
  mac=pathlib.Path(f'/sys/class/net/{host}/address').read_text().strip()
  up=subprocess.Popen([BIN['fess-load'],'-serve','127.0.0.1:18081'],stdout=subprocess.DEVNULL);processes.append(up)
  time.sleep(.2)
- for repeat in range(A.repeats):
-  for scenario in ['normal','cidr-syn','rate-syn','cidr-udp','rate-udp']:
+ cases=[('normal',0)]+[(s,p) for p in (levels or [A.pps]) for s in ['cidr-syn','rate-syn','cidr-udp','rate-udp']]
+ for repeat in range(A.repeat_offset,A.repeat_offset+A.repeats):
+  for scenario,pps in cases:
    for enabled in ([False,True] if repeat%2==0 else [True,False]):
     with tempfile.TemporaryDirectory(prefix='fess-xdp-bench-') as d:
      guard=flood=server=None
@@ -87,7 +99,10 @@ try:
        before_x=json.loads(cmd(BIN['fess-xdpstats']).stdout) if enabled else {}
        before_net=netstats();before_cpu=cpu();before_ticks=ticks(server.pid);start=time.monotonic()
        if scenario!='normal':
-        flood=subprocess.Popen(client(BIN['fess-rawload'],'-interface',peer,'-destination-mac',mac,'-protocol','syn' if scenario.endswith('syn') else 'udp','-pps',str(A.pps),'-duration',f'{A.seconds}s'),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);processes.append(flood)
+        flood_args=client(BIN['fess-rawload'],'-interface',peer,'-destination-mac',mac,'-protocol','syn' if scenario.endswith('syn') else 'udp','-pps',str(pps),'-duration',f'{A.seconds}s')
+        if generator_cpus:flood_args=['taskset','-c',','.join(map(str,generator_cpus)),*flood_args]
+        flood_env=os.environ.copy();flood_env['FESS_BENCH_GENERATOR_CPUS']=','.join(map(str,generator_cpus))
+        flood=subprocess.Popen(flood_args,env=flood_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);processes.append(flood)
        result=load(A.seconds)
        attack=None
        if flood:
@@ -96,13 +111,17 @@ try:
        after_x=json.loads(cmd(BIN['fess-xdpstats']).stdout) if enabled else {}
        drain_start=time.monotonic();rows=api('GET','/proxy-access-logs?limit=1')['total']-before_rows;drain=time.monotonic()-drain_start
        successes=result['status_codes'].get('200',0)
-       assert rows==successes,(rows,result)
+       assert rows==sum(result['status_codes'].values()),(rows,result)
        delta=[b-a for a,b in zip(before_cpu,after_cpu)];total=sum(delta);idle=delta[3]+delta[4]
-       row={'repeat':repeat+1,'scenario':scenario,'xdp':enabled,'http':result,'attack':attack,'access_rows':rows,'journal_drain_seconds':drain,'successful_rps_including_drain':successes/(result['elapsed_seconds']+drain),'wall_seconds':elapsed,'fess_cpu_percent_one_core':100*(after_ticks-before_ticks)/os.sysconf('SC_CLK_TCK')/elapsed,'host_busy_percent':100*(total-idle)/total,'host_softirq_percent':100*delta[6]/total,'tcp_ext_delta':{k:after_net[k]-v for k,v in before_net.items()},'xdp_delta':{k:after_x[k]-v for k,v in before_x.items()}}
+       row={'repeat':repeat+1,'requested_pps':pps,'scenario':scenario,'xdp':enabled,'http':result,'attack':attack,'access_rows':rows,'journal_drain_seconds':drain,'successful_rps_including_drain':successes/(result['elapsed_seconds']+drain),'wall_seconds':elapsed,'fess_cpu_percent_one_core':100*(after_ticks-before_ticks)/os.sysconf('SC_CLK_TCK')/elapsed,'host_busy_percent':100*(total-idle)/total,'host_softirq_percent':100*delta[6]/total,'tcp_ext_delta':{k:after_net[k]-v for k,v in before_net.items()},'xdp_delta':{k:after_x[k]-v for k,v in before_x.items()}}
        REPORT['runs'].append(row);save();print(json.dumps(row),flush=True)
+      except Exception:
+       log.flush();log.seek(0);print('SERVER DIAGNOSTICS: '+log.read()[-12000:],flush=True)
+       raise
       finally:
        stop(flood);stop(guard);stop(server)
- # A detached filter must leave normal HTTP available on the interface (upstream control).
+ # A baseline at the start of each repeat tracks drift on the same runner.
+
  REPORT['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();save()
 finally:
  for p in reversed(processes):stop(p)

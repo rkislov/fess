@@ -7,12 +7,21 @@ on:
         default: generic
         type: choice
         options: [generic, native]
+      levels:
+        description: Optional comma-separated PPS ramp on this same runner
+        default: ''
+      seconds:
+        description: Seconds per probe
+        default: '12'
+      generator_cpus:
+        description: Optional reserved packet-generator CPUs (remaining CPUs run services)
+        default: ''
 permissions:
   contents: read
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -32,7 +41,10 @@ jobs:
       - name: Paired HTTP and L3/L4 probes on isolated veth
         env:
           XDP_MODE: ${{ inputs.mode }}
-        run: sudo python3 benchmarks/xdp-linux.py --mode "$XDP_MODE" --output benchmarks/xdp-linux-results.json > benchmarks/xdp-linux-run.log 2>&1
+          PPS_LEVELS: ${{ inputs.levels }}
+          PROBE_SECONDS: ${{ inputs.seconds }}
+          GENERATOR_CPUS: ${{ inputs.generator_cpus }}
+        run: sudo python3 benchmarks/xdp-linux.py --mode "$XDP_MODE" --levels "$PPS_LEVELS" --seconds "$PROBE_SECONDS" --generator-cpus "$GENERATOR_CPUS" --output benchmarks/xdp-linux-results.json > benchmarks/xdp-linux-run.log 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
