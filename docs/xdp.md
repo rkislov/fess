@@ -80,5 +80,10 @@ allow/deny, VLAN, extension headers, лимитов и фрагментов. Д�
 50 тыс. PPS и влияние на HTTP RPS: [методика и результаты](../benchmarks/xdp-linux.md).
 Результаты виртуального стенда не являются оценкой предельного PPS физической NIC.
 
+[PPS-ступени на одном Linux-runner](../benchmarks/xdp-ramp.md) отдельно измеряют
+порог просадки HTTP и ограничение фактически достижимого потока. CIDR сохраняет
+100% отбрасывания запрещённого источника при достигнутых примерно 300 тыс. PPS;
+HTTP на этом стенде теряет более 10% baseline между 100 и 200 тыс. PPS.
+
 Полезные первоисточники: https://docs.kernel.org/networking/af_xdp.html и
 https://ebpf-go.dev/guides/getting-started/.
