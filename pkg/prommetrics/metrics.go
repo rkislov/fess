@@ -12,8 +12,14 @@ import (
 const namespace = "fence"
 
 var (
-	once     sync.Once
-	registry *prometheus.Registry
+	LogPending     = prometheus.NewGauge(prometheus.GaugeOpts{Namespace: namespace, Name: "log_pending", Help: "Gateway log records awaiting commit."})
+	LogEnqueued    = prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: "log_enqueued_total", Help: "Gateway log records queued."})
+	LogCommitted   = prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: "log_committed_total", Help: "Gateway log records committed."})
+	LogRejected    = prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: "log_rejected_total", Help: "Gateway log records rejected before enqueue."})
+	LogWriteErrors = prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: "log_write_errors_total", Help: "Failed batch attempts; rows retained for retry."})
+	LogBatches     = prometheus.NewCounter(prometheus.CounterOpts{Namespace: namespace, Name: "log_batches_total", Help: "Committed gateway log batches."})
+	once           sync.Once
+	registry       *prometheus.Registry
 
 	HTTPRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -87,6 +93,7 @@ func initRegistry() {
 		registry.MustRegister(collectors.NewGoCollector())
 		registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 		registry.MustRegister(
+			LogPending, LogEnqueued, LogCommitted, LogRejected, LogWriteErrors, LogBatches,
 			HTTPRequestsTotal,
 			HTTPRequestDuration,
 			GatewayConnectionsTotal,

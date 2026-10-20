@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"database/sql"
+	"fence/internal/logbatch"
 	"log"
 	"net"
 	"net/http"
@@ -48,7 +49,7 @@ func writeProxyAccessLog(ctx context.Context, db *sql.DB, r *http.Request, mr ro
 	scheme := requestScheme(r)
 	cc := countryCodeForRequest(r, ip)
 	ua := truncateUTF8(strings.TrimSpace(r.Header.Get("User-Agent")), maxUserAgentBytes)
-	_, err := db.ExecContext(ctx, `
+	err := logbatch.Exec(ctx, db, `
 INSERT INTO proxy_access_logs(host, method, path, client_ip, tcp_peer, backend_name, upstream_base, outcome, protocol, country_code, user_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		host, r.Method, r.URL.Path, ip, tcpPeer, be, up, outcome, scheme, cc, ua)

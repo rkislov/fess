@@ -1,5 +1,8 @@
 name: Test native FESS
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -41,14 +44,14 @@ jobs:
       - run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
       - name: Build Linux package
         run: |
-          FESS_VERSION=2.0.0 scripts/build.sh
+          FESS_VERSION=2.1.0 scripts/build.sh
           cp dist/fess dist/fess-linux-amd64
           cd packaging
-          FESS_VERSION=2.0.0 FESS_ARCH=amd64 nfpm package --packager deb --target ../dist/
+          FESS_VERSION=2.1.0 FESS_ARCH=amd64 nfpm package --packager deb --target ../dist/
       - name: Install with OS dependencies and start systemd
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ./dist/fess_2.0.0_amd64.deb
+          sudo apt-get install -y ./dist/fess_2.1.0_amd64.deb
           sudo systemctl start fess
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8082/healthz; then break; fi
@@ -60,3 +63,33 @@ jobs:
           sudo systemctl restart fess
           curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:8082/healthz
           sudo journalctl -u fess --no-pager -n 20
+
+  xdp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build optional XDP filter
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang iproute2 curl
+          BPF_CLANG=/usr/bin/clang scripts/build-xdp.sh
+          mkdir -p dist
+          go build -o dist/fess-xdp ./cmd/fess-xdp
+          go build -o dist/fess-load ./cmd/fess-load
+      - name: Kernel verifier and synthetic packets
+        run: |
+          go test -c -o /tmp/fess-xdp.test ./internal/xdpguard
+          sudo env FESS_TEST_XDP=1 /tmp/fess-xdp.test -test.v
+      - name: Attach and detach on an isolated veth
+        run: sudo python3 scripts/xdp-smoke.py dist/fess-xdp dist/fess-load
+      - name: Optional package remains disabled on install
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+          cp dist/fess-xdp dist/fess-xdp-linux-amd64
+          (cd packaging && FESS_VERSION=2.1.0 FESS_ARCH=amd64 nfpm package -f nfpm-xdp.yaml --packager deb --target ../dist/)
+          sudo apt-get install -y ./dist/fess-xdp_2.1.0_amd64.deb
+          test "$(systemctl is-enabled fess-xdp.service || true)" = disabled
+          /usr/bin/fess-xdp --check --config /etc/fess/xdp.json.example

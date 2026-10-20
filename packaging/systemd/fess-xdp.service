@@ -1,0 +1,23 @@
+[Unit]
+Description=Optional FESS XDP L3/L4 ingress filter
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/fess/xdp.json
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/fess-xdp --config /etc/fess/xdp.json
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+CapabilityBoundingSet=CAP_BPF CAP_NET_ADMIN CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_BPF CAP_NET_ADMIN CAP_SYS_RESOURCE
+LimitMEMLOCK=infinity
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

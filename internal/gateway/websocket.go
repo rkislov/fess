@@ -54,7 +54,7 @@ func serveWebSocketUpgrade(
 	if clientIPBypassed(bypassStore, clientHost) {
 		decision = engine.Decision{Action: "allow", Reason: "ip bypass allowlist"}
 	} else {
-		decision = evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
+		decision = evaluator.EvaluateBody(r, snapshot, mr.PolicyID, clientHost, nil)
 	}
 	effectiveAction := decision.Action
 	if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {

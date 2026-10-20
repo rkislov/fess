@@ -1,0 +1,24 @@
+name: fess-xdp
+arch: ${FESS_ARCH}
+platform: linux
+version: ${FESS_VERSION}
+maintainer: Roman Sergeyevich Kislov
+homepage: https://github.com/rkislov/fess
+license: Apache-2.0
+description: Optional FESS XDP ingress CIDR and packet/SYN rate filter for Linux 5.15+
+section: net
+priority: optional
+contents:
+  - src: ../dist/fess-xdp-linux-${FESS_ARCH}
+    expand: true
+    dst: /usr/bin/fess-xdp
+    file_info:
+      mode: 0755
+  - src: xdp.json.example
+    dst: /etc/fess/xdp.json.example
+    type: config|noreplace
+  - src: systemd/fess-xdp.service
+    dst: /usr/lib/systemd/system/fess-xdp.service
+scripts:
+  postinstall: postinstall-xdp.sh
+  preremove: preremove-xdp.sh
