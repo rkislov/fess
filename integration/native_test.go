@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,12 +69,30 @@ func TestNativeBackends(t *testing.T) {
 			d := openBackend(t, backend)
 			ctx, cancel := context.WithCancel(context.Background())
 			bus := runtimebus.New()
-			t.Cleanup(func() { cancel(); bus.Close(); gateway.Close() })
+			t.Cleanup(func() {
+				cancel()
+				bus.Close()
+				if err := gateway.Close(); err != nil {
+					t.Errorf("gateway shutdown: %v", err)
+				}
+			})
 			management, err := api.New(ctx, d, bus)
 			if err != nil {
 				t.Fatal(err)
 			}
-			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "origin-ok") }))
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/echo" {
+					w.Header().Set("Content-Type", "application/octet-stream")
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						http.Error(w, err.Error(), 400)
+						return
+					}
+					w.Write(body)
+					return
+				}
+				fmt.Fprint(w, "origin-ok")
+			}))
 			defer origin.Close()
 			call := func(method, path string, payload any) map[string]any {
 				t.Helper()
@@ -103,6 +122,9 @@ func TestNativeBackends(t *testing.T) {
 			be := call("POST", "/api/v1/sites/"+sid+"/backends", map[string]any{"name": "origin", "base_url": origin.URL, "priority": 1})
 			bid := be["id"].(string)
 			call("POST", "/api/v1/backends/"+bid+"/paths", map[string]any{"path_prefix": "/extra", "priority": 1})
+			malwareCfg := call("GET", "/api/v1/settings/malware", nil)
+			malwareCfg["clamd"].(map[string]any)["enabled"] = false
+			call("PUT", "/api/v1/settings/malware", malwareCfg)
 			gw, _, err := gateway.New(ctx, d, bus)
 			if err != nil {
 				t.Fatal(err)
@@ -117,6 +139,16 @@ func TestNativeBackends(t *testing.T) {
 				if rec.Code != tc.code {
 					t.Fatalf("gateway %s: %d %s", tc.path, rec.Code, rec.Body.String())
 				}
+			}
+
+			// The evaluator must leave a binary payload intact for the upstream.
+			payload := bytes.Repeat([]byte{0xff, 0x00, 0x80, 'x'}, 16384)
+			echo := httptest.NewRecorder()
+			post := httptest.NewRequest("POST", "http://app.test/echo", bytes.NewReader(payload))
+			post.Header.Set("Content-Type", "application/octet-stream")
+			gw.ServeHTTP(echo, post)
+			if echo.Code != 200 || !bytes.Equal(echo.Body.Bytes(), payload) {
+				t.Fatalf("body changed after WAF evaluation: status=%d bytes=%d", echo.Code, echo.Body.Len())
 			}
 			// Exercise SQL reporting on nonempty logs, including dates, JSON and binning.
 			for _, path := range []string{"/policies", "/policies/" + pid, "/sites", "/sites/" + sid + "/backends", "/backends/" + bid + "/paths", "/logs", "/logs?search=blocked", "/proxy-access-logs", "/proxy-access-logs?search=app", "/malware-scan-logs", "/dashboard/summary", "/dashboard/system", "/waf-rule-hits", "/waf-log-events", "/certificates", "/settings/acme", "/settings/auth", "/settings/siem-export", "/settings/ai", "/settings/malware", "/settings/bot-protection", "/settings/threat-feed", "/settings/rate-limit", "/ip-bypass", "/users"} {
