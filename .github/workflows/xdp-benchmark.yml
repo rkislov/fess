@@ -1,0 +1,42 @@
+name: Linux XDP load comparison
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: XDP attachment on isolated veth
+        default: generic
+        type: choice
+        options: [generic, native]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build test binaries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang iproute2 iptables
+          BPF_CLANG=/usr/bin/clang scripts/build-xdp.sh
+          mkdir -p dist
+          go build -o dist/fess ./cmd/fess
+          go build -o dist/fess-xdp ./cmd/fess-xdp
+          go build -o dist/fess-load ./cmd/fess-load
+          go build -o dist/fess-rawload ./benchmarks/rawload
+          go build -o dist/fess-xdpstats ./benchmarks/xdpstats
+      - name: Paired HTTP and L3/L4 probes on isolated veth
+        env:
+          XDP_MODE: ${{ inputs.mode }}
+        run: sudo python3 benchmarks/xdp-linux.py --mode "$XDP_MODE" --output benchmarks/xdp-linux-results.json > benchmarks/xdp-linux-run.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xdp-linux-${{ inputs.mode }}
+          path: |
+            benchmarks/xdp-linux-results.json
+            benchmarks/xdp-linux-run.log
