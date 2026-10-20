@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/netip"
@@ -26,7 +27,11 @@ func NewEvaluator() *Evaluator {
 
 // Evaluate runs the WAF rule chain. clientHost is the resolved client IP string (no port), same as used in logs.
 func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePolicyID, clientHost string) Decision {
-	body := readBodySafely(r)
+	return e.EvaluateBody(r, snapshot, sitePolicyID, clientHost, readBodySafely(r))
+}
+
+// EvaluateBody evaluates an already buffered request without reading or replacing r.Body.
+func (e *Evaluator) EvaluateBody(r *http.Request, snapshot policy.Snapshot, sitePolicyID, clientHost string, body []byte) Decision {
 	path := r.URL.Path
 	query := r.URL.Query()
 
@@ -58,7 +63,7 @@ func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePoli
 			if rule.PathRegex != nil && !rule.PathRegex.MatchString(path) {
 				continue
 			}
-			if rule.BodyContains != "" && !strings.Contains(body, rule.BodyContains) {
+			if rule.BodyContains != "" && !bytes.Contains(body, []byte(rule.BodyContains)) {
 				continue
 			}
 			if !matchQuery(rule.QueryEquals, query) {
@@ -80,16 +85,16 @@ func (e *Evaluator) Evaluate(r *http.Request, snapshot policy.Snapshot, sitePoli
 	return Decision{Action: "allow", Reason: "default allow"}
 }
 
-func readBodySafely(r *http.Request) string {
+func readBodySafely(r *http.Request) []byte {
 	if r.Body == nil {
-		return ""
+		return nil
 	}
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		return ""
+		return nil
 	}
-	r.Body = io.NopCloser(strings.NewReader(string(b)))
-	return string(b)
+	r.Body = io.NopCloser(bytes.NewReader(b))
+	return b
 }
 
 func matchQuery(expect map[string]string, actual map[string][]string) bool {

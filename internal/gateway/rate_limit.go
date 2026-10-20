@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fence/internal/logbatch"
 	"fmt"
 	"log"
 	"net/http"
@@ -128,8 +129,11 @@ func writeRateLimitLog(ctx context.Context, db *sql.DB, r *http.Request, mr rout
 	if requestID == "" {
 		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
-	_, _ = db.ExecContext(ctx, `
+	err := logbatch.Exec(ctx, db, `
 INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, host, details)
 VALUES ($1, NULL, NULL, $2, $3, $4, $5, $6, $7::jsonb)`,
 		requestID, "rate_limit", ipRes.ClientHost(r), r.Method, r.URL.Path, publicHostHeader(r, ipRes), string(raw))
+	if err != nil {
+		log.Printf("rate limit log enqueue failed: %v", err)
+	}
 }

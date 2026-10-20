@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"database/sql"
+	"fence/internal/logbatch"
 	"log"
 	"net/http"
 	"net/netip"
@@ -191,7 +192,7 @@ func writeThreatFeedLog(ctx context.Context, db *sql.DB, r *http.Request, blocke
 	if srcIP == "" {
 		srcIP = r.RemoteAddr
 	}
-	_, err := db.ExecContext(ctx, `
+	err := logbatch.Exec(ctx, db, `
 INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, host, details)
 VALUES ($1, NULL, NULL, $2, $3, $4, $5, $6, $7::jsonb)`,
 		requestID, action, srcIP, r.Method, r.URL.Path, h, string(details))

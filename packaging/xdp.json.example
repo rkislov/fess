@@ -1,0 +1,10 @@
+{
+  "interface": "CHANGE_ME",
+  "mode": "native",
+  "ports": [{"protocol": "tcp", "port": 80}, {"protocol": "tcp", "port": 443}],
+  "block_cidrs": ["203.0.113.0/24", "2001:db8:bad::/48"],
+  "allow_cidrs": [],
+  "packets_per_second": 10000,
+  "syns_per_second": 1000,
+  "drop_fragments": false
+}

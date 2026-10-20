@@ -1,0 +1,12 @@
+goos: darwin
+goarch: arm64
+pkg: fence/pkg/engine
+cpu: Apple M4
+BenchmarkBodyEvaluation/compatibility-read-10         	   65671	     17954 ns/op	3650.16 MB/s	  285105 B/op	      21 allocs/op
+BenchmarkBodyEvaluation/compatibility-read-10         	   68955	     17880 ns/op	3665.30 MB/s	  285105 B/op	      21 allocs/op
+BenchmarkBodyEvaluation/compatibility-read-10         	   63819	     18795 ns/op	3486.95 MB/s	  285106 B/op	      21 allocs/op
+BenchmarkBodyEvaluation/reuse-buffer-10               	 1628730	       744.2 ns/op	88068.12 MB/s	     112 B/op	       3 allocs/op
+BenchmarkBodyEvaluation/reuse-buffer-10               	 1644276	       731.5 ns/op	89595.72 MB/s	     112 B/op	       3 allocs/op
+BenchmarkBodyEvaluation/reuse-buffer-10               	 1627750	       726.6 ns/op	90199.16 MB/s	     112 B/op	       3 allocs/op
+PASS
+ok  	fence/pkg/engine	10.263s

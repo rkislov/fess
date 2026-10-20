@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fence/internal/logbatch"
 	"fmt"
 	"log"
 	"net/http"
@@ -266,8 +267,22 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		backendPathByIDHandler(w, r, db, state)
 	})
 
-	apiHandler := prommetrics.Middleware("policy-api", auth.Middleware(authSvc, requireWriteRole(mux)))
+	eventReads := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		logs := path == "/api/v1/logs" || path == "/api/v1/proxy-access-logs" || path == "/api/v1/malware-scan-logs" || path == "/api/v1/dashboard/summary" || strings.HasPrefix(path, "/api/v1/waf-")
+		if r.Method == http.MethodGet && logs {
+			flushCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			defer cancel()
+			if err := logbatch.Flush(flushCtx, db); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "gateway log flush unavailable"})
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+	apiHandler := prommetrics.Middleware("policy-api", auth.Middleware(authSvc, requireWriteRole(eventReads)))
 	return loggingMiddleware(apiHandler), nil
+
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

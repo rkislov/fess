@@ -20,6 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Build and verify embedded XDP bytecode
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang
+          BPF_CLANG=/usr/bin/clang scripts/build-xdp.sh
+          go test -c -o /tmp/fess-xdp.test ./internal/xdpguard
+          sudo env FESS_TEST_XDP=1 /tmp/fess-xdp.test -test.v
       - name: Install package builder
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
       - name: Build releases
@@ -34,8 +41,9 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           version="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          out="dist/releases/$version"
           if gh release view "v$version" >/dev/null 2>&1; then
-            gh release upload "v$version" dist/*.tar.gz dist/*.deb dist/*.rpm dist/SHA256SUMS --clobber
+            gh release upload "v$version" "$out"/*.tar.gz "$out"/*.deb "$out"/*.rpm "$out"/SHA256SUMS --clobber
           else
-            gh release create "v$version" dist/*.tar.gz dist/*.deb dist/*.rpm dist/SHA256SUMS --title "FESS $version" --generate-notes --target "$GITHUB_SHA"
+            gh release create "v$version" "$out"/*.tar.gz "$out"/*.deb "$out"/*.rpm "$out"/SHA256SUMS --title "FESS $version" --generate-notes --target "$GITHUB_SHA"
           fi

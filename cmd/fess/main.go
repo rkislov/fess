@@ -70,7 +70,7 @@ func loadEnv(path string) error {
 	}
 	return sc.Err()
 }
-func run() error {
+func run() (runErr error) {
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Println("FESS", version)
 		return nil
@@ -142,7 +142,7 @@ func run() error {
 		return err
 	}
 	bus := runtimebus.New()
-	defer func() { bus.Close(); gateway.Close() }()
+	defer func() { bus.Close(); runErr = errors.Join(runErr, gateway.Close()) }()
 	apiHandler, err := api.New(ctx, d, bus)
 	if err != nil {
 		return err

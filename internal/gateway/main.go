@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"fence/internal/logbatch"
 	"fmt"
 	"io"
 	"log"
@@ -39,6 +40,9 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 			return nil, nil, fmt.Errorf("invalid UPSTREAM_URL: %w", err)
 		}
 		upstream = u
+	}
+	if _, err := logbatch.Start(db); err != nil {
+		return nil, nil, err
 	}
 	initGeoPath := getenv("GEOIP_MMDB_PATH", "")
 	initASNPath := getenv("GEOIP_ASN_MMDB_PATH", "")
@@ -177,7 +181,7 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		if ipBypassed {
 			decision = engine.Decision{Action: "allow", Reason: "ip bypass allowlist"}
 		} else {
-			decision = evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
+			decision = evaluator.EvaluateBody(r, snapshot, mr.PolicyID, clientHost, body)
 		}
 		effectiveAction := decision.Action
 		if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
@@ -240,7 +244,10 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	return loggingMiddleware(wrapped, ipRes), tlsCfg, nil
 }
 
-func Close() {
+func Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	err := logbatch.CloseAll(ctx)
 	closeGeoIP()
 	asnMu.Lock()
 	defer asnMu.Unlock()
@@ -248,6 +255,7 @@ func Close() {
 		asnReader.Close()
 		asnReader = nil
 	}
+	return err
 }
 
 func reloadPolicySnapshot(db *sql.DB, store *policy.Store) {
@@ -297,7 +305,7 @@ func writeWAFLog(ctx context.Context, db *sql.DB, r *http.Request, decision engi
 	if srcIP == "" {
 		srcIP = r.RemoteAddr
 	}
-	_, err := db.ExecContext(ctx, `
+	err := logbatch.Exec(ctx, db, `
 INSERT INTO waf_logs(request_id, policy_id, rule_id, action, source_ip, method, path, host, details)
 VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::jsonb)`,
 		requestID, decision.PolicyID, decision.RuleID, effectiveAction, srcIP, r.Method, r.URL.Path, h, string(details))
