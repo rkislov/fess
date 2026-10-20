@@ -1,0 +1,381 @@
+{
+  "started_at": "2026-10-20T09:18:53.463337+00:00",
+  "machine": {
+    "cpu": "Apple M4",
+    "logical_cpus": 10,
+    "ram_bytes": 25769803776,
+    "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "go": "go version go1.25.0 darwin/arm64"
+  },
+  "conditions": [
+    "Loopback; load generator, upstream, FESS, PostgreSQL and ClamAV on one host.",
+    "Closed-loop fixed workers; 5 seconds per measurement after 1 second warmup.",
+    "Keep-alive enabled, plain HTTP, response body 9 bytes, synchronous access logging enabled.",
+    "One enabled WAF policy with one path rule. Rate limits and bot scoring disabled to measure capacity.",
+    "ClamAV has a minimal local test-signature database; upload results are not production antivirus capacity.",
+    "Each backend gets fresh storage; logs accumulate during its runs. Short tests are capacity probes, not endurance tests."
+  ],
+  "runs": [
+    {
+      "body_bytes": 0,
+      "concurrency": 1,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.000084875,
+      "error_examples": null,
+      "max_ms": 0.591,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.036917,
+      "p95_ms": 0.04725,
+      "p99_ms": 0.062333,
+      "requests": 128432,
+      "requests_per_second": 25685.96398076143,
+      "response_bytes": 1155888,
+      "status_codes": {
+        "200": 128432
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58646/pass",
+      "scenario": "direct-upstream",
+      "backend": "baseline"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.002124625,
+      "error_examples": null,
+      "max_ms": 5.30425,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.122375,
+      "p95_ms": 0.280292,
+      "p99_ms": 0.49875,
+      "requests": 552432,
+      "requests_per_second": 110439.47150756963,
+      "response_bytes": 4971888,
+      "status_codes": {
+        "200": 552432
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58646/pass",
+      "scenario": "direct-upstream",
+      "backend": "baseline"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 64,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.002733625,
+      "error_examples": null,
+      "max_ms": 12.107,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.396167,
+      "p95_ms": 1.295333,
+      "p99_ms": 2.044042,
+      "requests": 631252,
+      "requests_per_second": 126181.4134667224,
+      "response_bytes": 5681268,
+      "status_codes": {
+        "200": 631252
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58646/pass",
+      "scenario": "direct-upstream",
+      "backend": "baseline"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 1,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.000405125,
+      "error_examples": null,
+      "max_ms": 1.5775,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.149125,
+      "p95_ms": 0.22875,
+      "p99_ms": 0.414708,
+      "requests": 30686,
+      "requests_per_second": 6136.702773657764,
+      "response_bytes": 276174,
+      "status_codes": {
+        "200": 30686
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.013081042,
+      "error_examples": null,
+      "max_ms": 429.435167,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.700292,
+      "p95_ms": 2.8345,
+      "p99_ms": 18.563375,
+      "requests": 52512,
+      "requests_per_second": 10474.995229490647,
+      "response_bytes": 472608,
+      "status_codes": {
+        "200": 52512
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 64,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.020846167,
+      "error_examples": null,
+      "max_ms": 740.225709,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 4.15775,
+      "p95_ms": 17.848083,
+      "p99_ms": 31.044292,
+      "requests": 50743,
+      "requests_per_second": 10106.463793595849,
+      "response_bytes": 456687,
+      "status_codes": {
+        "200": 50743
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 1,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.000079792,
+      "error_examples": null,
+      "max_ms": 4.02625,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.174792,
+      "p95_ms": 0.215916,
+      "p99_ms": 0.49925,
+      "requests": 27133,
+      "requests_per_second": 5426.513401528533,
+      "response_bytes": 58580147,
+      "status_codes": {
+        "403": 27133
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/blocked",
+      "scenario": "WAF-block",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.011913208,
+      "error_examples": null,
+      "max_ms": 429.139625,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 1.311,
+      "p95_ms": 4.638167,
+      "p99_ms": 21.701833,
+      "requests": 33306,
+      "requests_per_second": 6645.366473393247,
+      "response_bytes": 71907654,
+      "status_codes": {
+        "403": 33306
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/blocked",
+      "scenario": "WAF-block",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 64,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.048532583,
+      "error_examples": null,
+      "max_ms": 737.843333,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 7.669917,
+      "p95_ms": 22.279917,
+      "p99_ms": 37.877042,
+      "requests": 33352,
+      "requests_per_second": 6606.276071646382,
+      "response_bytes": 72006968,
+      "status_codes": {
+        "403": 33352
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/blocked",
+      "scenario": "WAF-block",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 1024,
+      "concurrency": 1,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.000873042,
+      "error_examples": null,
+      "max_ms": 33.186958,
+      "method": "POST",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.781584,
+      "p95_ms": 0.969291,
+      "p99_ms": 1.258042,
+      "requests": 6108,
+      "requests_per_second": 1221.3867356163128,
+      "response_bytes": 54972,
+      "status_codes": {
+        "200": 6108
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/upload",
+      "scenario": "upload-ClamAV-test-db",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 1024,
+      "concurrency": 16,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.012119,
+      "error_examples": null,
+      "max_ms": 186.724709,
+      "method": "POST",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 5.641083,
+      "p95_ms": 16.167,
+      "p99_ms": 58.461958,
+      "requests": 10130,
+      "requests_per_second": 2021.1012547786675,
+      "response_bytes": 91170,
+      "status_codes": {
+        "200": 10130
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/upload",
+      "scenario": "upload-ClamAV-test-db",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 1024,
+      "concurrency": 64,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.030356959,
+      "error_examples": null,
+      "max_ms": 360.92625,
+      "method": "POST",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 27.120708,
+      "p95_ms": 47.569875,
+      "p99_ms": 118.72375,
+      "requests": 10530,
+      "requests_per_second": 2093.2908113330573,
+      "response_bytes": 94770,
+      "status_codes": {
+        "200": 10530
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:58825/upload",
+      "scenario": "upload-ClamAV-test-db",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 1,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.000418667,
+      "error_examples": null,
+      "max_ms": 10.467334,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.176291,
+      "p95_ms": 0.539,
+      "p99_ms": 3.882459,
+      "requests": 16752,
+      "requests_per_second": 3350.1194831052735,
+      "response_bytes": 150768,
+      "status_codes": {
+        "200": 16752
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:59838/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "postgres"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.005667209,
+      "error_examples": null,
+      "max_ms": 28.252417,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 3.635834,
+      "p95_ms": 12.076042,
+      "p99_ms": 15.907958,
+      "requests": 16091,
+      "requests_per_second": 3214.556487308823,
+      "response_bytes": 144819,
+      "status_codes": {
+        "200": 16091
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:59838/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "postgres"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 64,
+      "duration_requested_seconds": 5,
+      "elapsed_seconds": 5.026827667,
+      "error_examples": [
+        "Get \"http://127.0.0.1:59838/pass\": dial tcp 127.0.0.1:59838: connect: can't assign requested address",
+        "Get \"http://127.0.0.1:59838/pass\": dial tcp 127.0.0.1:59838: connect: can't assign requested address",
+        "Get \"http://127.0.0.1:59838/pass\": dial tcp 127.0.0.1:59838: connect: can't assign requested address"
+      ],
+      "max_ms": 705.870792,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 61.903042,
+      "p95_ms": 130.157208,
+      "p99_ms": 464.225833,
+      "requests": 4362,
+      "requests_per_second": 867.7440901019056,
+      "response_bytes": 48692,
+      "status_codes": {
+        "200": 74,
+        "502": 22
+      },
+      "transport_errors": 4266,
+      "url": "http://127.0.0.1:59838/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "postgres"
+    }
+  ],
+  "stored_log_counts": {
+    "sqlite": {
+      "access": 304620,
+      "waf": 112619,
+      "malware": 31940
+    }
+  },
+  "database_errors": {
+    "sqlite": []
+  },
+  "finished_at": "2026-10-20T09:20:26.880442+00:00"
+}

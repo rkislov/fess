@@ -1,0 +1,28 @@
+[Unit]
+Description=FESS Web Application Firewall
+Wants=network-online.target fess-clamd.service fess-freshclam.service
+After=network-online.target fess-clamd.service
+
+[Service]
+Type=simple
+User=fess
+Group=fess
+SupplementaryGroups=fess-av
+EnvironmentFile=/etc/fess/fess.env
+ExecStart=/usr/bin/fess
+Restart=on-failure
+RestartSec=5
+StateDirectory=fess
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/fess
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

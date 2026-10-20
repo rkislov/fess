@@ -1,0 +1,259 @@
+package gateway
+
+import (
+	"crypto/tls"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"fence/pkg/clientip"
+	"fence/pkg/routing"
+)
+
+func TestApplyUpstream_untrustedOverwritesSpoofedXFF(t *testing.T) {
+	r := clientip.ParseTrustedProxies("")
+	req := newTestReq("198.51.100.5:4000", "1.2.3.4", "")
+	applyUpstreamClientHeaders(req, r, req.Host, "http")
+	if got := req.Header.Get("X-Forwarded-For"); got != "198.51.100.5" {
+		t.Fatalf("X-Forwarded-For: got %q want 198.51.100.5", got)
+	}
+	if got := req.Header.Get("X-Real-IP"); got != "198.51.100.5" {
+		t.Fatalf("X-Real-IP: got %q", got)
+	}
+}
+
+func TestApplyUpstream_trustedPreservesNonEmptyXFF(t *testing.T) {
+	r := clientip.ParseTrustedProxies("192.0.2.1/32")
+	chain := "203.0.113.9, 192.0.2.1"
+	req := newTestReq("192.0.2.1:443", chain, "")
+	applyUpstreamClientHeaders(req, r, req.Host, "http")
+	if got := req.Header.Get("X-Forwarded-For"); got != chain {
+		t.Fatalf("X-Forwarded-For: got %q want %q", got, chain)
+	}
+	if got := req.Header.Get("X-Real-IP"); got != "203.0.113.9" {
+		t.Fatalf("X-Real-IP: got %q want 203.0.113.9", got)
+	}
+}
+
+func TestApplyUpstream_trustedFillsEmptyXFF(t *testing.T) {
+	r := clientip.ParseTrustedProxies("192.0.2.1/32")
+	req := newTestReq("192.0.2.1:443", "", "")
+	applyUpstreamClientHeaders(req, r, req.Host, "http")
+	if got := req.Header.Get("X-Forwarded-For"); got != "192.0.2.1" {
+		t.Fatalf("X-Forwarded-For: got %q want 192.0.2.1", got)
+	}
+}
+
+func TestApplyUpstream_setsForwardedHostProtoAndPort(t *testing.T) {
+	r := clientip.ParseTrustedProxies("")
+	req := newTestReq("198.51.100.5:4000", "", "")
+	applyUpstreamClientHeaders(req, r, "public.example.com:8443", "https")
+	if got := req.Header.Get("X-Forwarded-Host"); got != "public.example.com:8443" {
+		t.Fatalf("X-Forwarded-Host: got %q want public.example.com:8443", got)
+	}
+	if got := req.Header.Get("X-Original-Host"); got != "public.example.com:8443" {
+		t.Fatalf("X-Original-Host: got %q want public.example.com:8443", got)
+	}
+	if got := req.Header.Get("X-Forwarded-Proto"); got != "https" {
+		t.Fatalf("X-Forwarded-Proto: got %q want https", got)
+	}
+	if got := req.Header.Get("X-Forwarded-Ssl"); got != "on" {
+		t.Fatalf("X-Forwarded-Ssl: got %q want on", got)
+	}
+	if got := req.Header.Get("HTTPS"); got != "on" {
+		t.Fatalf("HTTPS: got %q want on", got)
+	}
+	if got := req.Header.Get("X-Url-Scheme"); got != "https" {
+		t.Fatalf("X-Url-Scheme: got %q want https", got)
+	}
+	if got := req.Header.Get("X-Forwarded-Server"); got != "public.example.com" {
+		t.Fatalf("X-Forwarded-Server: got %q want public.example.com", got)
+	}
+	if got := req.Header.Get("X-Forwarded-Port"); got != "8443" {
+		t.Fatalf("X-Forwarded-Port: got %q want 8443", got)
+	}
+}
+
+func TestDynamicReverseProxyPreservesPublicHost(t *testing.T) {
+	target, _ := url.Parse("http://backend.internal:8080")
+	store := routing.NewStore(target)
+	proxy := newDynamicReverseProxy(target, store, clientip.ParseTrustedProxies(""))
+	req := newTestReq("198.51.100.5:4000", "", "")
+	req.Host = "public.example.com"
+	req.Header.Set("Origin", "https://public.example.com")
+
+	proxy.Director(req)
+
+	if req.URL.Host != "backend.internal:8080" {
+		t.Fatalf("URL.Host = %q, want backend.internal:8080", req.URL.Host)
+	}
+	if req.Host != "public.example.com" {
+		t.Fatalf("Host header = %q, want public.example.com", req.Host)
+	}
+	if got := req.Header.Get("X-Forwarded-Host"); got != "public.example.com" {
+		t.Fatalf("X-Forwarded-Host = %q, want public.example.com", got)
+	}
+	if got := req.Header.Get("Origin"); got != "https://public.example.com" {
+		t.Fatalf("Origin = %q, want preserved", got)
+	}
+}
+
+func TestDynamicReverseProxyUsesTrustedForwardedHost(t *testing.T) {
+	target, _ := url.Parse("http://backend.internal:8080")
+	store := routing.NewStore(target)
+	proxy := newDynamicReverseProxy(target, store, clientip.ParseTrustedProxies("198.51.100.5/32"))
+	req := newTestReq("198.51.100.5:4000", "", "")
+	req.Host = "10.78.3.61:80"
+	req.Header.Set("X-Forwarded-Host", "cifro.tech")
+	req.Header.Set("Origin", "https://cifro.tech")
+
+	proxy.Director(req)
+
+	if req.URL.Host != "backend.internal:8080" {
+		t.Fatalf("URL.Host = %q, want backend.internal:8080", req.URL.Host)
+	}
+	if req.Host != "cifro.tech" {
+		t.Fatalf("Host header = %q, want cifro.tech", req.Host)
+	}
+	if got := req.Header.Get("X-Forwarded-Host"); got != "cifro.tech" {
+		t.Fatalf("X-Forwarded-Host = %q, want cifro.tech", got)
+	}
+	if got := req.Header.Get("Origin"); got != "https://cifro.tech" {
+		t.Fatalf("Origin = %q, want preserved", got)
+	}
+}
+
+func TestPublicHostHeaderIgnoresUntrustedForwardedHost(t *testing.T) {
+	req := newTestReq("203.0.113.9:4000", "", "")
+	req.Host = "10.78.3.61:80"
+	req.Header.Set("X-Forwarded-Host", "cifro.tech")
+	if got := publicHostHeader(req, clientip.ParseTrustedProxies("198.51.100.5/32")); got != "10.78.3.61:80" {
+		t.Fatalf("got %q want direct host", got)
+	}
+}
+
+func TestBackendTransportUsesHTTP1ForWebSocket(t *testing.T) {
+	tr, ok := backendProxyTransport().(*backendTLSPickTransport)
+	if !ok {
+		t.Fatalf("unexpected transport type %T", backendProxyTransport())
+	}
+	secureWS, ok := tr.secureWS.(*http.Transport)
+	if !ok {
+		t.Fatalf("unexpected secureWS type %T", tr.secureWS)
+	}
+	if secureWS.ForceAttemptHTTP2 {
+		t.Fatal("websocket transport must not force HTTP/2")
+	}
+	if secureWS.TLSNextProto == nil {
+		t.Fatal("websocket transport should disable TLSNextProto HTTP/2 upgrades")
+	}
+	if _, ok := secureWS.TLSNextProto["h2"]; ok {
+		t.Fatal("websocket transport must not advertise h2")
+	}
+	// Keep crypto/tls imported in this test package alongside the production type assertion context.
+	_ = tls.VersionTLS12
+}
+
+func newTestReq(remoteAddr, xff, xfp string) *http.Request {
+	req := &http.Request{
+		Method:     "GET",
+		RemoteAddr: remoteAddr,
+		Header:     make(http.Header),
+		URL:        &url.URL{Scheme: "http", Host: "app.internal", Path: "/"},
+		Host:       "app.internal",
+	}
+	if xff != "" {
+		req.Header.Set("X-Forwarded-For", xff)
+	}
+	if xfp != "" {
+		req.Header.Set("X-Forwarded-Proto", xfp)
+	}
+	return req
+}
+
+// Concurrent requests must reuse upstream connections across successive waves,
+// rather than exhausting ephemeral ports under sustained traffic.
+func TestBackendTransportReusesConcurrentConnections(t *testing.T) {
+	const workers = 16
+	var accepted atomic.Int64
+	arrived := []atomic.Int64{{}, {}}
+	barriers := []chan struct{}{make(chan struct{}), make(chan struct{})}
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wave := 0
+		if r.URL.Path == "/second" {
+			wave = 1
+		}
+		if arrived[wave].Add(1) == workers {
+			close(barriers[wave])
+		}
+		select {
+		case <-barriers[wave]:
+		case <-time.After(3 * time.Second):
+			http.Error(w, "wave timeout", 500)
+			return
+		}
+		io.WriteString(w, "ok")
+	}))
+	upstream.Config.ConnState = func(c net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			accepted.Add(1)
+		}
+	}
+	upstream.Start()
+	defer upstream.Close()
+	client := &http.Client{Transport: backendProxyTransport(), Timeout: 5 * time.Second}
+	var first int64
+	for i, path := range []string{"/first", "/second"} {
+		var wg sync.WaitGroup
+		for j := 0; j < workers; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, err := client.Get(upstream.URL + path)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				defer res.Body.Close()
+				io.Copy(io.Discard, res.Body)
+				if res.StatusCode != 200 {
+					t.Errorf("wave status %d", res.StatusCode)
+				}
+			}()
+		}
+		wg.Wait()
+		if i == 0 {
+			first = accepted.Load()
+		}
+	}
+	if accepted.Load() != first {
+		t.Fatalf("upstream connections churned between waves: first=%d total=%d", first, accepted.Load())
+	}
+}
+
+func TestBackendTimeoutAllowsResponseBodyToFinish(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.(http.Flusher).Flush()
+		time.Sleep(30 * time.Millisecond)
+		io.WriteString(w, "streamed-body")
+	}))
+	defer upstream.Close()
+	req, _ := http.NewRequest("GET", upstream.URL, nil)
+	req = req.WithContext(routing.WithBackendTimeouts(req.Context(), routing.BackendTimeouts{Timeout: time.Second}))
+	response, err := backendProxyTransport().RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "streamed-body" {
+		t.Fatalf("timeout canceled body before consumption: %q %v", body, err)
+	}
+}

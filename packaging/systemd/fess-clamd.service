@@ -1,0 +1,23 @@
+[Unit]
+Description=ClamAV scanner for FESS
+Wants=fess-freshclam.service
+After=network-online.target fess-freshclam.service
+
+[Service]
+Type=simple
+User=fess-av
+Group=fess-av
+ExecStart=/usr/sbin/clamd --config-file=/etc/fess/clamd.conf --foreground=true
+Restart=on-failure
+RestartSec=30
+RuntimeDirectory=fess-clamav
+RuntimeDirectoryMode=0750
+StateDirectory=fess-clamav
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

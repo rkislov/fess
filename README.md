@@ -1,0 +1,138 @@
+# FESS — Frontend Security Server
+
+WAF и reverse proxy с веб-панелью, политиками без перезапуска, TLS/ACME,
+антивирусом, защитой от ботов, IOC, журналами, LDAP/JWT и экспортом SIEM.
+
+**Один Go-бинарник `fess`** содержит шлюз, API и собранную панель Nuxt.
+SQLite используется по умолчанию; PostgreSQL подключается для больших установок.
+ClamAV и freshclam устанавливаются пакетным менеджером ОС. Node.js и Go на
+целевом сервере не нужны. Redis, Nginx и контейнерная инфраструктура не требуются.
+
+Автор: Роман Сергеевич Кислов · [Apache-2.0](LICENSE)
+
+## Установка Linux
+
+Скачайте deb/rpm для своей архитектуры из [Releases](https://github.com/rkislov/fess/releases).
+Установите пакет через менеджер зависимостей:
+
+```sh
+sudo apt install ./fess_2.0.0_arm64.deb
+# Для RPM-систем (могут потребоваться репозитории дистрибутива/EPEL с ClamAV):
+# sudo dnf install ./fess-2.0.0-1.aarch64.rpm
+sudo editor /etc/fess/fess.env
+sudo systemctl start fess
+```
+
+При первом запуске укажите `FESS_ADMIN_PASSWORD` в конфигурации. Если он не задан,
+создаётся `admin` / `fessfess`; смените пароль в панели. JWT-секрет генерируется
+автоматически и хранится в `/var/lib/fess/jwt.secret` с правами `0600`.
+
+Панель и API по умолчанию доступны на `127.0.0.1:8082`. Для удалённого доступа:
+
+```sh
+ssh -L 8082:127.0.0.1:8082 user@server
+```
+
+Откройте `http://127.0.0.1:8082`. Шлюз слушает `80` и `443`; сайты, upstream и
+сертификаты настраиваются в панели. HTTPS требует сертификата для выбранного SNI.
+Без совпадающего сайта HTTP показывает заставку FESS.
+
+Пакет включает `fess.service`, `fess-clamd.service`, `fess-freshclam.service`.
+ClamAV использует `/var/lib/fess-clamav` и `/run/fess-clamav/clamd.sock`.
+При первом старте freshclam скачивает сигнатуры. Пока сканер не готов, запросы,
+подлежащие антивирусной проверке, блокируются; остальные функции доступны.
+Диагностика — в панели и `journalctl -u fess -u fess-clamd -u fess-freshclam`.
+
+## Запуск бинарника
+
+```sh
+./fess --data-dir ./data --admin 127.0.0.1:8082 --http :8080 --https ''
+./fess version
+./fess --help
+```
+
+Для антивируса нужен доступный системный `clamd`; путь к Unix-сокету задаётся в
+панели. В небольших установках никаких других служб хранения данных не нужно.
+Настройки, учётные записи и журналы сохраняются в `data/fess.db`. Счётчики rate
+limit и временные оценки ботов хранятся в памяти и сбрасываются при перезапуске.
+Один каталог данных и один SQLite-файл обслуживает один процесс FESS.
+
+`FESS_CONFIG=/path/to/fess.env` загружает файл `KEY=value` без выполнения shell.
+Переменные окружения имеют приоритет над файлом, флаги — над окружением.
+Для systemd файл `/etc/fess/fess.env` загружается самой службой.
+
+Основные параметры:
+
+- `FESS_DATA_DIR`: каталог данных, по умолчанию `./data`.
+- `FESS_DB`: `sqlite` или `postgres`.
+- `FESS_DATABASE_URL`: путь SQLite либо DSN PostgreSQL.
+- `FESS_ADMIN_ADDR`: адрес панели/API, по умолчанию `127.0.0.1:8082`.
+- `WAF_LISTEN_ADDR`, `WAF_TLS_LISTEN_ADDR`: порты шлюза.
+- `WAF_TRUSTED_PROXIES`: CIDR непосредственных доверенных прокси перед FESS.
+- `FENCE_AI_*`: настройки внешней модели; их также можно задать в панели.
+
+## Перенос SQLite → PostgreSQL
+
+Создайте **пустую** БД PostgreSQL. Сохраните резервную копию каталога данных и
+остановите FESS на время переноса. Используйте тот же каталог данных: он содержит
+JWT-секрет и GeoIP, которые не переносятся в SQL.
+
+```sh
+sudo systemctl stop fess
+sudo -u fess env FESS_MIGRATE_TARGET='postgres://user:password@db:5432/fess?sslmode=verify-full' \
+  /usr/bin/fess migrate --data-dir /var/lib/fess
+```
+
+Команда переносит таблицы в порядке зависимостей, сохраняет идентификаторы,
+сверяет значения и количество строк, восстанавливает последовательности ID.
+Данные PostgreSQL записываются в одной транзакции. При ошибке копирования данные
+откатываются, но созданная схема остаётся — для повторного запуска используйте
+пустую БД/схему. Исходная SQLite сохраняется.
+
+Затем измените `/etc/fess/fess.env`:
+
+```ini
+FESS_DB=postgres
+FESS_DATABASE_URL=postgres://user:password@db:5432/fess?sslmode=verify-full
+```
+
+```sh
+sudo systemctl start fess
+```
+
+До начала новых записей можно вернуться к SQLite изменением конфигурации.
+После начала записи в PostgreSQL старая SQLite уже не содержит новых данных.
+PostgreSQL увеличивает возможности хранения; координация нескольких активных
+процессов FESS в этом выпуске не реализована.
+
+## Сборка и проверки
+
+Требуются Go 1.25+ и Node.js 22+ только на машине сборки.
+
+```sh
+scripts/build.sh
+./dist/fess --http :8080 --https ''
+go test ./...
+go test -race ./...
+```
+
+Сборка сначала генерирует статическую панель, затем включает её через `go:embed`.
+Для проверки PostgreSQL и переноса данных задайте DSN тестовой БД:
+
+```sh
+FESS_TEST_POSTGRES='postgres://user:password@127.0.0.1:5432/test?sslmode=disable' go test ./integration
+```
+
+Тесты создают и удаляют собственные схемы; пользователю нужны соответствующие
+права. Выпуск бинарников и deb/rpm: `FESS_VERSION=2.0.0 scripts/release.sh`.
+
+## Исходники
+
+- `cmd/fess`: единый запуск, конфигурация и команда переноса БД.
+- `internal/api`, `internal/gateway`: управление и обработка трафика.
+- `internal/runtimebus`: внутренние уведомления и счётчики с TTL.
+- `db`: PostgreSQL-миграции, отдельные SQLite-миграции, адаптация SQL и перенос.
+- `pkg`: WAF, маршрутизация, TLS, антивирус и другие компоненты.
+- `ui`: панель; `packaging`: системные службы и пакеты.
+
+[Руководство администратора](docs/admin-guide.md) · [OpenAPI](docs/openapi.yaml) · [Нагрузочные проверки](benchmarks/README.md)

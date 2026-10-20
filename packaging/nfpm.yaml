@@ -1,0 +1,41 @@
+name: fess
+arch: ${FESS_ARCH}
+platform: linux
+version: ${FESS_VERSION}
+maintainer: Roman Sergeyevich Kislov
+homepage: https://github.com/rkislov/fess
+license: Apache-2.0
+description: FESS Web Application Firewall with embedded UI and SQLite/PostgreSQL storage
+section: net
+priority: optional
+overrides:
+  deb:
+    depends: [ca-certificates, clamav-daemon, clamav-freshclam, passwd]
+  rpm:
+    depends: [ca-certificates, clamav-server, clamav-update, shadow-utils]
+contents:
+  - src: ../dist/fess-linux-${FESS_ARCH}
+    expand: true
+    dst: /usr/bin/fess
+    file_info:
+      mode: 0755
+  - src: fess.env
+    dst: /etc/fess/fess.env
+    type: config|noreplace
+    file_info:
+      mode: 0600
+  - src: clamd.conf
+    dst: /etc/fess/clamd.conf
+    type: config|noreplace
+  - src: freshclam.conf
+    dst: /etc/fess/freshclam.conf
+    type: config|noreplace
+  - src: systemd/fess.service
+    dst: /usr/lib/systemd/system/fess.service
+  - src: systemd/fess-clamd.service
+    dst: /usr/lib/systemd/system/fess-clamd.service
+  - src: systemd/fess-freshclam.service
+    dst: /usr/lib/systemd/system/fess-freshclam.service
+scripts:
+  postinstall: postinstall.sh
+  preremove: preremove.sh

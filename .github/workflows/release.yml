@@ -1,0 +1,41 @@
+name: Release native FESS
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        description: Version without v prefix
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install package builder
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+      - name: Build releases
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          export FESS_VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          scripts/release.sh
+      - name: Upload packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            gh release upload "v$version" dist/*.tar.gz dist/*.deb dist/*.rpm dist/SHA256SUMS --clobber
+          else
+            gh release create "v$version" dist/*.tar.gz dist/*.deb dist/*.rpm dist/SHA256SUMS --title "FESS $version" --generate-notes --target "$GITHUB_SHA"
+          fi

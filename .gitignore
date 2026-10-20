@@ -1,0 +1,19 @@
+# Local configuration and persistent secrets
+.env
+.env.local
+.env.*.local
+/data/
+/dist/
+/ui/node_modules/
+/ui/.nuxt/
+/ui/.output/
+/ui/dist/*
+!/ui/dist/index.html
+*.db
+*.db-wal
+*.db-shm
+*.lock
+!ui/package-lock.json
+.DS_Store
+.idea/
+.vscode/
