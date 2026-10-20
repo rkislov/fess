@@ -93,3 +93,4 @@ jobs:
           sudo apt-get install -y ./dist/fess-xdp_2.1.0_amd64.deb
           test "$(systemctl is-enabled fess-xdp.service || true)" = disabled
           /usr/bin/fess-xdp --check --config /etc/fess/xdp.json.example
+          sudo python3 scripts/xdp-smoke.py /usr/bin/fess-xdp dist/fess-load --systemd
