@@ -1,0 +1,827 @@
+{
+  "pack_id": "crs-bundle-v1",
+  "title": "OWASP CRS — расширенный набор (Fence)",
+  "description": "Большой набор эвристик в духе OWASP CRS (не полная копия ModSecurity CRS). Официальный CRS: https://github.com/coreruleset/coreruleset — для строгого соответствия используйте связку с настоящим CRS.",
+  "rules": [
+    {
+      "name": "SQLi: OR 1=1 comment (body)",
+      "crs_rule_id": "942101",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942101,
+      "condition": {
+        "body_contains": "' OR 1=1--"
+      }
+    },
+    {
+      "name": "SQLi: OR true hash (body)",
+      "crs_rule_id": "942102",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942102,
+      "condition": {
+        "body_contains": "' OR true#"
+      }
+    },
+    {
+      "name": "SQLi: admin'-- (body)",
+      "crs_rule_id": "942103",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942103,
+      "condition": {
+        "body_contains": "admin'--"
+      }
+    },
+    {
+      "name": "SQLi: xp_cmdshell (body)",
+      "crs_rule_id": "942104",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942104,
+      "condition": {
+        "body_contains": "xp_cmdshell"
+      }
+    },
+    {
+      "name": "SQLi: sp_executesql (body)",
+      "crs_rule_id": "942105",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942105,
+      "condition": {
+        "body_contains": "sp_executesql"
+      }
+    },
+    {
+      "name": "SQLi: WAITFOR DELAY (body)",
+      "crs_rule_id": "942106",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942106,
+      "condition": {
+        "body_contains": "WAITFOR DELAY"
+      }
+    },
+    {
+      "name": "SQLi: BENCHMARK( (body)",
+      "crs_rule_id": "942107",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942107,
+      "condition": {
+        "body_contains": "BENCHMARK("
+      }
+    },
+    {
+      "name": "SQLi: INTO OUTFILE (body)",
+      "crs_rule_id": "942108",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942108,
+      "condition": {
+        "body_contains": "INTO OUTFILE"
+      }
+    },
+    {
+      "name": "SQLi: LOAD_FILE( (body)",
+      "crs_rule_id": "942109",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942109,
+      "condition": {
+        "body_contains": "LOAD_FILE("
+      }
+    },
+    {
+      "name": "SQLi: information_schema.tables (body)",
+      "crs_rule_id": "942110",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942110,
+      "condition": {
+        "body_contains": "information_schema.tables"
+      }
+    },
+    {
+      "name": "SQLi: mysql.user (body)",
+      "crs_rule_id": "942111",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942111,
+      "condition": {
+        "body_contains": "mysql.user"
+      }
+    },
+    {
+      "name": "SQLi: pg_sleep (body)",
+      "crs_rule_id": "942112",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942112,
+      "condition": {
+        "body_contains": "pg_sleep("
+      }
+    },
+    {
+      "name": "SQLi: dbms_pipe (body)",
+      "crs_rule_id": "942113",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942113,
+      "condition": {
+        "body_contains": "DBMS_PIPE"
+      }
+    },
+    {
+      "name": "SQLi: UTL_HTTP (body)",
+      "crs_rule_id": "942114",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942114,
+      "condition": {
+        "body_contains": "UTL_HTTP"
+      }
+    },
+    {
+      "name": "SQLi: SELECT FROM (body)",
+      "crs_rule_id": "942115",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942115,
+      "condition": {
+        "body_contains": "'; SELECT * FROM"
+      }
+    },
+    {
+      "name": "SQLi: INSERT INTO (body)",
+      "crs_rule_id": "942116",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942116,
+      "condition": {
+        "body_contains": "'; INSERT INTO"
+      }
+    },
+    {
+      "name": "SQLi: DROP TABLE (body)",
+      "crs_rule_id": "942117",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942117,
+      "condition": {
+        "body_contains": "DROP TABLE"
+      }
+    },
+    {
+      "name": "SQLi: ALTER TABLE (body)",
+      "crs_rule_id": "942118",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942118,
+      "condition": {
+        "body_contains": "ALTER TABLE"
+      }
+    },
+    {
+      "name": "SQLi: EXEC( (body)",
+      "crs_rule_id": "942119",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942119,
+      "condition": {
+        "body_contains": "EXEC("
+      }
+    },
+    {
+      "name": "SQLi: EXECUTE( (body)",
+      "crs_rule_id": "942120",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942120,
+      "condition": {
+        "body_contains": "EXECUTE("
+      }
+    },
+    {
+      "name": "SQLi: union+select (URI)",
+      "crs_rule_id": "942201",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942201,
+      "condition": {
+        "request_uri_contains": "union+select"
+      }
+    },
+    {
+      "name": "SQLi: concat( (URI)",
+      "crs_rule_id": "942202",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942202,
+      "condition": {
+        "request_uri_contains": "concat("
+      }
+    },
+    {
+      "name": "SQLi: char( (URI)",
+      "crs_rule_id": "942203",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942203,
+      "condition": {
+        "request_uri_contains": "char("
+      }
+    },
+    {
+      "name": "SQLi: 0x3a (URI)",
+      "crs_rule_id": "942204",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942204,
+      "condition": {
+        "request_uri_contains": "0x3a"
+      }
+    },
+    {
+      "name": "SQLi: benchmark( (URI)",
+      "crs_rule_id": "942205",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942205,
+      "condition": {
+        "request_uri_contains": "benchmark("
+      }
+    },
+    {
+      "name": "SQLi: md5( (URI)",
+      "crs_rule_id": "942206",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942206,
+      "condition": {
+        "request_uri_contains": "md5("
+      }
+    },
+    {
+      "name": "SQLi: version( (URI)",
+      "crs_rule_id": "942207",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942207,
+      "condition": {
+        "request_uri_contains": "version("
+      }
+    },
+    {
+      "name": "SQLi: @@version (URI)",
+      "crs_rule_id": "942208",
+      "category": "sqli",
+      "action": "block",
+      "priority": 942208,
+      "condition": {
+        "request_uri_contains": "@@version"
+      }
+    },
+    {
+      "name": "XSS: iframe (body/URI mix)",
+      "crs_rule_id": "941101",
+      "category": "xss",
+      "action": "block",
+      "priority": 941101,
+      "condition": {
+        "body_contains": "<iframe"
+      }
+    },
+    {
+      "name": "XSS: object tag (body/URI mix)",
+      "crs_rule_id": "941102",
+      "category": "xss",
+      "action": "block",
+      "priority": 941102,
+      "condition": {
+        "body_contains": "<object"
+      }
+    },
+    {
+      "name": "XSS: embed (body/URI mix)",
+      "crs_rule_id": "941103",
+      "category": "xss",
+      "action": "block",
+      "priority": 941103,
+      "condition": {
+        "body_contains": "<embed"
+      }
+    },
+    {
+      "name": "XSS: svg onload (body/URI mix)",
+      "crs_rule_id": "941104",
+      "category": "xss",
+      "action": "block",
+      "priority": 941104,
+      "condition": {
+        "body_contains": "<svg"
+      }
+    },
+    {
+      "name": "XSS: vbscript: (body/URI mix)",
+      "crs_rule_id": "941105",
+      "category": "xss",
+      "action": "block",
+      "priority": 941105,
+      "condition": {
+        "request_uri_contains": "vbscript:"
+      }
+    },
+    {
+      "name": "XSS: data:text/html (body/URI mix)",
+      "crs_rule_id": "941106",
+      "category": "xss",
+      "action": "block",
+      "priority": 941106,
+      "condition": {
+        "request_uri_contains": "data:text/html"
+      }
+    },
+    {
+      "name": "XSS: onclick= (body/URI mix)",
+      "crs_rule_id": "941107",
+      "category": "xss",
+      "action": "block",
+      "priority": 941107,
+      "condition": {
+        "request_uri_contains": "onclick="
+      }
+    },
+    {
+      "name": "XSS: onload= (body/URI mix)",
+      "crs_rule_id": "941108",
+      "category": "xss",
+      "action": "block",
+      "priority": 941108,
+      "condition": {
+        "request_uri_contains": "onload="
+      }
+    },
+    {
+      "name": "XSS: alert( (body/URI mix)",
+      "crs_rule_id": "941109",
+      "category": "xss",
+      "action": "block",
+      "priority": 941109,
+      "condition": {
+        "request_uri_contains": "alert("
+      }
+    },
+    {
+      "name": "XSS: eval( (body/URI mix)",
+      "crs_rule_id": "941110",
+      "category": "xss",
+      "action": "block",
+      "priority": 941110,
+      "condition": {
+        "request_uri_contains": "eval("
+      }
+    },
+    {
+      "name": "XSS: document.cookie (body/URI mix)",
+      "crs_rule_id": "941111",
+      "category": "xss",
+      "action": "block",
+      "priority": 941111,
+      "condition": {
+        "body_contains": "document.cookie"
+      }
+    },
+    {
+      "name": "XSS: String.fromCharCode (body/URI mix)",
+      "crs_rule_id": "941112",
+      "category": "xss",
+      "action": "block",
+      "priority": 941112,
+      "condition": {
+        "request_uri_contains": "String.fromCharCode"
+      }
+    },
+    {
+      "name": "LFI/Traversal: ..%2f",
+      "crs_rule_id": "930121",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930121,
+      "condition": {
+        "request_uri_contains": "..%2f"
+      }
+    },
+    {
+      "name": "LFI/Traversal: ..%252f",
+      "crs_rule_id": "930122",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930122,
+      "condition": {
+        "request_uri_contains": "..%252f"
+      }
+    },
+    {
+      "name": "LFI/Traversal: /etc/shadow",
+      "crs_rule_id": "930123",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930123,
+      "condition": {
+        "request_uri_contains": "/etc/shadow"
+      }
+    },
+    {
+      "name": "LFI/Traversal: /proc/self",
+      "crs_rule_id": "930124",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930124,
+      "condition": {
+        "request_uri_contains": "/proc/self"
+      }
+    },
+    {
+      "name": "LFI/Traversal: win.ini",
+      "crs_rule_id": "930125",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930125,
+      "condition": {
+        "request_uri_contains": "win.ini"
+      }
+    },
+    {
+      "name": "LFI/Traversal: boot.ini",
+      "crs_rule_id": "930126",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930126,
+      "condition": {
+        "request_uri_contains": "boot.ini"
+      }
+    },
+    {
+      "name": "LFI/Traversal: file://",
+      "crs_rule_id": "930127",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930127,
+      "condition": {
+        "request_uri_contains": "file://"
+      }
+    },
+    {
+      "name": "LFI/Traversal: expect://",
+      "crs_rule_id": "930128",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930128,
+      "condition": {
+        "request_uri_contains": "expect://"
+      }
+    },
+    {
+      "name": "LFI/Traversal: zip://",
+      "crs_rule_id": "930129",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930129,
+      "condition": {
+        "request_uri_contains": "zip://"
+      }
+    },
+    {
+      "name": "LFI/Traversal: phar://",
+      "crs_rule_id": "930130",
+      "category": "lfi",
+      "action": "block",
+      "priority": 930130,
+      "condition": {
+        "request_uri_contains": "phar://"
+      }
+    },
+    {
+      "name": "RCE: bash -c (body)",
+      "crs_rule_id": "932120",
+      "category": "rce",
+      "action": "block",
+      "priority": 932120,
+      "condition": {
+        "body_contains": "bash -c"
+      }
+    },
+    {
+      "name": "RCE: /bin/sh (body)",
+      "crs_rule_id": "932121",
+      "category": "rce",
+      "action": "block",
+      "priority": 932121,
+      "condition": {
+        "body_contains": "/bin/sh"
+      }
+    },
+    {
+      "name": "RCE: powershell (body)",
+      "crs_rule_id": "932122",
+      "category": "rce",
+      "action": "block",
+      "priority": 932122,
+      "condition": {
+        "body_contains": "powershell"
+      }
+    },
+    {
+      "name": "RCE: cmd.exe (body)",
+      "crs_rule_id": "932123",
+      "category": "rce",
+      "action": "block",
+      "priority": 932123,
+      "condition": {
+        "body_contains": "cmd.exe"
+      }
+    },
+    {
+      "name": "RCE: wget http (body)",
+      "crs_rule_id": "932124",
+      "category": "rce",
+      "action": "block",
+      "priority": 932124,
+      "condition": {
+        "body_contains": "wget http"
+      }
+    },
+    {
+      "name": "RCE: curl http (body)",
+      "crs_rule_id": "932125",
+      "category": "rce",
+      "action": "block",
+      "priority": 932125,
+      "condition": {
+        "body_contains": "curl http"
+      }
+    },
+    {
+      "name": "RCE: python -c (body)",
+      "crs_rule_id": "932126",
+      "category": "rce",
+      "action": "block",
+      "priority": 932126,
+      "condition": {
+        "body_contains": "python -c"
+      }
+    },
+    {
+      "name": "RCE: perl -e (body)",
+      "crs_rule_id": "932127",
+      "category": "rce",
+      "action": "block",
+      "priority": 932127,
+      "condition": {
+        "body_contains": "perl -e"
+      }
+    },
+    {
+      "name": "RCE: base64 -d (body)",
+      "crs_rule_id": "932128",
+      "category": "rce",
+      "action": "block",
+      "priority": 932128,
+      "condition": {
+        "body_contains": "base64 -d"
+      }
+    },
+    {
+      "name": "RCE: chmod +x (body)",
+      "crs_rule_id": "932129",
+      "category": "rce",
+      "action": "block",
+      "priority": 932129,
+      "condition": {
+        "body_contains": "chmod +x"
+      }
+    },
+    {
+      "name": "Scanner UA: nikto",
+      "crs_rule_id": "913101",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913101,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "nikto"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: Nmap",
+      "crs_rule_id": "913102",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913102,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "Nmap"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: masscan",
+      "crs_rule_id": "913103",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913103,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "masscan"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: zgrab",
+      "crs_rule_id": "913104",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913104,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "zgrab"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: acunetix",
+      "crs_rule_id": "913105",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913105,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "acunetix"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: nessus",
+      "crs_rule_id": "913106",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913106,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "nessus"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: OpenVAS",
+      "crs_rule_id": "913107",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913107,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "OpenVAS"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: w3af",
+      "crs_rule_id": "913108",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913108,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "w3af"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: dirbuster",
+      "crs_rule_id": "913109",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913109,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "dirbuster"
+        }
+      }
+    },
+    {
+      "name": "Scanner UA: gobuster",
+      "crs_rule_id": "913110",
+      "category": "scanner",
+      "action": "block",
+      "priority": 913110,
+      "condition": {
+        "header_contains": {
+          "User-Agent": "gobuster"
+        }
+      }
+    },
+    {
+      "name": "Protocol abuse: TRACE (method)",
+      "crs_rule_id": "920100",
+      "category": "protocol",
+      "action": "block",
+      "priority": 920100,
+      "condition": {
+        "method": "TRACE"
+      }
+    },
+    {
+      "name": "Sensitive path: .git (path)",
+      "crs_rule_id": "920200",
+      "category": "scanner",
+      "action": "block",
+      "priority": 920200,
+      "condition": {
+        "path_contains": "/.git"
+      }
+    },
+    {
+      "name": "Sensitive path: .env (path)",
+      "crs_rule_id": "920201",
+      "category": "scanner",
+      "action": "block",
+      "priority": 920201,
+      "condition": {
+        "path_contains": "/.env"
+      }
+    },
+    {
+      "name": "Sensitive path: wp-config (path)",
+      "crs_rule_id": "920202",
+      "category": "scanner",
+      "action": "block",
+      "priority": 920202,
+      "condition": {
+        "path_contains": "wp-config"
+      }
+    },
+    {
+      "name": "Sensitive path: phpinfo (URI)",
+      "crs_rule_id": "920203",
+      "category": "scanner",
+      "action": "block",
+      "priority": 920203,
+      "condition": {
+        "request_uri_contains": "phpinfo"
+      }
+    },
+    {
+      "name": "Sensitive path: server-status (URI)",
+      "crs_rule_id": "920204",
+      "category": "scanner",
+      "action": "block",
+      "priority": 920204,
+      "condition": {
+        "request_uri_contains": "server-status"
+      }
+    },
+    {
+      "name": "JWT none alg (body)",
+      "crs_rule_id": "920205",
+      "category": "protocol",
+      "action": "log",
+      "priority": 920205,
+      "condition": {
+        "body_contains": "\"alg\":\"none\""
+      }
+    },
+    {
+      "name": "Prototype pollution __proto__ (body)",
+      "crs_rule_id": "920206",
+      "category": "injection",
+      "action": "block",
+      "priority": 920206,
+      "condition": {
+        "body_contains": "__proto__"
+      }
+    },
+    {
+      "name": "Log4j JNDI ldap (body)",
+      "crs_rule_id": "920207",
+      "category": "rce",
+      "action": "block",
+      "priority": 920207,
+      "condition": {
+        "body_contains": "${jndi:ldap"
+      }
+    },
+    {
+      "name": "Log4j JNDI rmi (URI)",
+      "crs_rule_id": "920208",
+      "category": "rce",
+      "action": "block",
+      "priority": 920208,
+      "condition": {
+        "request_uri_contains": "${jndi:"
+      }
+    }
+  ]
+}

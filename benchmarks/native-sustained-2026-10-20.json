@@ -1,0 +1,83 @@
+{
+  "started_at": "2026-10-20T09:24:20.449143+00:00",
+  "machine": {
+    "cpu": "Apple M4",
+    "logical_cpus": 10,
+    "ram_bytes": 25769803776,
+    "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "go": "go version go1.25.0 darwin/arm64"
+  },
+  "conditions": [
+    "Loopback; load generator, upstream, FESS, PostgreSQL and ClamAV on one host.",
+    "Closed-loop fixed workers; 30 seconds per measurement after 1 second warmup.",
+    "Keep-alive enabled, plain HTTP, response body 9 bytes, synchronous access logging enabled.",
+    "One enabled WAF policy with one path rule. Rate limits and bot scoring disabled to measure capacity.",
+    "ClamAV has a minimal local test-signature database; upload results are not production antivirus capacity.",
+    "Each backend gets fresh storage; logs accumulate during its runs. Short tests are capacity probes, not endurance tests."
+  ],
+  "runs": [
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 30,
+      "elapsed_seconds": 30.058198292,
+      "error_examples": null,
+      "max_ms": 1029.909,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 0.884042,
+      "p95_ms": 3.723917,
+      "p99_ms": 19.175791,
+      "requests": 247886,
+      "requests_per_second": 8246.86821185736,
+      "response_bytes": 2230974,
+      "status_codes": {
+        "200": 247886
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:52064/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "sqlite"
+    },
+    {
+      "body_bytes": 0,
+      "concurrency": 16,
+      "duration_requested_seconds": 30,
+      "elapsed_seconds": 30.003983084,
+      "error_examples": null,
+      "max_ms": 156.224292,
+      "method": "GET",
+      "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+      "p50_ms": 1.696416,
+      "p95_ms": 9.090708,
+      "p99_ms": 13.085209,
+      "requests": 187885,
+      "requests_per_second": 6262.001930676732,
+      "response_bytes": 1690965,
+      "status_codes": {
+        "200": 187885
+      },
+      "transport_errors": 0,
+      "url": "http://127.0.0.1:52141/pass",
+      "scenario": "proxy-and-WAF",
+      "backend": "postgres"
+    }
+  ],
+  "stored_log_counts": {
+    "sqlite": {
+      "access": 258450,
+      "waf": 0,
+      "malware": 0
+    },
+    "postgres": {
+      "access": 192524,
+      "waf": 0,
+      "malware": 0
+    }
+  },
+  "database_errors": {
+    "sqlite": [],
+    "postgres": []
+  },
+  "finished_at": "2026-10-20T09:25:24.014378+00:00"
+}

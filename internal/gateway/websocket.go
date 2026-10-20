@@ -1,0 +1,101 @@
+package gateway
+
+import (
+	"database/sql"
+	"net/http"
+	"strings"
+
+	"fence/pkg/clientip"
+	"fence/pkg/engine"
+	"fence/pkg/policy"
+	"fence/pkg/routing"
+)
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return false
+	}
+	conn := strings.ToLower(r.Header.Get("Connection"))
+	return strings.Contains(conn, "upgrade")
+}
+
+// serveWebSocketUpgrade proxies a handshake without buffering the body (ICAP/malware skip).
+func serveWebSocketUpgrade(
+	w http.ResponseWriter,
+	r *http.Request,
+	mr routing.MatchResult,
+	db *sql.DB,
+	store *policy.Store,
+	evaluator *engine.Evaluator,
+	proxy http.Handler,
+	failMode string,
+	gateTF threatFeedGateResult,
+	ipRes *clientip.Resolver,
+	bypassStore *ipBypassStore,
+) {
+	if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
+		return
+	}
+	if !mr.WebSocketEnabled {
+		writeProxyAccessLog(r.Context(), db, r, mr, "websocket_disabled", ipRes)
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "WebSocket выключен", "Для этого пути WebSocket не разрешён.")
+		return
+	}
+
+	snapshot := store.Current()
+	clientHost := ipRes.ClientHost(r)
+	if strings.TrimSpace(clientHost) == "" {
+		clientHost = clientip.PeerHost(r)
+	}
+	var decision engine.Decision
+	if clientIPBypassed(bypassStore, clientHost) {
+		decision = engine.Decision{Action: "allow", Reason: "ip bypass allowlist"}
+	} else {
+		decision = evaluator.Evaluate(r, snapshot, mr.PolicyID, clientHost)
+	}
+	effectiveAction := decision.Action
+	if decision.PolicyMode == "log" && (decision.Action == "block" || decision.Action == "redirect" || decision.Action == "replace") {
+		effectiveAction = "log"
+	}
+	writeWAFLog(r.Context(), db, r, decision, effectiveAction, ipRes)
+
+	accessOutcome := "websocket_proxied"
+	switch effectiveAction {
+	case "block":
+		accessOutcome = "waf_block"
+	case "redirect":
+		accessOutcome = "redirect"
+	}
+	if accessOutcome == "websocket_proxied" && gateTF.ProxyOutcomeHint != "" {
+		accessOutcome = gateTF.ProxyOutcomeHint
+	}
+	writeProxyAccessLog(r.Context(), db, r, mr, accessOutcome, ipRes)
+
+	switch effectiveAction {
+	case "block":
+		writeFESSError(w, http.StatusForbidden, pageBlocked, "Заблокировано политикой", "Правило WAF отклонило этот WebSocket.")
+	case "redirect":
+		target := decision.RedirectURL
+		if target == "" {
+			target = "/"
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+	case "replace":
+		if maybeServeSplash(w, r, mr, db, ipRes) {
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	default:
+		if decision.Action == "deny_on_error" && strings.EqualFold(failMode, "close") {
+			writeFESSError(w, http.StatusServiceUnavailable, pageError, "Временно недоступно", "FESS не смог применить политику (fail-closed).")
+			return
+		}
+		if maybeServeSplash(w, r, mr, db, ipRes) {
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}
+}

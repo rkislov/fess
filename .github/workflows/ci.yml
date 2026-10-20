@@ -1,0 +1,62 @@
+name: Test native FESS
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build embedded UI and binary
+        run: scripts/build.sh
+      - name: Start OS PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER fess WITH PASSWORD 'fess' CREATEDB;"
+          sudo -u postgres createdb -O fess fess_test
+      - name: Test both databases and transfer
+        env:
+          FESS_TEST_POSTGRES: postgres://fess:fess@127.0.0.1:5432/fess_test?sslmode=disable
+        run: go test -race ./...
+      - run: go vet ./...
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+      - name: Build Linux package
+        run: |
+          FESS_VERSION=2.0.0 scripts/build.sh
+          cp dist/fess dist/fess-linux-amd64
+          cd packaging
+          FESS_VERSION=2.0.0 FESS_ARCH=amd64 nfpm package --packager deb --target ../dist/
+      - name: Install with OS dependencies and start systemd
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ./dist/fess_2.0.0_amd64.deb
+          sudo systemctl start fess
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8082/healthz; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8082/healthz
+          curl --fail http://127.0.0.1:8082/ | grep '/_nuxt/'
+          curl --fail http://127.0.0.1/ | grep FESS
+          sudo systemctl restart fess
+          curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:8082/healthz
+          sudo journalctl -u fess --no-pager -n 20
