@@ -17,3 +17,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Python validation caches
+__pycache__/

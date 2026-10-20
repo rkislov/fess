@@ -155,3 +155,22 @@ func TestKernelFragments(t *testing.T) {
 		}
 	}
 }
+
+func TestKernelUDPPortScope(t *testing.T) {
+	c := kernelCollection(t, Config{Ports: []Port{{"udp", 443}}, BlockCIDRs: []string{"203.0.113.0/24"}})
+	packet := ipv4Packet("203.0.113.8", 443, 0)
+	packet = packet[:14+20+8]
+	packet[14+9] = 17
+	binary.BigEndian.PutUint16(packet[14+2:14+4], 28)
+	binary.BigEndian.PutUint16(packet[14+20+4:14+20+6], 8)
+	if got := action(t, c, packet); got != 1 {
+		t.Fatalf("UDP protected port bypass: %d", got)
+	}
+	binary.BigEndian.PutUint16(packet[14+20+2:14+20+4], 53)
+	if got := action(t, c, packet); got != 2 {
+		t.Fatalf("unprotected UDP affected: %d", got)
+	}
+	if got := action(t, c, ipv4Packet("203.0.113.8", 443, 2)); got != 2 {
+		t.Fatalf("UDP-only configuration affected TCP: %d", got)
+	}
+}

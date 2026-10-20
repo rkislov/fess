@@ -24,8 +24,8 @@ func TestOpenAPISpecHandler(t *testing.T) {
 	if strings.Contains(body, "/api/v1/dashboard/containers/") {
 		t.Fatal("obsolete container routes in native API")
 	}
-	if !strings.Contains(body, `version: "2.0.0"`) {
-		t.Fatal("spec version should be 2.0.0")
+	if !strings.Contains(body, `version: "2.1.0"`) {
+		t.Fatal("spec version should be 2.1.0")
 	}
 	if !strings.Contains(rec.Header().Get("Content-Type"), "yaml") {
 		t.Fatalf("content-type %q", rec.Header().Get("Content-Type"))
