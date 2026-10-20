@@ -1,0 +1,1619 @@
+{
+  "started_at": "2026-10-20T22:23:45.755863+00:00",
+  "machine": {
+    "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+    "cpus": 4,
+    "affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "cpu_model": "AMD EPYC 7763 64-Core Processor"
+  },
+  "mode": "generic",
+  "seconds": 12,
+  "repeats": 3,
+  "requested_pps": 50000,
+  "runs": [
+    {
+      "repeat": 1,
+      "scenario": "normal",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005229101,
+        "error_examples": null,
+        "max_ms": 11.647842,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.837794,
+        "p95_ms": 4.285598,
+        "p99_ms": 5.479344,
+        "requests": 91311,
+        "requests_per_second": 7605.935649524095,
+        "response_bytes": 821799,
+        "status_codes": {
+          "200": 91311
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 91311,
+      "journal_drain_seconds": 0.011740725999999313,
+      "successful_rps_including_drain": 7598.504557683118,
+      "wall_seconds": 12.020458000999994,
+      "fess_cpu_percent_one_core": 231.18919426937077,
+      "host_busy_percent": 90.94241966788871,
+      "host_softirq_percent": 6.1462152253612246,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 1,
+      "scenario": "normal",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.006420516,
+        "error_examples": null,
+        "max_ms": 10.282986,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.834093,
+        "p95_ms": 4.188508,
+        "p99_ms": 5.229894,
+        "requests": 92070,
+        "requests_per_second": 7668.39707782229,
+        "response_bytes": 828630,
+        "status_codes": {
+          "200": 92070
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 92070,
+      "journal_drain_seconds": 0.011024282999997581,
+      "successful_rps_including_drain": 7661.3624227058135,
+      "wall_seconds": 12.021507572000004,
+      "fess_cpu_percent_one_core": 237.65738056468106,
+      "host_busy_percent": 90.4494382022472,
+      "host_softirq_percent": 6.763180639585134,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 92151,
+        "rate_drop": 0,
+        "seen": 92151
+      }
+    },
+    {
+      "repeat": 1,
+      "scenario": "cidr-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003927339,
+        "error_examples": null,
+        "max_ms": 21.04826,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.229913,
+        "p95_ms": 5.290303,
+        "p99_ms": 6.801018,
+        "requests": 75134,
+        "requests_per_second": 6259.118193417781,
+        "response_bytes": 676206,
+        "status_codes": {
+          "200": 75134
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.383056081126,
+        "elapsed_seconds": 12.000568119,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599973
+      },
+      "access_rows": 75134,
+      "journal_drain_seconds": 0.014209929000003285,
+      "successful_rps_including_drain": 6251.717576903947,
+      "wall_seconds": 12.017432487000008,
+      "fess_cpu_percent_one_core": 187.72728720884876,
+      "host_busy_percent": 93.26447170217345,
+      "host_softirq_percent": 22.35851086722617,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 522369,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 522369,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 1,
+      "scenario": "cidr-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004885792,
+        "error_examples": null,
+        "max_ms": 12.861831,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.934432,
+        "p95_ms": 4.431476,
+        "p99_ms": 5.56797,
+        "requests": 87335,
+        "requests_per_second": 7274.954673721231,
+        "response_bytes": 786015,
+        "status_codes": {
+          "200": 87335
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49994.92224489098,
+        "elapsed_seconds": 12.001218785,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 600000
+      },
+      "access_rows": 87335,
+      "journal_drain_seconds": 0.011207114000001184,
+      "successful_rps_including_drain": 7268.16950261686,
+      "wall_seconds": 12.019861999000014,
+      "fess_cpu_percent_one_core": 220.1356388467798,
+      "host_busy_percent": 91.45446698316789,
+      "host_softirq_percent": 8.113940440224429,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 600000,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 87415,
+        "rate_drop": 0,
+        "seen": 687415
+      }
+    },
+    {
+      "repeat": 1,
+      "scenario": "rate-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.00477419,
+        "error_examples": null,
+        "max_ms": 12.197177,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.21571,
+        "p95_ms": 5.231833,
+        "p99_ms": 6.596774,
+        "requests": 75850,
+        "requests_per_second": 6318.319595147671,
+        "response_bytes": 682650,
+        "status_codes": {
+          "200": 75850
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49986.51482342643,
+        "elapsed_seconds": 12.000076463,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599842
+      },
+      "access_rows": 75850,
+      "journal_drain_seconds": 0.014074294000010923,
+      "successful_rps_including_drain": 6310.920725972598,
+      "wall_seconds": 12.017772732999987,
+      "fess_cpu_percent_one_core": 190.1350650212868,
+      "host_busy_percent": 93.24614065180103,
+      "host_softirq_percent": 22.341337907375642,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 522299,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 522299,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 1,
+      "scenario": "rate-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004331379,
+        "error_examples": null,
+        "max_ms": 11.407429,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.962236,
+        "p95_ms": 4.563732,
+        "p99_ms": 5.73292,
+        "requests": 85732,
+        "requests_per_second": 7141.7555291731505,
+        "response_bytes": 771588,
+        "status_codes": {
+          "200": 85732
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49997.663791255414,
+        "elapsed_seconds": 12.000040692,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599974
+      },
+      "access_rows": 85732,
+      "journal_drain_seconds": 0.01124749999999608,
+      "successful_rps_including_drain": 7135.070300261314,
+      "wall_seconds": 12.018889537999996,
+      "fess_cpu_percent_one_core": 217.99018883702806,
+      "host_busy_percent": 91.20310478654592,
+      "host_softirq_percent": 8.840017248814144,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 3818,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 3818,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 98812,
+        "rate_drop": 586974,
+        "seen": 685786
+      }
+    },
+    {
+      "repeat": 1,
+      "scenario": "cidr-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003945822,
+        "error_examples": null,
+        "max_ms": 10.810427,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.009735,
+        "p95_ms": 4.626542,
+        "p99_ms": 5.790814,
+        "requests": 84059,
+        "requests_per_second": 7002.614077609588,
+        "response_bytes": 756531,
+        "status_codes": {
+          "200": 84059
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49997.487046549795,
+        "elapsed_seconds": 12.000063112,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599973
+      },
+      "access_rows": 84059,
+      "journal_drain_seconds": 0.010099609999997483,
+      "successful_rps_including_drain": 6996.727328507077,
+      "wall_seconds": 12.019613893000013,
+      "fess_cpu_percent_one_core": 210.3228957689113,
+      "host_busy_percent": 91.80292598967297,
+      "host_softirq_percent": 12.306368330464716,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 1,
+      "scenario": "cidr-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004540126,
+        "error_examples": null,
+        "max_ms": 10.870939,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.941944,
+        "p95_ms": 4.456915,
+        "p99_ms": 5.609834,
+        "requests": 86852,
+        "requests_per_second": 7234.9293757527485,
+        "response_bytes": 781668,
+        "status_codes": {
+          "200": 86852
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.470213828194,
+        "elapsed_seconds": 12.00078722,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599985
+      },
+      "access_rows": 86852,
+      "journal_drain_seconds": 0.010675155000001268,
+      "successful_rps_including_drain": 7228.501360049829,
+      "wall_seconds": 12.020391168000003,
+      "fess_cpu_percent_one_core": 219.29402821909892,
+      "host_busy_percent": 91.29965457685665,
+      "host_softirq_percent": 8.160621761658032,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 599985,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 86932,
+        "rate_drop": 0,
+        "seen": 686917
+      }
+    },
+    {
+      "repeat": 1,
+      "scenario": "rate-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004794908,
+        "error_examples": null,
+        "max_ms": 11.260337,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.03012,
+        "p95_ms": 4.701095,
+        "p99_ms": 5.884937,
+        "requests": 83079,
+        "requests_per_second": 6920.484742695282,
+        "response_bytes": 747711,
+        "status_codes": {
+          "200": 83079
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49998.352129405044,
+        "elapsed_seconds": 12.0003355,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599997
+      },
+      "access_rows": 83079,
+      "journal_drain_seconds": 0.010809033000015233,
+      "successful_rps_including_drain": 6914.259192292056,
+      "wall_seconds": 12.020278460999975,
+      "fess_cpu_percent_one_core": 211.47596607246396,
+      "host_busy_percent": 91.64513350559862,
+      "host_softirq_percent": 12.015503875968992,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 1,
+      "scenario": "rate-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004561194,
+        "error_examples": null,
+        "max_ms": 11.864879,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.993842,
+        "p95_ms": 4.575094,
+        "p99_ms": 5.746111,
+        "requests": 84758,
+        "requests_per_second": 7060.482980615976,
+        "response_bytes": 762822,
+        "status_codes": {
+          "200": 84758
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49993.79922822777,
+        "elapsed_seconds": 12.001288345,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599990
+      },
+      "access_rows": 84758,
+      "journal_drain_seconds": 0.011097914000004039,
+      "successful_rps_including_drain": 7053.96177090013,
+      "wall_seconds": 12.019973442999998,
+      "fess_cpu_percent_one_core": 216.80580347019327,
+      "host_busy_percent": 91.458153580673,
+      "host_softirq_percent": 9.490940465918895,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 207328,
+        "rate_drop": 477501,
+        "seen": 684829
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "normal",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005183799,
+        "error_examples": null,
+        "max_ms": 10.048002,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.812574,
+        "p95_ms": 4.177621,
+        "p99_ms": 5.213105,
+        "requests": 92995,
+        "requests_per_second": 7746.237088660504,
+        "response_bytes": 836955,
+        "status_codes": {
+          "200": 92995
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 92995,
+      "journal_drain_seconds": 0.011946519000019862,
+      "successful_rps_including_drain": 7738.536367597362,
+      "wall_seconds": 12.020195296999987,
+      "fess_cpu_percent_one_core": 234.43878658970868,
+      "host_busy_percent": 89.7875108412836,
+      "host_softirq_percent": 6.591500433651344,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 93075,
+        "rate_drop": 0,
+        "seen": 93075
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "normal",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003825398,
+        "error_examples": null,
+        "max_ms": 8.997187,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.805743,
+        "p95_ms": 4.138246,
+        "p99_ms": 5.190889,
+        "requests": 93477,
+        "requests_per_second": 7787.26755019067,
+        "response_bytes": 841293,
+        "status_codes": {
+          "200": 93477
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 93477,
+      "journal_drain_seconds": 0.01292925100000275,
+      "successful_rps_including_drain": 7778.888953830714,
+      "wall_seconds": 12.018939630000006,
+      "fess_cpu_percent_one_core": 235.46170353798496,
+      "host_busy_percent": 89.98699609882965,
+      "host_softirq_percent": 6.35023840485479,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 2,
+      "scenario": "cidr-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003298815,
+        "error_examples": null,
+        "max_ms": 11.369746,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.968295,
+        "p95_ms": 4.54848,
+        "p99_ms": 5.701756,
+        "requests": 85528,
+        "requests_per_second": 7125.374558960357,
+        "response_bytes": 769752,
+        "status_codes": {
+          "200": 85528
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.336305938195,
+        "elapsed_seconds": 12.000819363,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599985
+      },
+      "access_rows": 85528,
+      "journal_drain_seconds": 0.01086144499998909,
+      "successful_rps_including_drain": 7118.932838340553,
+      "wall_seconds": 12.019298408999987,
+      "fess_cpu_percent_one_core": 219.23076625062623,
+      "host_busy_percent": 91.213298791019,
+      "host_softirq_percent": 8.333333333333334,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 599985,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 85608,
+        "rate_drop": 0,
+        "seen": 685593
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "cidr-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.002974527,
+        "error_examples": null,
+        "max_ms": 17.427595,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.227049,
+        "p95_ms": 5.369889,
+        "p99_ms": 6.913704,
+        "requests": 74704,
+        "requests_per_second": 6223.790597235515,
+        "response_bytes": 672336,
+        "status_codes": {
+          "200": 74704
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49996.71942698144,
+        "elapsed_seconds": 12.00064738,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599993
+      },
+      "access_rows": 74704,
+      "journal_drain_seconds": 0.011860591000015575,
+      "successful_rps_including_drain": 6217.646706452281,
+      "wall_seconds": 12.016683247999993,
+      "fess_cpu_percent_one_core": 189.81943294374847,
+      "host_busy_percent": 93.42359767891683,
+      "host_softirq_percent": 22.458628841607567,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 522488,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 522488,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 2,
+      "scenario": "rate-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004740161,
+        "error_examples": null,
+        "max_ms": 11.109047,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.977612,
+        "p95_ms": 4.565061,
+        "p99_ms": 5.851616,
+        "requests": 85097,
+        "requests_per_second": 7088.616568016694,
+        "response_bytes": 765873,
+        "status_codes": {
+          "200": 85097
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.51102450712,
+        "elapsed_seconds": 12.000377388,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599965
+      },
+      "access_rows": 85097,
+      "journal_drain_seconds": 0.011097404999986793,
+      "successful_rps_including_drain": 7082.069771048708,
+      "wall_seconds": 12.019689684000014,
+      "fess_cpu_percent_one_core": 218.89084237359725,
+      "host_busy_percent": 91.4802065404475,
+      "host_softirq_percent": 8.950086058519794,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 3801,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 3801,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 98177,
+        "rate_drop": 586965,
+        "seen": 685142
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "rate-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004324223,
+        "error_examples": null,
+        "max_ms": 15.60552,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.241199,
+        "p95_ms": 5.290871,
+        "p99_ms": 6.839455,
+        "requests": 74929,
+        "requests_per_second": 6241.834076460366,
+        "response_bytes": 674361,
+        "status_codes": {
+          "200": 74929
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49992.3614589257,
+        "elapsed_seconds": 12.000413313,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599929
+      },
+      "access_rows": 74929,
+      "journal_drain_seconds": 0.010284221000006255,
+      "successful_rps_including_drain": 6236.491213945379,
+      "wall_seconds": 12.017750456999977,
+      "fess_cpu_percent_one_core": 189.63615596399336,
+      "host_busy_percent": 93.29477292202228,
+      "host_softirq_percent": 22.30077120822622,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 523691,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 523691,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 2,
+      "scenario": "cidr-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005669599,
+        "error_examples": null,
+        "max_ms": 18.326461,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.990915,
+        "p95_ms": 4.594932,
+        "p99_ms": 5.884581,
+        "requests": 84414,
+        "requests_per_second": 7031.178003351947,
+        "response_bytes": 759726,
+        "status_codes": {
+          "200": 84414
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.61377184919,
+        "elapsed_seconds": 12.000572745,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599976
+      },
+      "access_rows": 84414,
+      "journal_drain_seconds": 0.011126644000000852,
+      "successful_rps_including_drain": 7024.667664575961,
+      "wall_seconds": 12.021270597000012,
+      "fess_cpu_percent_one_core": 216.69922317946117,
+      "host_busy_percent": 90.93459961148284,
+      "host_softirq_percent": 8.223613209583423,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 599976,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 84494,
+        "rate_drop": 0,
+        "seen": 684470
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "cidr-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.00533017,
+        "error_examples": null,
+        "max_ms": 12.962987,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.059202,
+        "p95_ms": 4.834832,
+        "p99_ms": 6.169771,
+        "requests": 81404,
+        "requests_per_second": 6780.65482975384,
+        "response_bytes": 732636,
+        "status_codes": {
+          "200": 81404
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49998.28185175465,
+        "elapsed_seconds": 12.000332367,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599996
+      },
+      "access_rows": 81404,
+      "journal_drain_seconds": 0.010514740000019174,
+      "successful_rps_including_drain": 6774.7212626098935,
+      "wall_seconds": 12.020939185000032,
+      "fess_cpu_percent_one_core": 208.1368153930972,
+      "host_busy_percent": 91.4384300194091,
+      "host_softirq_percent": 12.335561785637266,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 2,
+      "scenario": "rate-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003973235,
+        "error_examples": null,
+        "max_ms": 11.13202,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.097555,
+        "p95_ms": 4.86546,
+        "p99_ms": 6.15189,
+        "requests": 80583,
+        "requests_per_second": 6713.027297082273,
+        "response_bytes": 725247,
+        "status_codes": {
+          "200": 80583
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.41440028848,
+        "elapsed_seconds": 12.000360577,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599963
+      },
+      "access_rows": 80583,
+      "journal_drain_seconds": 0.01049726799999462,
+      "successful_rps_including_drain": 6707.16199934725,
+      "wall_seconds": 12.018932240000026,
+      "fess_cpu_percent_one_core": 215.99256474383736,
+      "host_busy_percent": 91.28747034720725,
+      "host_softirq_percent": 9.402631011429804,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 210664,
+        "rate_drop": 469963,
+        "seen": 680627
+      }
+    },
+    {
+      "repeat": 2,
+      "scenario": "rate-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004141146,
+        "error_examples": null,
+        "max_ms": 11.186963,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.047332,
+        "p95_ms": 4.736217,
+        "p99_ms": 5.977492,
+        "requests": 81969,
+        "requests_per_second": 6828.393552112937,
+        "response_bytes": 737721,
+        "status_codes": {
+          "200": 81969
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.55042484469,
+        "elapsed_seconds": 12.000347929,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599964
+      },
+      "access_rows": 81969,
+      "journal_drain_seconds": 0.011097586000005322,
+      "successful_rps_including_drain": 6822.0866707952455,
+      "wall_seconds": 12.019046096000011,
+      "fess_cpu_percent_one_core": 212.32966240551457,
+      "host_busy_percent": 91.7707884532529,
+      "host_softirq_percent": 12.085308056872037,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "normal",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.00496959,
+        "error_examples": null,
+        "max_ms": 9.492091,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.833272,
+        "p95_ms": 4.185859,
+        "p99_ms": 5.275975,
+        "requests": 92442,
+        "requests_per_second": 7700.311050933699,
+        "response_bytes": 831978,
+        "status_codes": {
+          "200": 92442
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 92442,
+      "journal_drain_seconds": 0.01140765799999599,
+      "successful_rps_including_drain": 7693.000818144756,
+      "wall_seconds": 12.020060352999963,
+      "fess_cpu_percent_one_core": 235.2733611103865,
+      "host_busy_percent": 89.90051903114187,
+      "host_softirq_percent": 6.076989619377162,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "normal",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005166215,
+        "error_examples": null,
+        "max_ms": 32.03339,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.823775,
+        "p95_ms": 4.180965,
+        "p99_ms": 5.29253,
+        "requests": 92472,
+        "requests_per_second": 7702.683856593318,
+        "response_bytes": 832248,
+        "status_codes": {
+          "200": 92472
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": null,
+      "access_rows": 92472,
+      "journal_drain_seconds": 0.01139336600004981,
+      "successful_rps_including_drain": 7695.380643409105,
+      "wall_seconds": 12.021225985000001,
+      "fess_cpu_percent_one_core": 233.8363827040225,
+      "host_busy_percent": 89.73359324236517,
+      "host_softirq_percent": 6.606021225904267,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 92552,
+        "rate_drop": 0,
+        "seen": 92552
+      }
+    },
+    {
+      "repeat": 3,
+      "scenario": "cidr-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.008449364,
+        "error_examples": null,
+        "max_ms": 18.400679,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.281118,
+        "p95_ms": 5.422512,
+        "p99_ms": 7.015051,
+        "requests": 73407,
+        "requests_per_second": 6112.945791324735,
+        "response_bytes": 660663,
+        "status_codes": {
+          "200": 73407
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49992.232903897144,
+        "elapsed_seconds": 12.001364315,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599975
+      },
+      "access_rows": 73407,
+      "journal_drain_seconds": 0.00958044300000438,
+      "successful_rps_including_drain": 6108.072718977903,
+      "wall_seconds": 12.022264590999953,
+      "fess_cpu_percent_one_core": 189.14905613559282,
+      "host_busy_percent": 93.08716187204809,
+      "host_softirq_percent": 22.370115929583513,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 522990,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 522990,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "cidr-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004618848,
+        "error_examples": null,
+        "max_ms": 12.483678,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.94971,
+        "p95_ms": 4.472905,
+        "p99_ms": 5.581602,
+        "requests": 86611,
+        "requests_per_second": 7214.806325519416,
+        "response_bytes": 779499,
+        "status_codes": {
+          "200": 86611
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49998.97851710556,
+        "elapsed_seconds": 12.000005156,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599988
+      },
+      "access_rows": 86611,
+      "journal_drain_seconds": 0.01104998099998511,
+      "successful_rps_including_drain": 7208.171366288254,
+      "wall_seconds": 12.020395129000008,
+      "fess_cpu_percent_one_core": 219.21076401580893,
+      "host_busy_percent": 91.1231101511879,
+      "host_softirq_percent": 8.250539956803456,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 599988,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 86691,
+        "rate_drop": 0,
+        "seen": 686679
+      }
+    },
+    {
+      "repeat": 3,
+      "scenario": "rate-syn",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005956708,
+        "error_examples": null,
+        "max_ms": 13.253743,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.270852,
+        "p95_ms": 5.418362,
+        "p99_ms": 6.989871,
+        "requests": 73691,
+        "requests_per_second": 6137.869875117661,
+        "response_bytes": 663219,
+        "status_codes": {
+          "200": 73691
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49970.998677157004,
+        "elapsed_seconds": 12.00202149,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599753
+      },
+      "access_rows": 73691,
+      "journal_drain_seconds": 0.009442494000040824,
+      "successful_rps_including_drain": 6133.046331721851,
+      "wall_seconds": 12.020372523999981,
+      "fess_cpu_percent_one_core": 189.84436592491113,
+      "host_busy_percent": 93.05674978503869,
+      "host_softirq_percent": 22.63542562338779,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 522248,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 522248,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "rate-syn",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.004031255,
+        "error_examples": null,
+        "max_ms": 12.040735,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.978606,
+        "p95_ms": 4.595425,
+        "p99_ms": 5.783474,
+        "requests": 85021,
+        "requests_per_second": 7082.70398451241,
+        "response_bytes": 765189,
+        "status_codes": {
+          "200": 85021
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.344334073234,
+        "elapsed_seconds": 12.000517408,
+        "frame_bytes": 54,
+        "protocol": "syn",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599970
+      },
+      "access_rows": 85021,
+      "journal_drain_seconds": 0.011137887000018054,
+      "successful_rps_including_drain": 7076.138420956728,
+      "wall_seconds": 12.019979484999965,
+      "fess_cpu_percent_one_core": 218.30320120550587,
+      "host_busy_percent": 91.39900840698427,
+      "host_softirq_percent": 8.881224401810735,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 2884,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 2884,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 98101,
+        "rate_drop": 586970,
+        "seen": 685071
+      }
+    },
+    {
+      "repeat": 3,
+      "scenario": "cidr-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.006045227,
+        "error_examples": null,
+        "max_ms": 11.500663,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.01241,
+        "p95_ms": 4.642049,
+        "p99_ms": 5.856123,
+        "requests": 83912,
+        "requests_per_second": 6989.145752282614,
+        "response_bytes": 755208,
+        "status_codes": {
+          "200": 83912
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49998.26968007842,
+        "elapsed_seconds": 12.000295287,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599994
+      },
+      "access_rows": 83912,
+      "journal_drain_seconds": 0.01006820399999242,
+      "successful_rps_including_drain": 6983.289603734772,
+      "wall_seconds": 12.019931910000025,
+      "fess_cpu_percent_one_core": 209.73496512926542,
+      "host_busy_percent": 91.56236512731981,
+      "host_softirq_percent": 12.084592145015106,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "cidr-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005408792,
+        "error_examples": null,
+        "max_ms": 10.520293,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.933442,
+        "p95_ms": 4.421325,
+        "p99_ms": 5.532953,
+        "requests": 87539,
+        "requests_per_second": 7291.6300907914965,
+        "response_bytes": 787851,
+        "status_codes": {
+          "200": 87539
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49995.49000468575,
+        "elapsed_seconds": 12.000522446,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599972
+      },
+      "access_rows": 87539,
+      "journal_drain_seconds": 0.011628098000016962,
+      "successful_rps_including_drain": 7284.574458853964,
+      "wall_seconds": 12.020852079000008,
+      "fess_cpu_percent_one_core": 220.45026280869504,
+      "host_busy_percent": 91.51593453919035,
+      "host_softirq_percent": 8.484065460809648,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 599972,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 87619,
+        "rate_drop": 0,
+        "seen": 687591
+      }
+    },
+    {
+      "repeat": 3,
+      "scenario": "rate-udp",
+      "xdp": false,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.005441749,
+        "error_examples": null,
+        "max_ms": 11.460669,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 2.013709,
+        "p95_ms": 4.66355,
+        "p99_ms": 5.857422,
+        "requests": 83782,
+        "requests_per_second": 6978.6686530696525,
+        "response_bytes": 754038,
+        "status_codes": {
+          "200": 83782
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49999.36400286327,
+        "elapsed_seconds": 12.000132641,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599999
+      },
+      "access_rows": 83782,
+      "journal_drain_seconds": 0.010948929999983648,
+      "successful_rps_including_drain": 6972.309925510214,
+      "wall_seconds": 12.020143385999972,
+      "fess_cpu_percent_one_core": 210.8959867277914,
+      "host_busy_percent": 91.65768484587196,
+      "host_softirq_percent": 11.942228928648415,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {}
+    },
+    {
+      "repeat": 3,
+      "scenario": "rate-udp",
+      "xdp": true,
+      "http": {
+        "body_bytes": 0,
+        "concurrency": 16,
+        "duration_requested_seconds": 12,
+        "elapsed_seconds": 12.003865416,
+        "error_examples": null,
+        "max_ms": 10.765303,
+        "method": "GET",
+        "model": "closed-loop; fixed workers; includes connection setup; in-flight requests drain after duration",
+        "p50_ms": 1.967392,
+        "p95_ms": 4.525084,
+        "p99_ms": 5.654688,
+        "requests": 85840,
+        "requests_per_second": 7151.029857897567,
+        "response_bytes": 772560,
+        "status_codes": {
+          "200": 85840
+        },
+        "transport_errors": 0,
+        "url": "http://192.0.2.1:18080/pass",
+        "exit_code": 0
+      },
+      "attack": {
+        "actual_pps": 49989.39381388501,
+        "elapsed_seconds": 12.001005698,
+        "frame_bytes": 42,
+        "protocol": "udp",
+        "requested_pps": 50000,
+        "send_errors": 0,
+        "sent": 599923
+      },
+      "access_rows": 85840,
+      "journal_drain_seconds": 0.011143050999976367,
+      "successful_rps_including_drain": 7144.397795121435,
+      "wall_seconds": 12.019509382999956,
+      "fess_cpu_percent_one_core": 215.73259917476028,
+      "host_busy_percent": 91.32400430570506,
+      "host_softirq_percent": 9.558665231431647,
+      "tcp_ext_delta": {
+        "SyncookiesSent": 0,
+        "ListenOverflows": 0,
+        "ListenDrops": 0,
+        "TCPReqQFullDoCookies": 0,
+        "TCPReqQFullDrop": 0
+      },
+      "xdp_delta": {
+        "cidr_drop": 0,
+        "fragment_drop": 0,
+        "malformed_pass": 0,
+        "passed": 208677,
+        "rate_drop": 477166,
+        "seen": 685843
+      }
+    }
+  ],
+  "conditions": [
+    "Linux GitHub Actions shared runner; veth, no physical NIC throughput claim.",
+    "FESS, upstream, HTTP and packet generators share CPUs; measured offered PPS can differ between pairs.",
+    "HTTP: 16 closed-loop clients, keep-alive, SQLite batch journal, one nonmatching WAF rule; ClamAV/rate/bots disabled.",
+    "Attack: valid IPv4 SYN or empty UDP to protected port 18080 from isolated 192.0.2.3. Legitimate HTTP uses 192.0.2.2.",
+    "CIDR cases deny attack source. Rate cases: 10000 PPS and 1000 SYN/s per IP; legitimate 192.0.2.2 explicitly allowed to isolate attack protection.",
+    "3 paired repetitions, alternating off/on order. Fresh FESS/SQLite each probe. One second HTTP warmup before measurement.",
+    "Counters cover measured flood and HTTP drain, captured before journal flush. Log totals checked after flush. CPU metrics are whole-host CPU and FESS process, not isolated networking CPU."
+  ],
+  "finished_at": "2026-10-20T22:30:23.517804+00:00",
+  "source_commit": "cfb4829",
+  "workflow_url": "https://github.com/rkislov/fess/actions/runs/39507672513"
+}

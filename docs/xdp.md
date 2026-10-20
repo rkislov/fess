@@ -76,5 +76,9 @@ allow/deny, VLAN, extension headers, лимитов и фрагментов. Д�
 целевого порта, доступность контрольного порта, отказ замены и снятие фильтра.
 К физическим интерфейсам машины разработчика тесты не подключаются.
 
+Нагрузочное сравнение XDP off/on на Linux/veth (native и generic), SYN/UDP
+50 тыс. PPS и влияние на HTTP RPS: [методика и результаты](../benchmarks/xdp-linux.md).
+Результаты виртуального стенда не являются оценкой предельного PPS физической NIC.
+
 Полезные первоисточники: https://docs.kernel.org/networking/af_xdp.html и
 https://ebpf-go.dev/guides/getting-started/.

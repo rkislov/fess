@@ -99,3 +99,11 @@ python3 benchmarks/compare.py --before /path/to/fess-2.0.0 --after /path/to/fess
 В PostgreSQL создаются и удаляются собственные временные БД; нужен CREATE DATABASE.
 XDP не участвовал в этих HTTP-прогонах. Его функциональность проверяется отдельно
 на Linux/veth; PPS на физической NIC в этом стенде не измерялись.
+
+## Linux: XDP off/on под SYN и UDP
+
+[Отдельное сравнение](xdp-linux.md): 60 Linux/veth-прогонов в native и generic,
+50 тыс. PPS, три повторения, HTTP RPS/p95/p99, CPU, XDP counters и TCP backlog.
+Исходные JSON: `xdp-linux-native-2026-10-21.json` и
+`xdp-linux-generic-2026-10-21.json`. Native и generic выполнялись на разных CPU;
+сравнивать следует off/on внутри каждой серии.
