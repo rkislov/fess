@@ -51,6 +51,8 @@
 
     </section>
 
+    <DashboardProtectionStatus :refresh-key="protectionRefresh" />
+
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
       <p class="mt-1 text-xs text-slate-500">
@@ -454,6 +456,7 @@ const RANK_TOP = 10
 const SERIES_VIS_LS_KEY = 'fence_dashboard_traffic_series_vis'
 const OUTCOME_VIS_LS_KEY = 'fence_dashboard_outcome_vis'
 
+const protectionRefresh = ref(0)
 const hours = ref(24)
 const busy = ref(false)
 const err = ref('')
@@ -522,6 +525,8 @@ let chartOutcome: ChartType | null = null
 let chartUA: ChartType | null = null
 let chartRps: ChartType | null = null
 let mapInst: LeafMap | null = null
+let yandexMap: any = null
+let mapGeneration = 0
 const markers: CircleMarker[] = []
 
 let chartPrepared = false
@@ -1219,8 +1224,10 @@ async function renderCharts(s: Summary) {
 
 async function renderMap(rows: CountryRow[]) {
   if (!import.meta.client || !elMap.value) return
-  await import('leaflet/dist/leaflet.css')
-  const L = (await import('leaflet')).default
+  const generation = ++mapGeneration
+  const container = elMap.value
+  yandexMap?.destroy()
+  yandexMap = null
 
   for (const m of markers) {
     try {
@@ -1255,17 +1262,50 @@ async function renderMap(rows: CountryRow[]) {
     return
   }
 
+  let settings: { provider: string; api_key: string }
+  const message = (text: string) => {
+    container.replaceChildren()
+    const label = document.createElement('p')
+    label.className = 'flex h-full items-center justify-center px-4 text-center text-sm text-slate-400'
+    label.textContent = text
+    container.appendChild(label)
+  }
+  try {
+    settings = await apiFetch(apiUrl('/settings/map'))
+    if (generation !== mapGeneration || !elMap.value) return
+    if (!settings.api_key) {
+      message('Для отображения карты укажите поставщика и API key: Настройки → Карта. Leaflet сам по себе ключа не требует.')
+      return
+    }
+    if (settings.provider === 'yandex') {
+      const sdk = await loadYandexMaps(settings.api_key)
+      if (generation !== mapGeneration || !elMap.value) return
+      const map = new sdk.Map(container, { center: [20, 0], zoom: 2, controls: ['zoomControl'] })
+      yandexMap = map
+      map.behaviors.disable('scrollZoom')
+      const max = Math.max(...pts.map(p => p.count), 1)
+      for (const p of pts) {
+        map.geoObjects.add(new sdk.Circle([[p.lat, p.lon], 50000 + 300000 * p.count / max],
+          { hintContent: `${p.country_code}: ${p.count}` },
+          { fillColor: '#f43f5e', fillOpacity: 0.35 + 0.45 * p.count / max, strokeColor: '#2dd4bf', strokeWidth: 1 }))
+      }
+      return
+    }
+  } catch {
+    if (generation === mapGeneration) message('Не удалось загрузить карту. Проверьте API key в разделе Настройки → Карта и доступ к поставщику.')
+    return
+  }
+  await import('leaflet/dist/leaflet.css')
+  const L = (await import('leaflet')).default
+  if (generation !== mapGeneration || !elMap.value) return
   const map = L.map(elMap.value, { scrollWheelZoom: false, worldCopyJump: true }).setView([20, 0], 2)
   // Leaflet по умолчанию добавляет SVG-флаг в префикс атрибуции; оставляем только ссылку на leafletjs.com
   map.attributionControl.setPrefix(
     '<a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>',
   )
-  const tiles = isLightTheme()
-    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  const tiles = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(settings.api_key)}`
   L.tileLayer(tiles, {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     maxZoom: 19,
   }).addTo(map)
   mapInst = map
@@ -1315,6 +1355,7 @@ async function load() {
       }),
     ])
     if (sys) sysHealth.value = sys
+    ++protectionRefresh.value
     const byCountry = dashboardByCountry(data)
     const byUserAgent = dashboardByUserAgent(data)
     summary.value = { ...data, by_country: byCountry, by_user_agent: byUserAgent }
@@ -1364,6 +1405,9 @@ watch(uiTheme, () => {
 })
 
 onBeforeUnmount(() => {
+  ++mapGeneration
+  yandexMap?.destroy()
+  yandexMap = null
   clearRefreshTimer()
   destroyCharts()
   try {
