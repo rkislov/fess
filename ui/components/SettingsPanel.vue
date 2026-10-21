@@ -53,6 +53,8 @@
       </p>
     </section>
 
+    <MapSettingsPanel v-else-if="sub === 'map' && isAdmin" />
+
     <!-- Admin: users -->
     <section v-else-if="sub === 'users' && isAdmin" class="space-y-6">
       <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
@@ -262,6 +264,7 @@ const isAdmin = computed(() => auth.isAdmin())
 const { preference: themePref, resolved: themeResolved } = useUiTheme()
 
 type SubId =
+  | 'map'
   | 'appearance'
   | 'users'
   | 'auth'
@@ -277,6 +280,7 @@ type SubId =
 const appearanceSection = [{ id: 'appearance' as const, label: 'Оформление', icon: '🎨' }]
 
 const adminSections = [
+  { id: 'map' as const, label: 'Карта', icon: '🗺️' },
   { id: 'users' as const, label: 'Пользователи', icon: '👤' },
   { id: 'auth' as const, label: 'Авторизация', icon: '🔐' },
   { id: 'siem' as const, label: 'SIEM', icon: '📤' },
