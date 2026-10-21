@@ -257,3 +257,21 @@ func TestBackendTimeoutAllowsResponseBodyToFinish(t *testing.T) {
 		t.Fatalf("timeout canceled body before consumption: %q %v", body, err)
 	}
 }
+
+func TestDynamicReverseProxyPreservePath(t *testing.T) {
+	target, _ := url.Parse("http://backend.internal:8080")
+	for _, preserve := range []bool{false, true} {
+		store := routing.NewStore(nil)
+		store.Swap(routing.Snapshot{Sites: []routing.ResolvedSite{{HostPattern: "app.test", Backends: []routing.ResolvedBackend{{PathPrefix: "/sub", PreservePath: preserve, Backend: target}}}}})
+		proxy := newDynamicReverseProxy(nil, store, clientip.ParseTrustedProxies(""))
+		req := httptest.NewRequest("GET", "http://app.test/sub/token?q=1", nil)
+		proxy.Director(req)
+		want := "/token"
+		if preserve {
+			want = "/sub/token"
+		}
+		if req.URL.Path != want || req.URL.RawQuery != "q=1" {
+			t.Fatal(preserve, req.URL)
+		}
+	}
+}

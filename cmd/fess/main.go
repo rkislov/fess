@@ -24,6 +24,7 @@ import (
 	"fence/internal/gateway"
 	"fence/internal/runtimebus"
 	"fence/ui"
+	"github.com/pires/go-proxyproto"
 	"golang.org/x/sys/unix"
 )
 
@@ -179,9 +180,16 @@ func run() (runErr error) {
 		}
 		listeners = append(listeners, ln)
 		if ep.tls != nil {
+			if trusted := strings.TrimSpace(os.Getenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS")); trusted != "" {
+				policy, err := proxyproto.TrustProxyHeaderFromRanges(strings.Split(trusted, ","))
+				if err != nil {
+					return fmt.Errorf("TLS PROXY protocol policy: %w", err)
+				}
+				ln = &proxyproto.Listener{Listener: ln, ConnPolicy: policy, ReadHeaderTimeout: 3 * time.Second}
+			}
 			ln = tls.NewListener(ln, ep.tls)
 		}
-		servers = append(servers, &http.Server{Handler: ep.handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second})
+		servers = append(servers, &http.Server{Handler: ep.handler, TLSConfig: ep.tls, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second})
 		listeners[len(listeners)-1] = ln
 	}
 	errs := make(chan error, len(servers))
