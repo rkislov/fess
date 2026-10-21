@@ -35,15 +35,16 @@ type Snapshot struct {
 
 // ResolvedBackend is one upstream path rule (flattened backend + path row).
 type ResolvedBackend struct {
-	PathPrefix       string
-	PathPriority     int
-	BackendPriority  int
-	Backend          *url.URL
-	BackendName      string
-	TLSSkipVerify    bool
-	WebSocketEnabled bool
-	TimeoutSec       int // 0 = no limit
-	IdleTimeoutSec   int // 0 = transport default
+	PreservePath        bool
+	PathPrefix          string
+	PathPriority        int
+	BackendPriority     int
+	Backend             *url.URL
+	BackendName         string
+	TLSSkipVerify       bool
+	WebSocketEnabled    bool
+	TimeoutSec          int // 0 = no limit
+	IdleTimeoutSec      int // 0 = transport default
 	IPAllowMode         string
 	AllowedPrefixes     []netip.Prefix
 	BackendRateOverride ratelimit.Override
@@ -60,13 +61,14 @@ type ResolvedSite struct {
 
 // MatchResult is the routing + policy scope for a request Host and path.
 type MatchResult struct {
-	Backend            *url.URL
-	BackendName        string
-	PolicyID           string
-	TLSSkipVerify      bool
-	WebSocketEnabled   bool
-	TimeoutSec         int
-	IdleTimeoutSec     int
+	PreservePath        bool
+	Backend             *url.URL
+	BackendName         string
+	PolicyID            string
+	TLSSkipVerify       bool
+	WebSocketEnabled    bool
+	TimeoutSec          int
+	IdleTimeoutSec      int
 	IPAllowMode         string
 	AllowedPrefixes     []netip.Prefix
 	MatchedPathPrefix   string // normalized prefix used for this backend ("" = default)
@@ -91,6 +93,7 @@ func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 		if br := site.pickBackend(reqPath); br != nil && br.Backend != nil {
 			return MatchResult{
 				Backend:             br.Backend,
+				PreservePath:        br.PreservePath,
 				BackendName:         br.BackendName,
 				PolicyID:            site.PolicyID,
 				TLSSkipVerify:       br.TLSSkipVerify,
@@ -185,7 +188,7 @@ SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
   b.name, b.base_url, b.priority, b.tls_skip_verify,
   COALESCE(p.path_prefix, '*'), p.priority, p.websocket_enabled,
   p.timeout_sec, p.idle_timeout_sec, p.ip_allow_mode, p.allowed_cidrs,
-  b.rate_limit_override, p.rate_limit_override
+  b.rate_limit_override, p.rate_limit_override, p.preserve_path
 FROM sites s
 JOIN backends b ON b.site_id = s.id AND b.enabled = TRUE
 JOIN backend_paths p ON p.backend_id = b.id AND p.enabled = TRUE
@@ -209,12 +212,12 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.p
 		var policyID string
 		var backendName, base string
 		var backendPri, pathPri int
-		var tlsSkip, wsEn bool
+		var tlsSkip, wsEn, preservePath bool
 		var pathPrefix string
 		var timeoutSec, idleTimeoutSec int
 		var ipAllowMode, allowedCIDRsJSON string
 		var backendRLRaw, pathRLRaw []byte
-		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &pathPri, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON, &backendRLRaw, &pathRLRaw); err != nil {
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &pathPri, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON, &backendRLRaw, &pathRLRaw, &preservePath); err != nil {
 			return out, err
 		}
 		backendRL, err := ratelimit.ParseOverrideJSON(backendRLRaw)
@@ -259,6 +262,7 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.p
 		}
 		out.Sites[idx].Backends = append(out.Sites[idx].Backends, ResolvedBackend{
 			PathPrefix:          NormalizePathPrefix(pathPrefix),
+			PreservePath:        preservePath,
 			PathPriority:        pathPri,
 			BackendPriority:     backendPri,
 			Backend:             u,

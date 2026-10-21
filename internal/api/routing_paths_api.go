@@ -15,6 +15,7 @@ import (
 )
 
 type backendPathRequest struct {
+	PreservePath     bool                       `json:"preserve_path"`
 	PathPrefix       string                     `json:"path_prefix"`
 	Priority         int                        `json:"priority"`
 	Enabled          *bool                      `json:"enabled"`
@@ -27,6 +28,7 @@ type backendPathRequest struct {
 }
 
 type backendPathRow struct {
+	PreservePath     bool      `json:"preserve_path"`
 	ID               string    `json:"id"`
 	BackendID        string    `json:"backend_id"`
 	PathPrefix       string    `json:"path_prefix"`
@@ -87,7 +89,7 @@ func backendPathsCollectionHandler(w http.ResponseWriter, r *http.Request, db *s
 func listBackendPaths(w http.ResponseWriter, r *http.Request, db *sql.DB, backendID string) {
 	rows, err := db.QueryContext(r.Context(), `
 SELECT id::text, backend_id::text, path_prefix, priority, enabled, websocket_enabled,
-  timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override, created_at, updated_at
+  timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override, created_at, updated_at, preserve_path
 FROM backend_paths
 WHERE backend_id=$1::uuid
 ORDER BY priority ASC, created_at ASC`, backendID)
@@ -113,7 +115,7 @@ func scanBackendPathRow(rows *sql.Rows) (backendPathRow, error) {
 	var allowedJSON string
 	var rlRaw []byte
 	err := rows.Scan(&it.ID, &it.BackendID, &it.PathPrefix, &it.Priority, &it.Enabled, &it.WebSocketEnabled,
-		&it.Timeout, &it.IdleTimeout, &it.IPAllowMode, &allowedJSON, &rlRaw, &it.CreatedAt, &it.UpdatedAt)
+		&it.Timeout, &it.IdleTimeout, &it.IPAllowMode, &allowedJSON, &rlRaw, &it.CreatedAt, &it.UpdatedAt, &it.PreservePath)
 	if err != nil {
 		return it, err
 	}
@@ -172,9 +174,9 @@ func createBackendPath(w http.ResponseWriter, r *http.Request, db *sql.DB, state
 	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO backend_paths(id, backend_id, path_prefix, priority, enabled, websocket_enabled, timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)`,
-		id, backendID, pathPrefix, payload.Priority, en, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON, rlArg)
+INSERT INTO backend_paths(id, backend_id, path_prefix, priority, enabled, websocket_enabled, timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override, preserve_path)
+VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)`,
+		id, backendID, pathPrefix, payload.Priority, en, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON, rlArg, payload.PreservePath)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "path_prefix already exists for this backend"})
@@ -234,8 +236,8 @@ func updateBackendPath(w http.ResponseWriter, r *http.Request, db *sql.DB, state
 	res, err := db.ExecContext(r.Context(), `
 UPDATE backend_paths SET path_prefix=$2, priority=$3, enabled=$4, websocket_enabled=$5,
   timeout_sec=$6, idle_timeout_sec=$7, ip_allow_mode=$8, allowed_cidrs=$9,
-  rate_limit_override=$10::jsonb, updated_at=NOW()
-WHERE id=$1::uuid`, id, pathPrefix, payload.Priority, en, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON, rlArg)
+  rate_limit_override=$10::jsonb, preserve_path=$11, updated_at=NOW()
+WHERE id=$1::uuid`, id, pathPrefix, payload.Priority, en, wsEn, timeoutSec, idleTimeoutSec, ipMode, allowedJSON, rlArg, payload.PreservePath)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "path_prefix already exists for this backend"})
@@ -290,7 +292,7 @@ func backendExists(ctx context.Context, db *sql.DB, backendID string) bool {
 func loadPathsForBackend(ctx context.Context, db *sql.DB, backendID string) ([]backendPathRow, error) {
 	rows, err := db.QueryContext(ctx, `
 SELECT id::text, backend_id::text, path_prefix, priority, enabled, websocket_enabled,
-  timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override, created_at, updated_at
+  timeout_sec, idle_timeout_sec, ip_allow_mode, allowed_cidrs, rate_limit_override, created_at, updated_at, preserve_path
 FROM backend_paths WHERE backend_id=$1::uuid ORDER BY priority ASC, created_at ASC`, backendID)
 	if err != nil {
 		return nil, err

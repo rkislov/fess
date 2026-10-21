@@ -230,7 +230,7 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 			// from Host/X-Forwarded-Host; replacing it with the container/upstream host breaks them.
 			req.Host = originalHost
 			req.URL.User = target.User
-			if mr.MatchedPathPrefix != "" {
+			if mr.MatchedPathPrefix != "" && !mr.PreservePath {
 				req.URL.Path = routing.StripPathPrefix(req.URL.Path, mr.MatchedPathPrefix)
 				req.URL.RawPath = ""
 			}

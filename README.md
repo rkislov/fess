@@ -130,7 +130,7 @@ PostgreSQL увеличивает возможности хранения; ко�
 
 ## Сборка и проверки
 
-Требуются Go 1.25+ и Node.js 22+ только на машине сборки.
+Требуются Go 1.26.9+ и Node.js 22+ только на машине сборки.
 
 ```sh
 scripts/build.sh
@@ -161,3 +161,23 @@ FESS_TEST_POSTGRES='postgres://user:password@127.0.0.1:5432/test?sslmode=disable
 - `ui`: панель; `packaging`: системные службы и пакеты.
 
 [Руководство администратора](docs/admin-guide.md) · [OpenAPI](docs/openapi.yaml) · [Нагрузочные проверки](benchmarks/README.md)
+
+### FESS завершает TLS за TCP-разделителем
+
+FESS может быть единственным HTTP reverse proxy: порт 80 принимает HTTP-01 ACME и перенаправляет известные TLS-сайты на HTTPS; TLS завершается самим FESS. Сертификаты и ACME-аккаунт хранятся в БД и доступны в разделе «УЦ». Для ACME укажите email, существующий аккаунт либо создайте новый после согласия с условиями CA, привяжите сертификаты к сайтам и включите автоматическое продление.
+
+Если Nginx разделяет HTTPS и VPN на внешнем 443, оставьте в нём только `stream`/SNI-маршрутизацию и `proxy_protocol on`. TLS listener FESS должен быть доступен только доверенным отправителям PROXY protocol, например:
+
+```ini
+WAF_LISTEN_ADDR=:80
+WAF_TLS_LISTEN_ADDR=127.0.0.1:8443
+WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS=127.0.0.1/32
+WAF_TRUSTED_PROXIES=
+WAF_HTTP_REDIRECT_HTTPS=true
+# Необязательное перенаправление HTTP с другого имени:
+# WAF_HTTP_CANONICAL_HOSTS=example.com=www.example.com
+```
+
+PROXY protocol v1/v2 принимается перед TLS и обязателен для указанного listener. Недоверенные TCP-отправители отклоняются. При передаче реального IP через PROXY protocol оставьте `WAF_TRUSTED_PROXIES` пустым, чтобы клиентские X-Forwarded-* не подменяли адреса и схему. Для прямого TLS без TCP-прокси не задавайте `WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS`.
+
+Для VPN-подписок и других маршрутов, где backend ожидает полный исходный URL-путь, включите «Сохранять префикс пути» в настройках пути сайта. По умолчанию префикс удаляется, как в предыдущих версиях.

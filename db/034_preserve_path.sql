@@ -1,0 +1,1 @@
+ALTER TABLE backend_paths ADD COLUMN preserve_path BOOLEAN NOT NULL DEFAULT FALSE;

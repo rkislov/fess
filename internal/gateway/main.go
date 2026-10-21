@@ -83,8 +83,25 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	subscribeGeoASNUpdates(state, initASNPath)
 	subscribeRoutingUpdates(db, state, upstream, routeStore, tlsStore)
 
+	redirects := map[string]string{}
+	var knownTLS func(string) bool
+	if strings.EqualFold(os.Getenv("WAF_HTTP_REDIRECT_HTTPS"), "true") {
+		knownTLS = func(host string) bool {
+			_, err := tlsStore.GetCertificate(&tls.ClientHelloInfo{ServerName: host})
+			return err == nil
+		}
+	}
+	for _, mapping := range strings.Split(os.Getenv("WAF_HTTP_CANONICAL_HOSTS"), ",") {
+		parts := strings.SplitN(strings.TrimSpace(mapping), "=", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" && !strings.ContainsAny(parts[0]+parts[1], "/\\?#@ \r\n") {
+			redirects[parts[0]] = parts[1]
+		}
+	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if serveACMEHTTP01(w, r, db) {
+			return
+		}
+		if httpsRedirect(w, r, redirects, knownTLS) {
 			return
 		}
 		if serveBrandAsset(w, r) {

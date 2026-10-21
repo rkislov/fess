@@ -402,6 +402,7 @@
                       <p v-if="!b.paths.length" class="mt-2 text-sm text-slate-500">Нет путей. Добавьте <span class="font-mono">*</span> или <span class="font-mono">/admin</span>.</p>
                       <div v-else class="mt-3 space-y-3">
                         <div v-for="p in b.paths" :key="p.id" class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                          <label class="mb-2 flex gap-2 text-xs text-slate-400"><input v-model="p.preserve_path" type="checkbox" />Сохранять префикс пути при передаче в backend</label>
                           <div class="mb-2 flex items-center justify-between gap-2"><span class="font-mono text-sm text-sky-300">{{ pathPrefixLabel(p.path_prefix) }}</span><span class="text-[10px] text-slate-500">prio {{ p.priority }}</span></div>
                           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <label class="block"><span class="text-xs text-slate-500">Префикс</span><input v-model="p.path_prefix" placeholder="* /admin" class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs" /></label>
@@ -483,6 +484,7 @@ type IPAllowMode = 'none' | 'private' | 'custom'
 type BackendPath = {
   id: string
   backend_id: string
+  preserve_path?: boolean
   path_prefix: string
   priority: number
   enabled: boolean
@@ -561,6 +563,7 @@ const newBackend = reactive({
 })
 
 type PathDraft = {
+  preserve_path?: boolean
   path_prefix: string
   priority: number
   websocket_enabled: boolean
@@ -654,6 +657,7 @@ function normBackendPath(raw: Record<string, unknown>): BackendPath {
   return {
     id: String(raw.id ?? raw.ID),
     backend_id: String(raw.backend_id ?? raw.BackendID ?? ''),
+    preserve_path: Boolean(raw.preserve_path),
     path_prefix: String(raw.path_prefix ?? raw.PathPrefix ?? '*') || '*',
     priority: Number(raw.priority ?? raw.Priority ?? 100),
     enabled: Boolean(raw.enabled ?? raw.Enabled ?? true),
@@ -1042,6 +1046,7 @@ async function saveBackendPath(p: BackendPath) {
       method: 'PUT',
       body: {
         path_prefix: p.path_prefix,
+        preserve_path: !!p.preserve_path,
         priority: p.priority,
         enabled: p.enabled,
         websocket_enabled: p.websocket_enabled,
@@ -1084,6 +1089,7 @@ async function addBackendPath(backendId: string) {
       method: 'POST',
       body: {
         path_prefix: draft.path_prefix,
+        preserve_path: !!draft.preserve_path,
         priority: draft.priority || undefined,
         enabled: true,
         websocket_enabled: draft.websocket_enabled,
