@@ -3,9 +3,10 @@
 package xdpguard
 
 import (
+	"net/netip"
+
 	"github.com/cilium/ebpf"
 	"golang.org/x/sys/unix"
-	"net/netip"
 )
 
 type sourceKey struct {
