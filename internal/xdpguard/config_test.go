@@ -50,7 +50,24 @@ func TestProtectionConfigValidation(t *testing.T) {
 			t.Fatalf("accepted invalid protection settings: %+v", c)
 		}
 	}
-	if _, err := ReadConfig("../../packaging/xdp.json.example"); err != nil {
+	// go test runs from the package directory; the standalone privileged test
+	// binary in CI runs from the checkout root. Locate the fixture in either.
+	dir, err := os.Getwd()
+	if err != nil {
 		t.Fatal(err)
+	}
+	for {
+		example := filepath.Join(dir, "packaging", "xdp.json.example")
+		if _, err := os.Stat(example); err == nil {
+			if _, err := ReadConfig(example); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("packaging/xdp.json.example not found in checkout")
+		}
+		dir = parent
 	}
 }
