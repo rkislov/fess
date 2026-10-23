@@ -53,6 +53,8 @@
 
     <DashboardProtectionStatus :refresh-key="protectionRefresh" />
 
+    <DashboardXdp />
+
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
       <h3 class="text-sm font-medium text-slate-300">География (по странам клиентов)</h3>
       <p class="mt-1 text-xs text-slate-500">

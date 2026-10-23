@@ -20,6 +20,8 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - name: Build embedded UI and binary
         run: scripts/build.sh
+      - name: Test XDP chart sampling
+        run: npm --prefix ui test
       - name: Start OS PostgreSQL
         run: |
           sudo systemctl start postgresql
