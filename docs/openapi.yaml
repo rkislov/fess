@@ -119,7 +119,7 @@ paths:
       summary: List users (admin)
       responses:
         "200":
-          description: `{ items: [...] }`
+          description: "`{ items: [...] }`"
     post:
       tags: [users]
       summary: Create local user (admin)
@@ -413,7 +413,7 @@ paths:
       summary: List IP bypass rules
       responses:
         "200":
-          description: `{ items }`
+          description: "`{ items }`"
     post:
       tags: [logs]
       summary: Upsert bypass CIDR
@@ -437,7 +437,7 @@ paths:
                   format: int64
       responses:
         "200":
-          description: `{ ok, cidr }`
+          description: "`{ ok, cidr }`"
         "400":
           $ref: "#/components/responses/Error"
     delete:
@@ -528,7 +528,7 @@ paths:
       summary: TLS flags (no private key)
       responses:
         "200":
-          description: `{ tls_enabled, tls_has_certificate }`
+          description: "`{ tls_enabled, tls_has_certificate }`"
     put:
       tags: [sites]
       summary: Set site TLS PEM (legacy) or enable flag
@@ -937,7 +937,7 @@ paths:
               $ref: "#/components/schemas/AIAnalyzeRequest"
       responses:
         "200":
-          description: `{ analysis, model }`
+          description: "`{ analysis, model }`"
   /api/v1/ai/ask:
     post:
       tags: [ai]
@@ -957,6 +957,69 @@ paths:
       responses:
         "200":
           description: Answer
+  /api/v1/settings/xdp:
+    get:
+      tags: [settings]
+      summary: Read XDP configuration (admin only; optional local controller)
+      responses:
+        "200": { description: Current XDP configuration }
+        "403": { description: Admin role required }
+        "503": { description: XDP controller unavailable }
+    put:
+      tags: [settings]
+      summary: Save validated XDP configuration while stopped (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [config]
+              properties:
+                config:
+                  type: object
+                  description: See docs/xdp.md and packaging/xdp.json.example for independent protection settings.
+      responses:
+        "200": { description: Configuration atomically saved }
+        "400": { description: Invalid configuration or interface }
+        "403": { description: Admin role required }
+        "409": { description: Stop and detach XDP before editing }
+        "503": { description: XDP controller unavailable }
+  /api/v1/settings/xdp/status:
+    get:
+      tags: [settings]
+      summary: Read XDP service and actual kernel attachment state (admin only)
+      responses:
+        "200": { description: Service state and interface XDP program ID }
+        "403": { description: Admin role required }
+        "503": { description: XDP controller unavailable }
+  /api/v1/settings/xdp/interfaces:
+    get:
+      tags: [settings]
+      summary: List server network interfaces for XDP attachment (admin only)
+      responses:
+        "200": { description: Interface names, indexes, addresses, MTU and up state }
+        "403": { description: Admin role required }
+        "503": { description: XDP controller unavailable }
+  /api/v1/settings/xdp/start:
+    post:
+      tags: [settings]
+      summary: Start XDP and confirm attachment on the configured interface (admin only)
+      responses:
+        "200": { description: XDP attached }
+        "400": { description: Missing or invalid configuration }
+        "403": { description: Admin role required }
+        "409": { description: Existing XDP program will not be replaced }
+        "503": { description: Controller unavailable or attachment failed }
+  /api/v1/settings/xdp/stop:
+    post:
+      tags: [settings]
+      summary: Stop XDP and detach its own filter (admin only)
+      responses:
+        "200": { description: XDP stopped }
+        "403": { description: Admin role required }
+        "503": { description: Controller unavailable or stop failed }
+
 components:
   securitySchemes:
     bearerAuth:

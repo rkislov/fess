@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -125,6 +126,22 @@ func TestNativeBackends(t *testing.T) {
 			malwareCfg := call("GET", "/api/v1/settings/malware", nil)
 			malwareCfg["clamd"].(map[string]any)["enabled"] = false
 			call("PUT", "/api/v1/settings/malware", malwareCfg)
+			// A WAF rule block reaches the local XDP notification socket without
+			// giving this process BPF privileges. Keep the Unix path short on macOS.
+			socketDir, err := os.MkdirTemp("/tmp", "fess-ban-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(socketDir)
+			blockSocket := filepath.Join(socketDir, "blocks.sock")
+			bans, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Name: blockSocket, Net: "unixgram"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer bans.Close()
+			t.Setenv("FESS_XDP_BLOCK_SOCKET", blockSocket)
+			t.Setenv("WAF_TRUSTED_PROXIES", "")
+			t.Setenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS", "")
 			gw, _, err := gateway.New(ctx, d, bus)
 			if err != nil {
 				t.Fatal(err)
@@ -139,6 +156,13 @@ func TestNativeBackends(t *testing.T) {
 				if rec.Code != tc.code {
 					t.Fatalf("gateway %s: %d %s", tc.path, rec.Code, rec.Body.String())
 				}
+			}
+
+			bans.SetReadDeadline(time.Now().Add(time.Second))
+			banData := make([]byte, 128)
+			n, _, err := bans.ReadFromUnix(banData)
+			if err != nil || string(banData[:n]) != "192.0.2.1" {
+				t.Fatalf("WAF block notification: %q %v", banData[:n], err)
 			}
 
 			// The evaluator must leave a binary payload intact for the upstream.
@@ -169,6 +193,24 @@ func TestNativeBackends(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
+			// Drain notifications from requests that still saw the old published
+			// snapshot, then ensure a log-only WAF decision never creates a ban.
+			for {
+				bans.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+				if _, _, err := bans.ReadFromUnix(banData); err != nil {
+					break
+				}
+			}
+			logged := httptest.NewRecorder()
+			gw.ServeHTTP(logged, httptest.NewRequest("GET", "http://app.test/blocked", nil))
+			if logged.Code != 200 {
+				t.Fatal("log policy blocked HTTP")
+			}
+			bans.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+			if _, _, err := bans.ReadFromUnix(banData); err == nil {
+				t.Fatal("log-only decision generated a packet ban")
+			}
+
 			// Rate limiting uses local counters, independent of any external service.
 			call("PUT", "/api/v1/settings/rate-limit", map[string]any{"config": map[string]any{"enabled": true, "requests_per_window": 1, "window_sec": 60, "scope": "ip"}})
 			deadline = time.Now().Add(3 * time.Second)

@@ -53,6 +53,8 @@
       </p>
     </section>
 
+    <XdpPanel v-else-if="sub === 'xdp' && isAdmin" />
+
     <MapSettingsPanel v-else-if="sub === 'map' && isAdmin" />
 
     <!-- Admin: users -->
@@ -276,6 +278,7 @@ type SubId =
   | 'bots'
   | 'ratelimit'
   | 'exceptions'
+  | 'xdp'
 
 const appearanceSection = [{ id: 'appearance' as const, label: 'Оформление', icon: '🎨' }]
 
@@ -300,7 +303,7 @@ const platformSections = computed(() =>
   isAdmin.value ? [...appearanceSection, ...adminSections] : [...appearanceSection],
 )
 
-const securitySectionsVisible = computed(() => securitySections)
+const securitySectionsVisible = computed(() => isAdmin.value ? [...securitySections, { id: 'xdp' as const, label: 'XDP', icon: '⚡' }] : securitySections)
 
 const appearanceHint = computed(() => {
   const pref =
@@ -353,7 +356,7 @@ const siem = ref({
 })
 
 watch(isAdmin, (admin) => {
-  if (!admin && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem' || sub.value === 'ai')) {
+  if (!admin && (sub.value === 'users' || sub.value === 'auth' || sub.value === 'siem' || sub.value === 'ai' || sub.value === 'xdp')) {
     sub.value = 'policies'
   }
 })
