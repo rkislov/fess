@@ -990,7 +990,7 @@ paths:
       tags: [settings]
       summary: Read XDP service and actual kernel attachment state (admin only)
       responses:
-        "200": { description: Service state and interface XDP program ID }
+        "200": { description: Service state, interface XDP program ID and current statistics snapshot with rates and freshness }
         "403": { description: Admin role required }
         "503": { description: XDP controller unavailable }
   /api/v1/settings/xdp/interfaces:

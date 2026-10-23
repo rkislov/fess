@@ -43,6 +43,12 @@ func TestProtectionConfigValidation(t *testing.T) {
 		func(c *Config) {
 			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock", TTLSeconds: 86401}
 		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock", TTLSeconds: 30, MinEvents: 1000001}
+		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock", TTLSeconds: 30, WindowSeconds: 86401}
+		},
 	} {
 		c := Config{Interface: "test0"}
 		change(&c)

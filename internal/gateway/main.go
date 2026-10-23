@@ -55,17 +55,11 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		log.Printf("waf-gateway: WAF_TRUSTED_PROXIES is unset — logs/WAF use TCP peer as client IP; behind Nginx/LB set CIDR(s) of the hop that connects to this gateway (see README: Nginx before waf-gateway)")
 	}
 
-	var xdpBlocks *xdpnotify.Client
-	// PROXY protocol rewrites RemoteAddr, hiding the real network peer from WAF.
-	if strings.TrimSpace(os.Getenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS")) == "" {
-		blockSocket, configured := os.LookupEnv("FESS_XDP_BLOCK_SOCKET")
-		if !configured {
-			blockSocket = "/run/fess-xdp/blocks.sock"
-		}
-		xdpBlocks = xdpnotify.New(ctx, strings.TrimSpace(blockSocket))
-	} else if os.Getenv("FESS_XDP_BLOCK_SOCKET") != "" {
-		log.Printf("xdp bans disabled: PROXY protocol hides the network peer")
+	blockSocket, configured := os.LookupEnv("FESS_XDP_BLOCK_SOCKET")
+	if !configured {
+		blockSocket = "/run/fess-xdp/blocks.sock"
 	}
+	xdpBlocks := xdpnotify.New(ctx, strings.TrimSpace(blockSocket))
 	store := policy.NewStore()
 	mwStore := newMalwareStore()
 	evaluator := engine.NewEvaluator()

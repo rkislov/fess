@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"fence/internal/xdpguard"
 )
@@ -147,5 +148,38 @@ func TestControllerRejectsArbitrarySocketAndInvalidJSON(t *testing.T) {
 	c.ServeHTTP(w, httptest.NewRequest("PUT", "/config", strings.NewReader(`{"config":{},"unexpected":true}`)))
 	if w.Code != 400 {
 		t.Fatal("unknown fields accepted")
+	}
+}
+
+func TestControllerReadsOnlyCurrentProcessStatistics(t *testing.T) {
+	c := New(filepath.Join(t.TempDir(), "xdp.json"))
+	c.statisticsDir = t.TempDir()
+	cfg := testConfig(t)
+	if err := c.save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	c.command = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name == "ip" {
+			return []byte(`[{}]`), nil
+		}
+		return []byte("ActiveState=active\nMainPID=42\n"), nil
+	}
+	now := time.Now()
+	if err := xdpguard.PublishStatistics(c.statisticsDir, xdpguard.Statistics{PID: 42, Interface: cfg.Interface, StartedAt: now, SampledAt: now, Counters: map[string]uint64{"seen": 123}}); err != nil {
+		t.Fatal(err)
+	}
+	w := request(c, "GET", "/status", nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"seen":123`) {
+		t.Fatal(w.Body.String())
+	}
+	c.command = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name == "ip" {
+			return []byte(`[{}]`), nil
+		}
+		return []byte("ActiveState=active\nMainPID=43\n"), nil
+	}
+	w = request(c, "GET", "/status", nil)
+	if strings.Contains(w.Body.String(), `"seen":123`) {
+		t.Fatal("previous process statistics leaked into new process")
 	}
 }

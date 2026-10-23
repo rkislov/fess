@@ -72,3 +72,39 @@ func TestTemporarySocketDoesNotReplaceExistingPath(t *testing.T) {
 		t.Fatal("existing path changed")
 	}
 }
+
+func TestBanThresholdSocket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "b.sock")
+	added := make(chan netip.Addr, 2)
+	stop, err := listenTemporaryBlocks(context.Background(), TemporaryBlockConfig{SocketPath: path, MinEvents: 3, WindowSeconds: 30}, func(ip netip.Addr) error { added <- ip; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	conn, err := net.Dial("unixgram", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	for i := 0; i < 2; i++ {
+		if _, err := conn.Write([]byte("198.51.100.1")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-added:
+		t.Fatal("single/second violation caused a packet ban")
+	case <-time.After(30 * time.Millisecond):
+	}
+	if _, err := conn.Write([]byte("198.51.100.1")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ip := <-added:
+		if ip.String() != "198.51.100.1" {
+			t.Fatal(ip)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("threshold did not create a ban")
+	}
+}
