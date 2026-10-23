@@ -86,3 +86,32 @@ func TestUnixDatagramDelivery(t *testing.T) {
 		t.Fatalf("message: %q", buf[:n])
 	}
 }
+
+func TestProxyProtocolSeparatesDirectAndForwardedConnections(t *testing.T) {
+	for _, tc := range []struct{ name, remote, network, proxy, want string }{
+		{"direct-http-with-proxy-enabled", "198.51.100.2:1234", "198.51.100.2:1234", "127.0.0.1/32", "198.51.100.2"},
+		{"forwarded-tls", "198.51.100.2:1234", "127.0.0.1:1234", "127.0.0.1/32", ""},
+		{"unverified-transport", "198.51.100.2:1234", "", "127.0.0.1/32", ""},
+		{"proxy-header-claims-proxy", "192.0.2.1:1234", "192.0.2.1:1234", "192.0.2.0/24", ""},
+		{"loopback-never-banned", "127.0.0.1:1234", "127.0.0.1:1234", "", ""},
+		{"mismatched-transport", "198.51.100.2:1234", "203.0.113.4:1234", "127.0.0.1/32", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Client{ctx: context.Background(), queue: make(chan string, 1), proxyProtocol: clientip.ParseTrustedProxies(tc.proxy)}
+			r := httptest.NewRequest("GET", "http://example.com/", nil)
+			r.RemoteAddr = tc.remote
+			if tc.network != "" {
+				r = r.WithContext(clientip.WithNetworkPeer(r.Context(), tc.network))
+			}
+			c.Block(r, clientip.ParseTrustedProxies(""))
+			got := ""
+			select {
+			case got = <-c.queue:
+			default:
+			}
+			if got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}

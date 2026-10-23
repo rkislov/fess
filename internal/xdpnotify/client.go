@@ -16,10 +16,11 @@ import (
 )
 
 type Client struct {
-	socket  string
-	ctx     context.Context
-	queue   chan string
-	dropped atomic.Uint64
+	proxyProtocol *clientip.Resolver
+	socket        string
+	ctx           context.Context
+	queue         chan string
+	dropped       atomic.Uint64
 }
 
 func New(ctx context.Context, socket string) *Client {
@@ -30,7 +31,7 @@ func New(ctx context.Context, socket string) *Client {
 		log.Printf("xdp bans disabled: socket must be an absolute path of at most 100 bytes")
 		return nil
 	}
-	c := &Client{ctx: ctx, socket: socket, queue: make(chan string, 256)}
+	c := &Client{ctx: ctx, socket: socket, queue: make(chan string, 256), proxyProtocol: clientip.ParseTrustedProxies(os.Getenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS"))}
 	go c.run(socket)
 	return c
 }
@@ -46,8 +47,21 @@ func (c *Client) Block(r *http.Request, resolver *clientip.Resolver) {
 			return
 		}
 	}
-	peer, err := netip.ParseAddr(clientip.PeerHost(r))
-	if err != nil || peer.Zone() != "" || peer.IsUnspecified() || peer.IsMulticast() {
+	networkPeer, known := clientip.NetworkPeer(r)
+	if !known {
+		// Embedders that enable PROXY protocol must preserve the real socket peer.
+		if c.proxyProtocol.TrustsForwardedHeaders() {
+			return
+		}
+		networkPeer = r.RemoteAddr
+	}
+	peerRequest := *r
+	peerRequest.RemoteAddr = networkPeer
+	if resolver.TrustsRequest(&peerRequest) || c.proxyProtocol.TrustsRequest(&peerRequest) {
+		return
+	}
+	peer, err := netip.ParseAddr(clientip.PeerHost(&peerRequest))
+	if err != nil || peer.Zone() != "" || peer.IsUnspecified() || peer.IsMulticast() || peer.IsLoopback() {
 		return
 	}
 	client, err := netip.ParseAddr(resolver.ClientHost(r))

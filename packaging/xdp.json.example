@@ -44,6 +44,8 @@
     "enabled": false,
     "socket_path": "/run/fess-xdp/blocks.sock",
     "socket_group": "fess",
-    "ttl_seconds": 60
+    "ttl_seconds": 60,
+    "min_events": 3,
+    "window_seconds": 30
   }
 }
