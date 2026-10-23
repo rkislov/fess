@@ -25,3 +25,49 @@ func TestConfigValidation(t *testing.T) {
 		t.Fatal("unknown fields must fail")
 	}
 }
+
+func TestProtectionConfigValidation(t *testing.T) {
+	for _, change := range []func(*Config){
+		func(c *Config) { c.GlobalBudget = BudgetConfig{Enabled: true} },
+		func(c *Config) { c.GlobalBudget = BudgetConfig{PacketsPerSecond: 1} },
+		func(c *Config) { c.GlobalBudget = BudgetConfig{BytesPerSecond: 1, ByteBurst: 1000000001} },
+		func(c *Config) { c.ICMPPing = ICMPConfig{Enabled: true} },
+		func(c *Config) { c.ICMPPing = ICMPConfig{PerIPPacketsPerSecond: 1} },
+		func(c *Config) { c.MalformedPackets.Enabled = true },
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "relative", TTLSeconds: 60}
+		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock"}
+		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock", TTLSeconds: 86401}
+		},
+	} {
+		c := Config{Interface: "test0"}
+		change(&c)
+		if c.Validate() == nil {
+			t.Fatalf("accepted invalid protection settings: %+v", c)
+		}
+	}
+	// go test runs from the package directory; the standalone privileged test
+	// binary in CI runs from the checkout root. Locate the fixture in either.
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		example := filepath.Join(dir, "packaging", "xdp.json.example")
+		if _, err := os.Stat(example); err == nil {
+			if _, err := ReadConfig(example); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("packaging/xdp.json.example not found in checkout")
+		}
+		dir = parent
+	}
+}

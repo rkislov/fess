@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"fence/internal/xdpguard"
 	"fmt"
 	"github.com/cilium/ebpf"
 	"os"
@@ -38,7 +39,7 @@ func main() {
 	}
 	defer found.Close()
 	result := map[string]uint64{}
-	for k, name := range []string{"seen", "passed", "cidr_drop", "rate_drop", "fragment_drop", "malformed_pass"} {
+	for k, name := range xdpguard.CounterNames {
 		key := uint32(k)
 		var values []uint64
 		if err := found.Lookup(&key, &values); err != nil {

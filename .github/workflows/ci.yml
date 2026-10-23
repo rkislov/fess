@@ -94,3 +94,5 @@ jobs:
           test "$(systemctl is-enabled fess-xdp.service || true)" = disabled
           /usr/bin/fess-xdp --check --config /etc/fess/xdp.json.example
           sudo python3 scripts/xdp-smoke.py /usr/bin/fess-xdp dist/fess-load --systemd
+          sudo systemctl is-active fess-xdp-control.service
+          sudo python3 scripts/xdp-control-smoke.py dist/fess-load

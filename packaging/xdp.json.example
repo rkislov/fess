@@ -1,10 +1,49 @@
 {
   "interface": "CHANGE_ME",
   "mode": "native",
-  "ports": [{"protocol": "tcp", "port": 80}, {"protocol": "tcp", "port": 443}],
-  "block_cidrs": ["203.0.113.0/24", "2001:db8:bad::/48"],
+  "ports": [
+    {
+      "protocol": "tcp",
+      "port": 80
+    },
+    {
+      "protocol": "tcp",
+      "port": 443
+    }
+  ],
+  "block_cidrs": [
+    "203.0.113.0/24",
+    "2001:db8:bad::/48"
+  ],
   "allow_cidrs": [],
   "packets_per_second": 10000,
   "syns_per_second": 1000,
-  "drop_fragments": false
+  "drop_fragments": false,
+  "global_budget": {
+    "enabled": false,
+    "packets_per_second": 100000,
+    "packet_burst": 200000,
+    "bytes_per_second": 100000000,
+    "byte_burst": 200000000,
+    "syns_per_second": 10000,
+    "syn_burst": 20000
+  },
+  "icmp_ping": {
+    "enabled": false,
+    "packets_per_second": 1000,
+    "burst": 2000,
+    "per_ip_packets_per_second": 10,
+    "per_ip_burst": 20
+  },
+  "malformed_packets": {
+    "enabled": false,
+    "invalid_lengths": true,
+    "invalid_tcp_flags": true
+  },
+  "temporary_blocks": {
+    "enabled": false,
+    "socket_path": "/run/fess-xdp/blocks.sock",
+    "socket_group": "fess",
+    "ttl_seconds": 60
+  }
 }
