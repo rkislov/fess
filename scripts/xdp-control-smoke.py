@@ -53,6 +53,14 @@ try:
  status = call('GET','/status')
  assert status['service']['ActiveState']=='active' and status['attachment'], status
  assert get(18080).returncode == 0, 'valid HTTP affected with all protections enabled'
+ deadline=time.monotonic()+15
+ while time.monotonic()<deadline:
+  sample=call('GET','/status').get('statistics')
+  if sample and sample['interval_seconds']>0 and sample['counters'].get('protected_packets',0)>0: break
+  time.sleep(.2)
+ else: raise AssertionError('no live kernel statistics published')
+ assert not sample['stale'] and sample['interface']==host, sample
+ assert sample['rates'].get('protected_packets',0)>0, sample
  call('PUT','/config',{'config':cfg},want=409)
  with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as s: s.sendto(b'192.0.2.2','/run/fess-xdp/blocks.sock')
  time.sleep(.05)
@@ -64,7 +72,7 @@ try:
  assert get(18080).returncode == 0, 'HTTP unavailable after detach'
  assert not call('GET','/status')['attachment'], 'filter still attached after stop'
  assert not pathlib.Path('/run/fess-xdp/blocks.sock').exists(), 'ban socket remains after stop'
- print('PASS: local controller config, interfaces, service start, kernel attachment, live-edit conflict, socket ban, TTL, port scope, stop/detach')
+ print('PASS: local controller config, interfaces, service start, kernel attachment, live statistics, live-edit conflict, socket ban, TTL, port scope, stop/detach')
 finally:
  if created:
   command('systemctl','stop','fess-xdp.service',check=False)

@@ -39,10 +39,12 @@ type MalformedConfig struct {
 	InvalidTCPFlags bool `json:"invalid_tcp_flags"`
 }
 type TemporaryBlockConfig struct {
-	Enabled     bool   `json:"enabled"`
-	SocketPath  string `json:"socket_path"`
-	SocketGroup string `json:"socket_group"`
-	TTLSeconds  uint32 `json:"ttl_seconds"`
+	Enabled       bool   `json:"enabled"`
+	SocketPath    string `json:"socket_path"`
+	SocketGroup   string `json:"socket_group"`
+	TTLSeconds    uint32 `json:"ttl_seconds"`
+	MinEvents     uint32 `json:"min_events"`
+	WindowSeconds uint32 `json:"window_seconds"`
 }
 
 type Config struct {
@@ -141,6 +143,15 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("malformed_packets requires at least one check")
 	}
 	if c.TemporaryBlocks.Enabled {
+		if c.TemporaryBlocks.MinEvents == 0 {
+			c.TemporaryBlocks.MinEvents = 1
+		}
+		if c.TemporaryBlocks.WindowSeconds == 0 {
+			c.TemporaryBlocks.WindowSeconds = 60
+		}
+		if c.TemporaryBlocks.MinEvents > 1000000 || c.TemporaryBlocks.WindowSeconds > 86400 {
+			return fmt.Errorf("temporary_blocks min_events must be 1..1000000 and window_seconds 1..86400")
+		}
 		if !filepath.IsAbs(c.TemporaryBlocks.SocketPath) || len(c.TemporaryBlocks.SocketPath) > 100 {
 			return fmt.Errorf("temporary_blocks.socket_path must be an absolute Unix socket path of at most 100 bytes")
 		}

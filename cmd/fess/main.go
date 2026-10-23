@@ -23,6 +23,7 @@ import (
 	"fence/internal/api"
 	"fence/internal/gateway"
 	"fence/internal/runtimebus"
+	"fence/pkg/clientip"
 	"fence/ui"
 	"github.com/pires/go-proxyproto"
 	"golang.org/x/sys/unix"
@@ -189,7 +190,7 @@ func run() (runErr error) {
 			}
 			ln = tls.NewListener(ln, ep.tls)
 		}
-		servers = append(servers, &http.Server{Handler: ep.handler, TLSConfig: ep.tls, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second})
+		servers = append(servers, &http.Server{ConnContext: clientip.CaptureNetworkPeer, Handler: ep.handler, TLSConfig: ep.tls, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second})
 		listeners[len(listeners)-1] = ln
 	}
 	errs := make(chan error, len(servers))

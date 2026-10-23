@@ -39,8 +39,9 @@ struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__typ
 struct {__uint(type,2);__uint(max_entries,2);__type(key,u32);__type(value,struct token_budget);} shared_budgets SEC(".maps");
 struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,u64);} echo_rates SEC(".maps");
 struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,u64);} temporary_bans SEC(".maps");
-struct {__uint(type,6);__uint(max_entries,10);__type(key,u32);__type(value,u64);} counters SEC(".maps");
-INLINE void count(u32 key){u64 *v=lookup(&counters,&key);if(v)(*v)++;}
+struct {__uint(type,6);__uint(max_entries,15);__type(key,u32);__type(value,u64);} counters SEC(".maps");
+INLINE void add_count(u32 key,u64 amount){u64 *v=lookup(&counters,&key);if(v)(*v)+=amount;}
+INLINE void count(u32 key){add_count(key,1);}
 INLINE int passed(void){count(1);return PASS;}
 INLINE int unparsed(void){count(5);return passed();}
 INLINE int dropped(u32 reason){count(reason);return DROP;}
@@ -89,9 +90,10 @@ INLINE int consume(u64 *slot,u32 now,u32 limit){
 }
 INLINE int echo(struct source *src,const u8 *l4,const u8 *end,struct limits *cfg,u32 available){
  // Rate-limit Echo Requests only. Error messages, NDP and Echo Replies pass.
- if(!cfg||(!cfg->icmp_pps&&!cfg->icmp_ip_pps))return passed();
  if(l4+8>end||available<8)return unparsed();
  if(l4[0]!=(src->family==4?8:128)||l4[1]!=0)return passed();
+ count(14);
+ if(!cfg||(!cfg->icmp_pps&&!cfg->icmp_ip_pps))return passed();
  if(allowed(src))return passed();
  u64 now=ktime_ns();
  if(cfg->icmp_pps){
@@ -121,6 +123,8 @@ INLINE int decide(struct source *src,const u8 *l4,const u8 *end,u8 protocol,stru
  if(l4+4>end||available<4)return unparsed();
  u32 port_key=((u32)protocol<<16)|read16(l4+2);
  if(!lookup(&ports,&port_key))return passed();
+ count(11);add_count(12,length);
+ if(protocol==6&&l4+20<=end&&available>=20&&(l4[13]&0x12)==0x02)count(13);
  if(allowed(src))return passed();
  if(cfg&&cfg->invalid_lengths){
   if(broken)return dropped(8);
@@ -153,7 +157,7 @@ INLINE int decide(struct source *src,const u8 *l4,const u8 *end,u8 protocol,stru
 SEC("xdp") int fess_filter(struct xdp_md *ctx){
  const u8 *data=(void *)(unsigned long)ctx->data;
  const u8 *end=(void *)(unsigned long)ctx->data_end;
- count(0);
+ count(0);add_count(10,(u64)(end-data));
  if(data+14>end)return unparsed();
  u16 ethertype=read16(data+12);u32 offset=14;
  #pragma unroll

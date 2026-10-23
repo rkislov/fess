@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,15 +27,18 @@ const unit = "fess-xdp.service"
 
 type commandFunc func(context.Context, string, ...string) ([]byte, error)
 type Controller struct {
-	path    string
-	command commandFunc
-	mu      sync.Mutex
+	path          string
+	statisticsDir string
+	command       commandFunc
+	mu            sync.Mutex
 }
 
 func command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
-func New(path string) *Controller { return &Controller{path: path, command: command} }
+func New(path string) *Controller {
+	return &Controller{path: path, statisticsDir: xdpguard.StatisticsDirectory, command: command}
+}
 
 func respond(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -58,7 +62,7 @@ func (c *Controller) config() (xdpguard.Config, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		// An interface must be chosen explicitly before saving or starting.
 		cfg = xdpguard.Config{Mode: "native", Ports: []xdpguard.Port{{Protocol: "tcp", Port: 80}, {Protocol: "tcp", Port: 443}}, AllowCIDRs: []string{}, BlockCIDRs: []string{}}
-		cfg.TemporaryBlocks = xdpguard.TemporaryBlockConfig{SocketPath: "/run/fess-xdp/blocks.sock", SocketGroup: "fess", TTLSeconds: 60}
+		cfg.TemporaryBlocks = xdpguard.TemporaryBlockConfig{SocketPath: "/run/fess-xdp/blocks.sock", SocketGroup: "fess", TTLSeconds: 60, MinEvents: 3, WindowSeconds: 30}
 		return cfg, nil
 	}
 	return cfg, err
@@ -87,7 +91,7 @@ func (c *Controller) save(cfg xdpguard.Config) error {
 }
 
 func (c *Controller) service(ctx context.Context) (map[string]string, error) {
-	out, err := c.command(ctx, "systemctl", "show", unit, "--property=LoadState,ActiveState,SubState,Result")
+	out, err := c.command(ctx, "systemctl", "show", unit, "--property=LoadState,ActiveState,SubState,Result,MainPID")
 	if err != nil {
 		return nil, fmt.Errorf("systemctl show: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -206,6 +210,16 @@ func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				result["attachment_error"] = err.Error()
 			} else {
 				result["attachment"] = attachment
+			}
+		}
+		result["statistics"] = nil
+		if state["ActiveState"] == "active" {
+			pid, _ := strconv.Atoi(state["MainPID"])
+			statistics, err := xdpguard.ReadStatistics(c.statisticsDir, pid, cfg.Interface, time.Now())
+			if err != nil {
+				result["statistics_error"] = "Statistics unavailable: " + err.Error()
+			} else {
+				result["statistics"] = statistics
 			}
 		}
 		respond(w, 200, result)
