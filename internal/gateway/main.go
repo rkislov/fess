@@ -58,7 +58,11 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	var xdpBlocks *xdpnotify.Client
 	// PROXY protocol rewrites RemoteAddr, hiding the real network peer from WAF.
 	if strings.TrimSpace(os.Getenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS")) == "" {
-		xdpBlocks = xdpnotify.New(ctx, strings.TrimSpace(getenv("FESS_XDP_BLOCK_SOCKET", "/run/fess-xdp/blocks.sock")))
+		blockSocket, configured := os.LookupEnv("FESS_XDP_BLOCK_SOCKET")
+		if !configured {
+			blockSocket = "/run/fess-xdp/blocks.sock"
+		}
+		xdpBlocks = xdpnotify.New(ctx, strings.TrimSpace(blockSocket))
 	} else if os.Getenv("FESS_XDP_BLOCK_SOCKET") != "" {
 		log.Printf("xdp bans disabled: PROXY protocol hides the network peer")
 	}
