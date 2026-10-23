@@ -45,6 +45,7 @@ func listenTemporaryBlocks(ctx context.Context, cfg TemporaryBlockConfig, add fu
 		cleanup()
 		return nil, err
 	}
+	threshold := newViolationThreshold(cfg.MinEvents, cfg.WindowSeconds, 65536)
 	var once sync.Once
 	done, readerDone := make(chan struct{}), make(chan struct{})
 	stop := func() {
@@ -63,6 +64,7 @@ func listenTemporaryBlocks(ctx context.Context, cfg TemporaryBlockConfig, add fu
 		defer close(readerDone)
 		buf := make([]byte, 128)
 		var lastError time.Time
+
 		for {
 			n, _, err := conn.ReadFromUnix(buf)
 			if err != nil {
@@ -72,12 +74,16 @@ func listenTemporaryBlocks(ctx context.Context, cfg TemporaryBlockConfig, add fu
 			if err != nil || ip.Zone() != "" || ip.IsUnspecified() || ip.IsMulticast() {
 				continue
 			}
-			if err = add(ip.Unmap()); err != nil && time.Since(lastError) >= 10*time.Second {
+			ip = ip.Unmap()
+			if !threshold.record(ip, time.Now()) {
+				continue
+			}
+			if err = add(ip); err != nil && time.Since(lastError) >= 10*time.Second {
 				log.Printf("xdp temporary block update failed: %v", err)
 				lastError = time.Now()
 			}
 		}
 	}()
-	log.Printf("xdp temporary blocks listening socket=%s ttl=%ds", cfg.SocketPath, cfg.TTLSeconds)
+	log.Printf("xdp temporary blocks listening socket=%s ttl=%ds threshold=%d/%ds", cfg.SocketPath, cfg.TTLSeconds, threshold.min, uint32(threshold.window/time.Second))
 	return stop, nil
 }

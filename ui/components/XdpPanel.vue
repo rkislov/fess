@@ -25,6 +25,36 @@
       <p class="mt-3 text-xs text-slate-400">{{ running ? 'Чтобы изменить интерфейс или параметры, сначала остановите XDP. Во время остановки пакеты обрабатывает обычный сетевой стек.' : 'Сохранение параметров не запускает фильтр. Запуск привяжет программу к выбранному интерфейсу.' }}</p>
     </div>
 
+    <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h4 class="text-sm font-semibold">Статистика XDP</h4>
+        <span v-if="statistics" class="text-xs text-slate-400">Снимок {{ new Date(statistics.sampled_at).toLocaleTimeString() }} · обновление каждые 10 с</span>
+      </div>
+      <p v-if="!statistics" class="mt-3 text-sm text-slate-400">{{ running ? 'Ожидаются данные счётчиков XDP.' : 'Запустите XDP, чтобы получать статистику.' }}</p>
+      <template v-else>
+        <p v-if="statistics.stale" role="alert" class="mt-3 text-sm text-amber-300">Данные устарели. Скорости не отображаются до получения свежего снимка.</p>
+        <p class="mt-2 text-xs text-slate-400">Итоги с запуска {{ new Date(statistics.started_at).toLocaleString() }}. При перезапуске счётчики обнуляются. Весь входящий трафик интерфейса включает другие сервисы.</p>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Всего пакетов</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ number(statistics.counters.seen) }}</p></div>
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Пропущено</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ number(statistics.counters.passed) }}</p></div>
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Отброшено</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ number(totalDropped) }} <span class="text-xs text-slate-400">{{ dropPercent }}%</span></p></div>
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Весь интерфейс · пакетов/с</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ rate('seen') }}</p></div>
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Весь интерфейс · Мбит/с</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ rate('frame_bytes', 8 / 1000000, 2) }}</p></div>
+          <div class="rounded-lg bg-slate-800/70 p-3"><p class="text-xs text-slate-400">Защищаемые порты · пакетов/с</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ rate('protected_packets') }}</p></div>
+        </div>
+        <div class="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <p>Защищаемые порты: <strong>{{ rate('protected_bytes', 8 / 1000000, 2) }}</strong> Мбит/с</p>
+          <p>Новые SYN: <strong>{{ rate('protected_syn', 1, 1) }}</strong>/с</p>
+          <p>Echo Request: <strong>{{ rate('icmp_echo', 1, 1) }}</strong>/с</p>
+        </div>
+        <h5 class="mt-5 text-xs font-semibold text-slate-400">Причины отбрасывания</h5>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <div v-for="reason in dropReasons" :key="reason.key" class="flex justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-xs"><span>{{ reason.label }}</span><span class="font-mono tabular-nums">{{ number(statistics.counters[reason.key]) }}</span></div>
+        </div>
+        <p class="mt-3 text-xs text-slate-400">Неразобранные пакеты, переданные сетевому стеку: {{ number(statistics.counters.malformed_pass) }}. Скорости рассчитаны по разнице двух снимков, это не HTTP RPS.</p>
+      </template>
+    </div>
+
     <fieldset :disabled="busy || !available || running" class="space-y-5 disabled:opacity-60">
       <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
         <h4 class="text-sm font-semibold">Интерфейс и область защиты</h4>
@@ -68,7 +98,11 @@
       <div class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
         <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="cfg.temporary_blocks.enabled" type="checkbox" />Временные блокировки из WAF</label>
         <p class="mt-2 text-xs text-slate-400">После блокировки правилом WAF прямой клиент временно блокируется на всех защищаемых портах. Доверенные прокси исключаются. За общим NAT блокировка может затронуть нескольких клиентов.</p>
-        <label class="mt-4 block max-w-xs text-xs text-slate-400">Срок блокировки, секунд<input v-model.number="cfg.temporary_blocks.ttl_seconds" type="number" min="1" max="86400" :disabled="!cfg.temporary_blocks.enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white" /></label>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <label class="text-xs text-slate-400">Срабатываний WAF до бана<input v-model.number="cfg.temporary_blocks.min_events" type="number" min="1" max="1000000" :disabled="!cfg.temporary_blocks.enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white" /></label>
+          <label class="text-xs text-slate-400">Окно срабатываний, секунд<input v-model.number="cfg.temporary_blocks.window_seconds" type="number" min="1" max="86400" :disabled="!cfg.temporary_blocks.enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white" /></label>
+        <label class="block text-xs text-slate-400">Срок блокировки, секунд<input v-model.number="cfg.temporary_blocks.ttl_seconds" type="number" min="1" max="86400" :disabled="!cfg.temporary_blocks.enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white" /></label>
+        </div>
       </div>
     </fieldset>
   </section>
@@ -77,14 +111,15 @@
 <script setup lang="ts">
 const { apiUrl, apiFetch } = useApi()
 type Budget = { enabled: boolean; [key: string]: number | boolean }
-type Status = { service: Record<string, string>; interface: string; mode: string; attachment: { prog?: { id?: number }; prog_id?: number } | null; attachment_error?: string; config_error?: string }
+type Statistics = { pid: number; started_at: string; sampled_at: string; interval_seconds: number; stale: boolean; counters: Record<string, number>; rates: Record<string, number> }
+type Status = { service: Record<string, string>; interface: string; mode: string; attachment: { prog?: { id?: number }; prog_id?: number } | null; attachment_error?: string; config_error?: string; statistics?: Statistics | null; statistics_error?: string }
 const cfg = ref({
   interface: '', mode: 'native', ports: [] as { protocol: string; port: number }[], block_cidrs: [] as string[], allow_cidrs: [] as string[],
   packets_per_second: 10000, syns_per_second: 1000, drop_fragments: false,
   global_budget: { enabled: false, packets_per_second: 100000, packet_burst: 200000, bytes_per_second: 100000000, byte_burst: 200000000, syns_per_second: 10000, syn_burst: 20000 } as Budget,
   icmp_ping: { enabled: false, packets_per_second: 1000, burst: 2000, per_ip_packets_per_second: 10, per_ip_burst: 20 } as Budget,
   malformed_packets: { enabled: false, invalid_lengths: true, invalid_tcp_flags: true },
-  temporary_blocks: { enabled: false, socket_path: '/run/fess-xdp/blocks.sock', socket_group: 'fess', ttl_seconds: 60 },
+  temporary_blocks: { enabled: false, socket_path: '/run/fess-xdp/blocks.sock', socket_group: 'fess', ttl_seconds: 60, min_events: 3, window_seconds: 30 },
 })
 const budgets: { key: 'global_budget' | 'icmp_ping'; title: string; hint: string; fields: { key: string; label: string }[] }[] = [
   { key: 'global_budget', title: 'Общие бюджеты', hint: 'Общий лимит для всех выбранных TCP/UDP-портов и источников. Burst — допустимый всплеск; пара нулей выключает измерение.', fields: [
@@ -101,6 +136,21 @@ const available = ref(false), busy = ref(false), error = ref(''), message = ref(
 const running = computed(() => !!status.value && !['inactive', 'failed'].includes(status.value.service.ActiveState || ''))
 const programID = computed(() => status.value?.attachment?.prog?.id || status.value?.attachment?.prog_id || 0)
 const isAttached = computed(() => programID.value > 0)
+const statistics = computed(() => status.value?.statistics || null)
+const dropReasons = [
+  { key: 'cidr_drop', label: 'CIDR deny' }, { key: 'rate_drop', label: 'Лимит на IP' },
+  { key: 'global_budget_drop', label: 'Общий бюджет' }, { key: 'icmp_ping_drop', label: 'ICMP Ping Flood' },
+  { key: 'malformed_drop', label: 'Некорректные пакеты' }, { key: 'temporary_block_drop', label: 'Временные баны WAF' },
+  { key: 'fragment_drop', label: 'IP-фрагменты' },
+]
+const totalDropped = computed(() => dropReasons.reduce((sum, r) => sum + (statistics.value?.counters[r.key] || 0), 0))
+const dropPercent = computed(() => statistics.value?.counters.seen ? (100 * totalDropped.value / statistics.value.counters.seen).toFixed(2) : '0.00')
+function number(value: number | undefined, digits = 0) { return (value || 0).toLocaleString(undefined, { maximumFractionDigits: digits }) }
+function rate(key: string, scale = 1, digits = 0) {
+  const stats = statistics.value
+  return stats && !stats.stale && stats.interval_seconds > 0 && typeof stats.rates[key] === 'number' ? number(stats.rates[key]! * scale, digits) : '—'
+}
+
 function errorMessage(e: any) { return e?.data?.error || e?.message || 'Не удалось выполнить действие XDP' }
 async function refreshStatus() { status.value = await apiFetch<Status>(apiUrl('/settings/xdp/status')) }
 async function load() {
@@ -111,6 +161,8 @@ async function load() {
     if (!cfg.value.temporary_blocks.socket_path) cfg.value.temporary_blocks.socket_path = '/run/fess-xdp/blocks.sock'
     if (!cfg.value.temporary_blocks.socket_group) cfg.value.temporary_blocks.socket_group = 'fess'
     if (!cfg.value.temporary_blocks.ttl_seconds) cfg.value.temporary_blocks.ttl_seconds = 60
+    if (!cfg.value.temporary_blocks.min_events) cfg.value.temporary_blocks.min_events = 1
+    if (!cfg.value.temporary_blocks.window_seconds) cfg.value.temporary_blocks.window_seconds = 60
     interfaces.value = ifaces.items
     ports.value = (cfg.value.ports || []).map(p => `${p.protocol}/${p.port}`).join('\n')
     blockedCIDRs.value = (cfg.value.block_cidrs || []).join('\n'); allowedCIDRs.value = (cfg.value.allow_cidrs || []).join('\n')

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/netip"
+	"os"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -151,6 +152,37 @@ func Run(ctx context.Context, c Config) error {
 		defer stop()
 	}
 	log.Printf("fess-xdp attached interface=%s mode=%s global_budget=%v icmp_ping=%v malformed_packets=%v temporary_blocks=%v", c.Interface, c.Mode, c.GlobalBudget.Enabled, c.ICMPPing.Enabled, c.MalformedPackets.Enabled, c.TemporaryBlocks.Enabled)
+	started := time.Now()
+	programInfo, err := collection.Programs["fess_filter"].Info()
+	if err != nil {
+		return err
+	}
+	programID, _ := programInfo.ID()
+	var previous *Statistics
+	publicationWarned := false
+	sample := func() error {
+		counters, err := readCounters(collection)
+		if err != nil {
+			return err
+		}
+		current := SampleStatistics(previous, Statistics{PID: os.Getpid(), ProgramID: uint32(programID), Interface: c.Interface, StartedAt: started, SampledAt: time.Now(), Counters: counters})
+		if err := PublishStatistics(StatisticsDirectory, current); err != nil {
+			if !publicationWarned {
+				log.Printf("xdp statistics publication unavailable: %v", err)
+				publicationWarned = true
+			}
+		} else {
+			publicationWarned = false
+		}
+		previous = &current
+		out, _ := json.Marshal(counters)
+		log.Printf("xdp counters=%s", out)
+		return nil
+	}
+	defer os.Remove(StatisticsPath(StatisticsDirectory, os.Getpid()))
+	if err := sample(); err != nil {
+		return err
+	}
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -158,19 +190,24 @@ func Run(ctx context.Context, c Config) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			stats := map[string]uint64{}
-			for key, name := range CounterNames {
-				k := uint32(key)
-				var values []uint64
-				if err := collection.Maps["counters"].Lookup(&k, &values); err != nil {
-					return err
-				}
-				for _, v := range values {
-					stats[name] += v
-				}
+			if err := sample(); err != nil {
+				return err
 			}
-			out, _ := json.Marshal(stats)
-			log.Printf("xdp counters=%s", out)
 		}
 	}
+}
+
+func readCounters(collection *ebpf.Collection) (map[string]uint64, error) {
+	stats := map[string]uint64{}
+	for key, name := range CounterNames {
+		k := uint32(key)
+		var values []uint64
+		if err := collection.Maps["counters"].Lookup(&k, &values); err != nil {
+			return nil, err
+		}
+		for _, v := range values {
+			stats[name] += v
+		}
+	}
+	return stats, nil
 }

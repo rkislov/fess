@@ -418,3 +418,21 @@ func TestKernelValidUDPWithTrailingIPPadding(t *testing.T) {
 		t.Fatal("valid UDP length with trailing IP padding rejected")
 	}
 }
+
+func TestKernelTrafficCounters(t *testing.T) {
+	c := kernelCollection(t, Config{})
+	tcp := ipv4Packet("198.51.100.1", 80, 2)
+	echo := icmpPacket(false, "198.51.100.2", 8)
+	if action(t, c, tcp) != 2 || action(t, c, echo) != 2 {
+		t.Fatal("counter instrumentation changed packet decisions")
+	}
+	stats, err := readCounters(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]uint64{"seen": 2, "passed": 2, "protected_packets": 1, "protected_syn": 1, "icmp_echo": 1, "frame_bytes": uint64(len(tcp) + len(echo)), "protected_bytes": uint64(len(tcp))} {
+		if stats[key] != want {
+			t.Fatalf("%s=%d want=%d", key, stats[key], want)
+		}
+	}
+}
