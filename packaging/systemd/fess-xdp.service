@@ -6,11 +6,14 @@ ConditionPathExists=/etc/fess/xdp.json
 
 [Service]
 Type=simple
+RuntimeDirectory=fess-xdp
+RuntimeDirectoryMode=0755
+UMask=0077
 ExecStart=/usr/bin/fess-xdp --config /etc/fess/xdp.json
 Restart=on-failure
 RestartSec=5
 User=root
-Group=root
+Group=fess
 CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_RESOURCE
 AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_RESOURCE
 LimitMEMLOCK=infinity

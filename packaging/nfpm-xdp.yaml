@@ -8,6 +8,11 @@ license: Apache-2.0
 description: Optional FESS XDP ingress CIDR and packet/SYN rate filter for Linux 5.15+
 section: net
 priority: optional
+overrides:
+  deb:
+    depends: [iproute2, passwd]
+  rpm:
+    depends: [iproute, shadow-utils]
 contents:
   - src: ../dist/fess-xdp-linux-${FESS_ARCH}
     expand: true
@@ -19,6 +24,8 @@ contents:
     type: config|noreplace
   - src: systemd/fess-xdp.service
     dst: /usr/lib/systemd/system/fess-xdp.service
+  - src: systemd/fess-xdp-control.service
+    dst: /usr/lib/systemd/system/fess-xdp-control.service
 scripts:
   postinstall: postinstall-xdp.sh
   preremove: preremove-xdp.sh

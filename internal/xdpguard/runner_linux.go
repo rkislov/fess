@@ -23,7 +23,12 @@ import (
 //go:embed filter.o
 var object []byte
 
-type limits struct{ Packets, SYNs, DropFragments uint32 }
+type limits struct {
+	Packets, SYNs, DropFragments                                                               uint32
+	GlobalPackets, GlobalPacketBurst, GlobalBytes, GlobalByteBurst, GlobalSYNs, GlobalSYNBurst uint32
+	ICMPPackets, ICMPBurst, ICMPIPPackets, ICMPIPBurst                                         uint32
+	InvalidLengths, InvalidFlags, TemporaryBlocks                                              uint32
+}
 type key4 struct {
 	Bits uint32
 	Addr [4]byte
@@ -53,6 +58,28 @@ func load(c Config) (*ebpf.Collection, error) {
 	}()
 	zero := uint32(0)
 	v := limits{Packets: c.PacketsPerSecond, SYNs: c.SYNsPerSecond}
+	if c.GlobalBudget.Enabled {
+		b := c.GlobalBudget
+		v.GlobalPackets, v.GlobalPacketBurst = b.PacketsPerSecond, b.PacketBurst
+		v.GlobalBytes, v.GlobalByteBurst = b.BytesPerSecond, b.ByteBurst
+		v.GlobalSYNs, v.GlobalSYNBurst = b.SYNsPerSecond, b.SYNBurst
+	}
+	if c.ICMPPing.Enabled {
+		b := c.ICMPPing
+		v.ICMPPackets, v.ICMPBurst = b.PacketsPerSecond, b.Burst
+		v.ICMPIPPackets, v.ICMPIPBurst = b.PerIPPacketsPerSecond, b.PerIPBurst
+	}
+	if c.MalformedPackets.Enabled {
+		if c.MalformedPackets.InvalidLengths {
+			v.InvalidLengths = 1
+		}
+		if c.MalformedPackets.InvalidTCPFlags {
+			v.InvalidFlags = 1
+		}
+	}
+	if c.TemporaryBlocks.Enabled {
+		v.TemporaryBlocks = 1
+	}
 	if c.DropFragments {
 		v.DropFragments = 1
 	}
@@ -114,7 +141,16 @@ func Run(ctx context.Context, c Config) error {
 		return fmt.Errorf("attach XDP without replacing an existing program on %s: %w", c.Interface, err)
 	}
 	defer attached.Close()
-	log.Printf("fess-xdp attached interface=%s mode=%s; only configured TCP/UDP ports are filtered", c.Interface, c.Mode)
+	if c.TemporaryBlocks.Enabled {
+		stop, err := listenTemporaryBlocks(ctx, c.TemporaryBlocks, func(ip netip.Addr) error {
+			return addTemporaryBan(collection.Maps["temporary_bans"], ip, c.TemporaryBlocks.TTLSeconds)
+		})
+		if err != nil {
+			return fmt.Errorf("temporary block socket: %w", err)
+		}
+		defer stop()
+	}
+	log.Printf("fess-xdp attached interface=%s mode=%s global_budget=%v icmp_ping=%v malformed_packets=%v temporary_blocks=%v", c.Interface, c.Mode, c.GlobalBudget.Enabled, c.ICMPPing.Enabled, c.MalformedPackets.Enabled, c.TemporaryBlocks.Enabled)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -123,7 +159,7 @@ func Run(ctx context.Context, c Config) error {
 			return nil
 		case <-ticker.C:
 			stats := map[string]uint64{}
-			for key, name := range []string{"seen", "passed", "cidr_drop", "rate_drop", "fragment_drop", "malformed_pass"} {
+			for key, name := range CounterNames {
 				k := uint32(key)
 				var values []uint64
 				if err := collection.Maps["counters"].Lookup(&k, &values); err != nil {

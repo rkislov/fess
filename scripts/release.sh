@@ -23,7 +23,7 @@ for arch in amd64 arm64; do
  cp "dist/fess-xdp-linux-$arch" "$stage/fess-xdp"
  cp LICENSE NOTICE "$stage/"
  cp docs/xdp.md "$stage/README.md"
- cp packaging/xdp.json.example packaging/systemd/fess-xdp.service "$stage/"
+ cp packaging/xdp.json.example packaging/systemd/fess-xdp.service packaging/systemd/fess-xdp-control.service "$stage/"
  tar -czf "$release_dir/fess-xdp_${FESS_VERSION}_linux_${arch}.tar.gz" -C "$stage" .
  rm -rf "$stage"
  for config in nfpm.yaml nfpm-xdp.yaml; do

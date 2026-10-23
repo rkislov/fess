@@ -1,0 +1,23 @@
+[Unit]
+Description=Local FESS XDP settings and service controller
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/fess-xdp --control --config /etc/fess/xdp.json
+User=root
+Group=fess
+RuntimeDirectory=fess-xdp-control
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ReadWritePaths=/etc/fess
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
