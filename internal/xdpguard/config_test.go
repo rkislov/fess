@@ -25,3 +25,32 @@ func TestConfigValidation(t *testing.T) {
 		t.Fatal("unknown fields must fail")
 	}
 }
+
+func TestProtectionConfigValidation(t *testing.T) {
+	for _, change := range []func(*Config){
+		func(c *Config) { c.GlobalBudget = BudgetConfig{Enabled: true} },
+		func(c *Config) { c.GlobalBudget = BudgetConfig{PacketsPerSecond: 1} },
+		func(c *Config) { c.GlobalBudget = BudgetConfig{BytesPerSecond: 1, ByteBurst: 1000000001} },
+		func(c *Config) { c.ICMPPing = ICMPConfig{Enabled: true} },
+		func(c *Config) { c.ICMPPing = ICMPConfig{PerIPPacketsPerSecond: 1} },
+		func(c *Config) { c.MalformedPackets.Enabled = true },
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "relative", TTLSeconds: 60}
+		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock"}
+		},
+		func(c *Config) {
+			c.TemporaryBlocks = TemporaryBlockConfig{Enabled: true, SocketPath: "/run/fess-xdp/b.sock", TTLSeconds: 86401}
+		},
+	} {
+		c := Config{Interface: "test0"}
+		change(&c)
+		if c.Validate() == nil {
+			t.Fatalf("accepted invalid protection settings: %+v", c)
+		}
+	}
+	if _, err := ReadConfig("../../packaging/xdp.json.example"); err != nil {
+		t.Fatal(err)
+	}
+}

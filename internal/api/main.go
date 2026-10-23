@@ -109,6 +109,8 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	mux.HandleFunc("/api/v1/users/", func(w http.ResponseWriter, r *http.Request) {
 		userByIDHandler(w, r, db)
 	})
+	mux.HandleFunc("/api/v1/settings/xdp", xdpSettingsHandler)
+	mux.HandleFunc("/api/v1/settings/xdp/", xdpSettingsHandler)
 	mux.HandleFunc("/api/v1/settings/map", func(w http.ResponseWriter, r *http.Request) {
 		mapSettingsHandler(w, r, db)
 	})

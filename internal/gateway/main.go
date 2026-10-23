@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fence/internal/logbatch"
+	"fence/internal/xdpnotify"
 	"fmt"
 	"io"
 	"log"
@@ -54,6 +55,13 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		log.Printf("waf-gateway: WAF_TRUSTED_PROXIES is unset — logs/WAF use TCP peer as client IP; behind Nginx/LB set CIDR(s) of the hop that connects to this gateway (see README: Nginx before waf-gateway)")
 	}
 
+	var xdpBlocks *xdpnotify.Client
+	// PROXY protocol rewrites RemoteAddr, hiding the real network peer from WAF.
+	if strings.TrimSpace(os.Getenv("WAF_TLS_PROXY_PROTOCOL_TRUSTED_CIDRS")) == "" {
+		xdpBlocks = xdpnotify.New(ctx, strings.TrimSpace(getenv("FESS_XDP_BLOCK_SOCKET", "/run/fess-xdp/blocks.sock")))
+	} else if os.Getenv("FESS_XDP_BLOCK_SOCKET") != "" {
+		log.Printf("xdp bans disabled: PROXY protocol hides the network peer")
+	}
 	store := policy.NewStore()
 	mwStore := newMalwareStore()
 	evaluator := engine.NewEvaluator()
@@ -143,7 +151,7 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		}
 
 		if isWebSocketUpgrade(r) {
-			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes, bypassStore)
+			serveWebSocketUpgrade(w, r, mr, db, store, evaluator, proxy, failMode, gateTF, ipRes, bypassStore, xdpBlocks)
 			return
 		}
 
@@ -205,6 +213,9 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 			effectiveAction = "log"
 		}
 		writeWAFLog(r.Context(), db, r, decision, effectiveAction, ipRes)
+		if effectiveAction == "block" {
+			xdpBlocks.Block(r, ipRes)
+		}
 
 		accessOutcome := "proxied"
 		switch effectiveAction {

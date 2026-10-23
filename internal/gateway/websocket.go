@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"database/sql"
+	"fence/internal/xdpnotify"
 	"net/http"
 	"strings"
 
@@ -35,6 +36,7 @@ func serveWebSocketUpgrade(
 	gateTF threatFeedGateResult,
 	ipRes *clientip.Resolver,
 	bypassStore *ipBypassStore,
+	xdpBlocks *xdpnotify.Client,
 ) {
 	if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
 		return
@@ -61,6 +63,9 @@ func serveWebSocketUpgrade(
 		effectiveAction = "log"
 	}
 	writeWAFLog(r.Context(), db, r, decision, effectiveAction, ipRes)
+	if effectiveAction == "block" {
+		xdpBlocks.Block(r, ipRes)
+	}
 
 	accessOutcome := "websocket_proxied"
 	switch effectiveAction {
