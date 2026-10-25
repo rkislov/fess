@@ -1,9 +1,9 @@
 <template>
-  <XdpStatistics :statistics="statistics" :running="running" :interface-name="status?.interface" :error="error || status?.statistics_error" graph />
+  <XdpStatistics :statistics="statistics" :running="running" :interface-name="status?.interface" :error="error || status?.statistics_error" :history="history" :history-error="historyError" :history-loading="historyLoading" :period="period" @period-change="changePeriod" graph />
 </template>
 
 <script setup lang="ts">
-import type { XdpStatistics } from '~/utils/xdpStatistics'
+import type { XdpStatistics, XdpHistory, XdpPeriod } from '~/utils/xdpStatistics'
 
 type Status = {
   service: { ActiveState?: string }
@@ -14,6 +14,39 @@ type Status = {
 const { apiFetch, apiUrl } = useApi()
 const status = ref<Status | null>(null)
 const error = ref('')
+const history = shallowRef<XdpHistory | null>(null)
+const historyError = ref('')
+const historyLoading = ref(false)
+const period = ref<XdpPeriod>('hour')
+let historyTimer: ReturnType<typeof setTimeout> | undefined
+let historyGeneration = 0
+async function refreshHistory() {
+  const generation = ++historyGeneration
+  if (historyTimer) clearTimeout(historyTimer)
+  historyLoading.value = true
+  try {
+    const result = await apiFetch<XdpHistory>(apiUrl(`/dashboard/xdp/history?period=${period.value}`), { timeout: 10000 })
+    if (disposed || generation !== historyGeneration) return
+    history.value = result
+    historyError.value = ''
+  } catch {
+    if (disposed || generation !== historyGeneration) return
+    historyError.value = history.value ? 'Не удалось обновить историю XDP. Показаны последние полученные данные.' : 'История XDP недоступна. Повторяем подключение автоматически.'
+  } finally {
+    if (!disposed && generation === historyGeneration) {
+      historyLoading.value = false
+      historyTimer = setTimeout(refreshHistory, 10000)
+    }
+  }
+}
+function changePeriod(value: XdpPeriod) {
+  if (period.value === value) return
+  period.value = value
+  history.value = null
+  historyError.value = ''
+  try { localStorage.setItem('fess-xdp-history-period', value) } catch {}
+  refreshHistory()
+}
 const running = computed(() => status.value?.service.ActiveState === 'active')
 const statistics = computed(() => {
   const sample = status.value?.statistics
@@ -38,6 +71,13 @@ async function refresh() {
     if (!disposed) timer = setTimeout(refresh, 5000)
   }
 }
-onMounted(refresh)
-onBeforeUnmount(() => { disposed = true; if (timer) clearTimeout(timer) })
+onMounted(() => {
+  try {
+    const saved = localStorage.getItem('fess-xdp-history-period')
+    if (saved === 'hour' || saved === 'day' || saved === 'week') period.value = saved
+  } catch {}
+  refresh()
+  refreshHistory()
+})
+onBeforeUnmount(() => { disposed = true; ++historyGeneration; if (historyTimer) clearTimeout(historyTimer); if (timer) clearTimeout(timer) })
 </script>

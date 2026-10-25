@@ -5,8 +5,8 @@
         <span v-if="statistics" class="text-xs text-slate-400">Снимок {{ new Date(statistics.sampled_at).toLocaleTimeString() }} · обновление каждые 10 с</span>
       </div>
       <p v-if="error" role="alert" class="mt-3 text-sm text-amber-300">{{ error }}</p>
-      <p v-if="!statistics" class="mt-3 text-sm text-slate-400">{{ running ? 'Ожидаются данные счётчиков XDP.' : 'Запустите XDP, чтобы получать статистику.' }}</p>
-      <template v-else>
+      <p v-if="!statistics && !error" class="mt-3 text-sm text-slate-400">{{ running ? 'Ожидаются данные счётчиков XDP.' : 'Запустите XDP, чтобы получать статистику.' }}</p>
+      <template v-if="statistics">
         <p v-if="statistics.stale" role="alert" class="mt-3 text-sm text-amber-300">Данные устарели. Скорости не отображаются до получения свежего снимка.</p>
         <p class="mt-2 text-xs text-slate-400">Итоги с запуска {{ new Date(statistics.started_at).toLocaleString() }}. При перезапуске счётчики обнуляются. Весь входящий трафик интерфейса включает другие сервисы.</p>
         <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -30,12 +30,20 @@
       </template>
       <div v-if="graph" class="mt-6 border-t border-white/10 pt-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div><h5 class="text-sm font-semibold">Трафик XDP</h5><p class="mt-1 text-xs text-slate-400">Последние 15 минут, пока открыт дашборд · снимки каждые 10 с · пропуски данных показаны разрывами.</p></div>
+          <div><h5 class="text-sm font-semibold">Трафик XDP</h5><p class="mt-1 text-xs text-slate-400">История хранится на сервере 8 дней · средние за {{ history?.step_seconds || 10 }} с по доступным измерениям · пропуски показаны разрывами.</p></div>
+          <div class="flex flex-wrap gap-3">
+            <div class="flex gap-2" aria-label="Период графика XDP">
+              <button v-for="option in periods" :key="option.key" type="button" :aria-pressed="period === option.key" class="rounded-lg border px-3 py-1.5 text-xs" :class="period === option.key ? 'border-teal-500 bg-teal-950 text-teal-200' : 'border-slate-600 text-slate-400'" @click="emit('periodChange', option.key)">{{ option.label }}</button>
+            </div>
           <div class="flex gap-2" aria-label="Единицы графика XDP">
             <button v-for="option in units" :key="option.key" type="button" :aria-pressed="unit === option.key" class="rounded-lg border px-3 py-1.5 text-xs" :class="unit === option.key ? 'border-teal-500 bg-teal-950 text-teal-200' : 'border-slate-600 text-slate-400'" @click="unit = option.key">{{ option.label }}</button>
           </div>
+          </div>
         </div>
-        <p v-if="!history.length" class="mt-3 text-xs text-slate-400">Ожидаются два свежих снимка для расчёта скорости.</p>
+        <p v-if="historyError" role="alert" class="mt-3 text-xs text-amber-300">{{ historyError }}</p>
+        <p v-if="historyLoading && !history" class="mt-3 text-xs text-slate-400">Загрузка истории…</p>
+        <p v-else-if="!historyError && !history?.points.length" class="mt-3 text-xs text-slate-400">За выбранный период измерений пока нет. История собирается автоматически, даже когда дашборд закрыт.</p>
+        <p v-if="history?.points.length" class="mt-2 text-xs text-slate-400">Последнее измерение: {{ new Date(history.points[history.points.length - 1]!.at).toLocaleString() }}</p>
         <div class="relative mt-4 h-64 sm:h-72"><canvas ref="canvas" role="img" :aria-label="unit === 'packets' ? 'Скорость входящих, защищаемых и отброшенных пакетов XDP' : 'Входящий трафик интерфейса и защищаемых портов в Мбит/с'" /></div>
       </div>
     </div>
@@ -44,10 +52,11 @@
 
 <script setup lang="ts">
 import type { Chart } from 'chart.js'
-import { appendXdpSample, xdpDropReasons, xdpDropped } from '~/utils/xdpStatistics'
-import type { XdpHistory, XdpStatistics } from '~/utils/xdpStatistics'
+import { xdpChartPoints, xdpDropReasons, xdpDropped } from '~/utils/xdpStatistics'
+import type { XdpHistory, XdpStatistics, XdpPeriod } from '~/utils/xdpStatistics'
 
-const props = defineProps<{ statistics: XdpStatistics | null; running?: boolean; interfaceName?: string; error?: string; graph?: boolean }>()
+const props = defineProps<{ statistics: XdpStatistics | null; running?: boolean; interfaceName?: string; error?: string; graph?: boolean; history?: XdpHistory | null; historyError?: string; historyLoading?: boolean; period?: XdpPeriod }>()
+const emit = defineEmits<{ periodChange: [period: XdpPeriod] }>()
 const dropReasons = xdpDropReasons
 const totalDropped = computed(() => xdpDropped(props.statistics?.counters || {}))
 const dropPercent = computed(() => props.statistics?.counters.seen ? (100 * totalDropped.value / props.statistics.counters.seen).toFixed(2) : '0.00')
@@ -59,37 +68,37 @@ function rate(key: string, scale = 1, digits = 0) {
 
 const units = [{ key: 'packets', label: 'Пакетов/с' }, { key: 'bandwidth', label: 'Мбит/с' }] as const
 const unit = ref<'packets' | 'bandwidth'>('packets')
-const state = shallowRef<XdpHistory>({ source: '', points: [] })
-const history = computed(() => state.value.points)
+const periods = [{ key: 'hour', label: 'Час' }, { key: 'day', label: 'Сутки' }, { key: 'week', label: 'Неделя' }] as const
+const points = computed(() => xdpChartPoints(props.history || null))
 const canvas = ref<HTMLCanvasElement | null>(null)
 let chart: Chart<'line'> | null = null
 let disposed = false
 
+function formatTime(value: number) {
+  const date = new Date(value)
+  return props.period === 'hour' ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : date.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 function renderChart() {
   if (!chart) return
   const series = unit.value === 'packets'
     ? [{ key: 'seen', label: 'Весь интерфейс', color: '#38bdf8' }, { key: 'protected_packets', label: 'Защищаемые порты', color: '#2dd4bf' }, { key: 'dropped', label: 'Отброшено', color: '#fb7185' }]
     : [{ key: 'frame_bytes', label: 'Весь интерфейс', color: '#38bdf8' }, { key: 'protected_bytes', label: 'Защищаемые порты', color: '#2dd4bf' }]
   const scale = unit.value === 'packets' ? 1 : 8 / 1000000
-  chart.data.datasets = series.map(s => ({
+  chart.data.datasets = series.map(s => Object.assign(chart!.data.datasets.find(dataset => dataset.label === s.label) || {}, {
     label: s.label,
-    data: history.value.map(p => ({ x: p.at, y: p.rates && Number.isFinite(p.rates[s.key]) ? p.rates[s.key]! * scale : null })) as any,
+    data: points.value.map(p => ({ x: p.at, y: p.rates && Number.isFinite(p.rates[s.key]) ? p.rates[s.key]! * scale : null })) as any,
     borderColor: s.color, backgroundColor: s.color, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4, spanGaps: false,
   }))
   if (chart.options.scales?.y?.title) chart.options.scales.y.title.text = unit.value === 'packets' ? 'Пакетов/с' : 'Мбит/с'
   if (chart.options.scales?.x) {
-    const end = history.value.at(-1)?.at || Date.now()
-    chart.options.scales.x.min = end - 15 * 60 * 1000
+    const end = props.history ? Date.parse(props.history.to) : Date.now()
+    const duration = props.period === 'week' ? 7 * 86400000 : props.period === 'day' ? 86400000 : 3600000
+    chart.options.scales.x.min = props.history ? Date.parse(props.history.from) : end - duration
     chart.options.scales.x.max = end
   }
   chart.update('none')
 }
-watch(() => props.statistics, sample => {
-  if (!props.graph) return
-  if (sample) state.value = appendXdpSample(state.value, sample)
-  else state.value = { source: '', points: [] }
-  renderChart()
-}, { immediate: true })
+watch([() => props.history, () => props.period], renderChart)
 watch(unit, renderChart)
 onMounted(async () => {
   if (!props.graph) return
@@ -104,12 +113,12 @@ onMounted(async () => {
       plugins: {
         legend: { labels: { color: '#94a3b8', usePointStyle: true, boxWidth: 8 } },
         tooltip: { callbacks: {
-          title: items => items.length ? new Date(items[0]!.parsed.x).toLocaleTimeString() : '',
+          title: items => items.length ? new Date(items[0]!.parsed.x).toLocaleString() : '',
           label: item => `${item.dataset.label}: ${number(item.parsed.y ?? undefined, 2)} ${unit.value === 'packets' ? 'пакетов/с' : 'Мбит/с'}`,
         } },
       },
       scales: {
-        x: { type: 'linear', ticks: { color: '#94a3b8', maxTicksLimit: 6, callback: value => new Date(Number(value)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }, grid: { color: 'rgba(148,163,184,0.08)' } },
+        x: { type: 'linear', ticks: { color: '#94a3b8', maxTicksLimit: 6, callback: value => formatTime(Number(value)) }, grid: { color: 'rgba(148,163,184,0.08)' } },
         y: { beginAtZero: true, title: { display: true, text: 'Пакетов/с', color: '#94a3b8' }, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
       },
     },
