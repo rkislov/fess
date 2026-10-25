@@ -1,11 +1,8 @@
 package api
 
 import (
-	"context"
 	"io"
-	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -38,15 +35,8 @@ func xdpSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	socket := strings.TrimSpace(os.Getenv("FESS_XDP_CONTROL_SOCKET"))
-	if socket == "" {
-		socket = "/run/fess-xdp-control/control.sock"
-	}
-	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", socket)
-	}}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 20 * time.Second}
+	client := xdpControllerClient(20 * time.Second)
+	defer client.CloseIdleConnections()
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, "http://xdp-controller"+endpoint, http.MaxBytesReader(w, r.Body, 4<<20))
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
