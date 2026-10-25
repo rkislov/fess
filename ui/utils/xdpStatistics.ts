@@ -24,21 +24,27 @@ export function xdpDropped(counters: Record<string, number>) {
   return xdpDropReasons.reduce((sum, reason) => sum + (counters[reason.key] || 0), 0)
 }
 
+export type XdpPeriod = 'hour' | 'day' | 'week'
+export type XdpHistory = {
+  period: XdpPeriod
+  from: string
+  to: string
+  step_seconds: number
+  points: { at: number; first_at: number; source: string; interface: string; coverage_seconds: number; rates: Record<string, number> }[]
+}
 export type XdpPoint = { at: number; rates: Record<string, number> | null }
-export type XdpHistory = { source: string; points: XdpPoint[] }
-export const xdpHistoryWindow = 15 * 60 * 1000
 
-// Snapshot timestamps, rather than polling times, deduplicate the controller's
-// ten-second samples. A new program must never connect to the previous series.
-export function appendXdpSample(history: XdpHistory, sample: XdpStatistics): XdpHistory {
-  const source = `${sample.interface}/${sample.pid}/${sample.program_id}/${sample.started_at}`
-  const points = source === history.source ? history.points : []
-  const at = Date.parse(sample.sampled_at)
-  if (!Number.isFinite(at) || sample.stale || sample.interval_seconds <= 0) return { source, points }
-  const last = points.at(-1)
-  if (last && at <= last.at) return { source, points }
-  const next = points.filter(point => point.at >= at - xdpHistoryWindow)
-  if (last && at - last.at > 15000 && next.length) next.push({ at: last.at + 1, rates: null })
-  next.push({ at, rates: { ...sample.rates, dropped: xdpDropped(sample.rates) } })
-  return { source, points: next.slice(-180) }
+// Preserve previous program runs. Separate restarts and unmeasured intervals
+// instead of connecting them or inventing zero traffic.
+export function xdpChartPoints(history: XdpHistory | null): XdpPoint[] {
+  const result: XdpPoint[] = []
+  let previous: XdpHistory['points'][number] | undefined
+  for (const point of history?.points || []) {
+    if (previous && (previous.source !== point.source || point.first_at - previous.at > 15000)) {
+      result.push({ at: previous.at + 1, rates: null })
+    }
+    result.push({ at: point.at, rates: { ...point.rates, dropped: xdpDropped(point.rates) } })
+    previous = point
+  }
+  return result
 }

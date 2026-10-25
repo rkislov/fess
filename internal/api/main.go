@@ -82,6 +82,7 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	go runThreatFeedBootstrap(ctx, db, state)
 	go runSIEMExporter(ctx, db)
 	go runPrometheusDBCollector(ctx, db)
+	go runXDPHistoryCollector(ctx, db)
 	go runACMERenewPoller(ctx, db, state)
 
 	mux := http.NewServeMux()
@@ -157,6 +158,9 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	})
 	mux.HandleFunc("/api/v1/dashboard/system", func(w http.ResponseWriter, r *http.Request) {
 		systemHealthHandler(w, r)
+	})
+	mux.HandleFunc("/api/v1/dashboard/xdp/history", func(w http.ResponseWriter, r *http.Request) {
+		xdpHistoryHandler(w, r, db)
 	})
 	mux.HandleFunc("/api/v1/settings/malware/status", func(w http.ResponseWriter, r *http.Request) {
 		malwareStatusHandler(w, r, db)
