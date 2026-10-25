@@ -993,6 +993,25 @@ paths:
         "200": { description: Service state, interface XDP program ID and current statistics snapshot with rates and freshness }
         "403": { description: Admin role required }
         "503": { description: XDP controller unavailable }
+  /api/v1/dashboard/xdp/history:
+    get:
+      tags: [dashboard]
+      summary: Read durable XDP traffic history (admin only)
+      description: Collected independently of the browser and retained for 8 days. Rates are weighted by measured time; missing data is not zero traffic. Process restarts retain previous segments.
+      parameters:
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: hour
+          description: Last hour (10-second buckets), day (2-minute buckets) or week (10-minute buckets).
+      responses:
+        "200":
+          description: Period, from/to timestamps, step_seconds and points with at/first_at (Unix milliseconds), source, interface, coverage_seconds and rates.
+        "400": { description: Unsupported period }
+        "403": { description: Admin role required }
+        "500": { description: History database unavailable }
   /api/v1/settings/xdp/interfaces:
     get:
       tags: [settings]
