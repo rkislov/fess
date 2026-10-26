@@ -34,6 +34,28 @@ export type XdpHistory = {
 }
 export type XdpPoint = { at: number; rates: Record<string, number> | null }
 
+// The server weights bucket rates by measured time. Integrating them recovers
+// packet/byte deltas across runs, without filling gaps or counting downtime.
+export function xdpHistoryTotals(history: XdpHistory | null) {
+  if (!history?.points.length) return null
+  const totals: Record<string, number> = {}
+  let coverageSeconds = 0
+  for (const point of history.points) {
+    coverageSeconds += point.coverage_seconds
+    for (const [key, rate] of Object.entries(point.rates)) {
+      totals[key] = (totals[key] || 0) + rate * point.coverage_seconds
+    }
+  }
+  const counters: Record<string, number> = {}
+  const rates: Record<string, number> = {}
+  for (const [key, total] of Object.entries(totals)) {
+    // Round only the final sum to remove floating-point error from SQL averages.
+    counters[key] = Math.round(total)
+    rates[key] = total / coverageSeconds
+  }
+  return { counters, rates, coverageSeconds }
+}
+
 // Preserve previous program runs. Separate restarts and unmeasured intervals
 // instead of connecting them or inventing zero traffic.
 export function xdpChartPoints(history: XdpHistory | null): XdpPoint[] {
