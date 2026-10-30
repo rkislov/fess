@@ -1,5 +1,11 @@
 # FESS — Frontend Security Server
 
+<!-- owner-maintenance:start -->
+**Автор проекта, изменений и публикаций — Кислов Роман Сергеевич ([@rkislov](https://github.com/rkislov)).**
+
+Ошибки и предложения принимаются через **Issues**, изменения — через **Pull Requests** из форков. Прямую запись в основной репозиторий и публикацию версий выполняет только владелец `rkislov`.
+<!-- owner-maintenance:end -->
+
 WAF и reverse proxy с веб-панелью, политиками без перезапуска, TLS/ACME,
 антивирусом, защитой от ботов, IOC, журналами, LDAP/JWT и экспортом SIEM.
 
