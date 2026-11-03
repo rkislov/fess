@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -33,6 +34,8 @@ type threatFeedStatusResponse struct {
 	RowsLastIngested int    `json:"rows_last_ingested"`
 	IndicatorCount   int    `json:"indicator_count"`
 	FileHashCount    int    `json:"file_hash_count"`
+	DomainCount      int    `json:"domain_count"`
+	URLCount         int    `json:"url_count"`
 	AutoSyncsToday   int    `json:"auto_syncs_today"`
 	AutoSyncLimit    int    `json:"auto_sync_limit"`
 	NextAutoSyncAt   string `json:"next_auto_sync_at,omitempty"`
@@ -135,6 +138,9 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_indicators`).Scan(&cnt)
 	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_file_hashes`).Scan(&hashCnt)
 
+	var domains, urls int
+	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_web_iocs WHERE indicator_type='domain'`).Scan(&domains)
+	_ = db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM threat_feed_web_iocs WHERE indicator_type='url'`).Scan(&urls)
 	now := time.Now()
 	quota, _ := loadThreatFeedAutoQuota(r.Context(), db)
 	usedToday := autoSyncsUsedToday(quota, now)
@@ -149,8 +155,9 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 		RowsLastIngested: rowsIng,
 		IndicatorCount:   cnt,
 		FileHashCount:    hashCnt,
-		AutoSyncsToday:   usedToday,
-		AutoSyncLimit:    threatFeedMaxAutoSyncsPerDay,
+		DomainCount:      domains, URLCount: urls,
+		AutoSyncsToday: usedToday,
+		AutoSyncLimit:  threatFeedMaxAutoSyncsPerDay,
 	}
 	if lastAtt.Valid {
 		out.LastAttemptAtRFC = lastAtt.Time.UTC().Format(time.RFC3339Nano)
@@ -161,7 +168,7 @@ FROM threat_feed_sync_state WHERE singleton = 'global'`).Scan(&lastAtt, &lastOK,
 	if lastErr.Valid && strings.TrimSpace(lastErr.String) != "" {
 		out.LastError = lastErr.String
 	}
-	if cfg.AutoSyncConfigured() && cfg.Enabled {
+	if cfg.AutoSyncConfigured() && (cfg.Enabled || cfg.UsesFessFeed()) {
 		if usedToday >= threatFeedMaxAutoSyncsPerDay {
 			nextAuto = threatFeedUTCDay(now).Add(24 * time.Hour)
 		}
@@ -177,16 +184,50 @@ func postThreatFeedUpload(w http.ResponseWriter, r *http.Request, db *sql.DB, st
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if err := r.ParseMultipartForm(threatFeedMaxPageBytes + (1 << 20)); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, 700<<20)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart parse failed: " + err.Error()})
 		return
 	}
-	fh, _, err := r.FormFile("file")
+	defer r.MultipartForm.RemoveAll()
+	fh, header, err := r.FormFile("file")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing form field \"file\""})
 		return
 	}
 	defer fh.Close()
+	if strings.HasSuffix(strings.ToLower(header.Filename), ".zip") {
+		file, err := os.CreateTemp("", "fess-offline-*.zip")
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "не удалось создать временный файл"})
+			return
+		}
+		defer os.Remove(file.Name())
+		defer file.Close()
+		n, err := io.Copy(file, io.LimitReader(fh, (690<<20)+1))
+		if err != nil || n > 690<<20 {
+			writeJSON(w, 400, map[string]string{"error": "архив слишком большой или неполный"})
+			return
+		}
+		bundle, err := threatfeed.ParseOffline(file, n)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		feedBundleMu.Lock()
+		count, err := replaceOfflineData(r.Context(), db, bundle, time.Now().UTC())
+		feedBundleMu.Unlock()
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": sanitizeThreatFeedError(err.Error())})
+			return
+		}
+		if err = state.Publish(r.Context(), "threat_feed_updated", `{"source":"offline_bundle"}`).Err(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "данные сохранены; не удалось уведомить шлюз"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "rows_ingested": count, "ip_count": len(bundle.IPs), "hash_count": len(bundle.Hashes), "domain_count": len(bundle.Domains), "url_count": len(bundle.URLs), "clamav_files": len(bundle.ClamAV)})
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(fh, threatFeedMaxPageBytes+1))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

@@ -66,7 +66,7 @@
     <section v-if="providerMode === 'fess_feed'" class="rounded-2xl border border-teal-900/40 bg-slate-900/50 p-5 sm:p-6">
       <h2 class="text-base font-semibold text-white">FESS Feed</h2>
       <p class="mt-1.5 text-sm text-slate-400">
-        Текстовые списки IP и хэшей. Ключ берётся в кабинете на feed.kislovs.ru и вставляется ниже.
+        Все IOC из включённых источников: IP/CIDR, хэши, домены и URL. Ключ берётся в кабинете на feed.kislovs.ru и вставляется ниже. С сохранённым ключом подписки обновление работает и при отключённой проверке IOC. ClamAV обновляется отдельно через cvd.kislovs.ru без подписки.
       </p>
       <div class="mt-3 flex flex-wrap gap-2">
         <a
@@ -238,17 +238,18 @@
       </motion.div>
     </section>
 
+    <p v-if="feedStatus" class="text-sm text-slate-400">Домены: {{ feedStatus.domain_count ?? 0 }} · URL: {{ feedStatus.url_count ?? 0 }}. Загружены для корреляции; блокировка IOC применяется к IP/CIDR и хэшам.</p>
     <!-- Manual upload -->
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
-      <h2 class="text-base font-semibold text-white">Ручная загрузка .txt</h2>
-      <p class="mt-1 text-sm text-slate-400">Один IP или CIDR на строку. Список в БД полностью заменяется.</p>
+      <h2 class="text-base font-semibold text-white">Ручная загрузка TXT / ZIP</h2>
+      <p class="mt-1 text-sm text-slate-400">TXT: один IP/CIDR на строку. ZIP Security Feed: все IP/CIDR, хэши, домены и URL; полный архив также обновляет ClamAV. Списки заменяются после проверки контрольных сумм.</p>
       <motion.div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label class="block min-w-0 flex-1 text-sm text-slate-400">
           Файл
           <input
             ref="fileInput"
             type="file"
-            accept=".txt,text/plain"
+            accept=".txt,.zip,text/plain,application/zip"
             class="mt-2 block w-full max-w-md text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-800 file:px-4 file:py-2 file:text-sm file:text-white hover:file:bg-teal-700"
             :disabled="busy"
             @change="onFilePicked"
@@ -349,12 +350,14 @@ type ThreatFeedStatus = {
   rows_last_ingested: number
   indicator_count: number
   file_hash_count?: number
+  domain_count?: number
+  url_count?: number
   auto_syncs_today?: number
   auto_sync_limit?: number
   next_auto_sync_at?: string
 }
 
-type UploadResp = { ok: boolean; rows_ingested: number }
+type UploadResp = { ok: boolean; rows_ingested: number; clamav_files?: number }
 
 function defaultCfg(): ThreatFeedCfg {
   return {
@@ -494,7 +497,7 @@ async function upload() {
     pickedFile.value = null
     if (fileInput.value) fileInput.value.value = ''
     await loadStatus()
-    flashOk(`Загружено ${res.rows_ingested} индикаторов`)
+    flashOk(`Загружено ${res.rows_ingested} IOC${res.clamav_files ? `; баз ClamAV: ${res.clamav_files}` : ''}`)
   } catch (e) {
     flashErr(e)
     await loadStatus().catch(() => {})
