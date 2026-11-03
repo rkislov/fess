@@ -247,6 +247,9 @@ func replaceThreatFoxData(ctx context.Context, db *sql.DB, p threatfeed.ThreatFo
 }
 
 func hashAlgForHex(h string) string {
+	if len(h) == 40 {
+		return "sha1"
+	}
 	if len(h) == 32 {
 		return "md5"
 	}

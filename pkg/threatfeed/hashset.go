@@ -2,12 +2,13 @@ package threatfeed
 
 import (
 	"crypto/md5"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 )
 
-// HashSet holds normalized MD5/SHA256 hex digests for O(1) lookup.
+// HashSet holds normalized MD5/SHA1/SHA256 hex digests for O(1) lookup.
 type HashSet struct {
 	m map[string]struct{}
 }
@@ -57,17 +58,22 @@ func (s *HashSet) MatchBody(body []byte) (matched string, ok bool) {
 	if s.Contains(h128) {
 		return h128, true
 	}
+	sum1 := sha1.Sum(body)
+	h1 := hex.EncodeToString(sum1[:])
+	if s.Contains(h1) {
+		return h1, true
+	}
 	return "", false
 }
 
-// NormalizeFileHash lowercases and validates MD5 (32) or SHA256 (64) hex.
+// NormalizeFileHash lowercases and validates MD5 (32), SHA1 (40) or SHA256 (64) hex.
 func NormalizeFileHash(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if !isHexString(s) {
 		return ""
 	}
 	switch len(s) {
-	case 32, 64:
+	case 32, 40, 64:
 		return s
 	default:
 		return ""

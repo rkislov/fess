@@ -39,7 +39,7 @@ func tickThreatFeedPoll(parent context.Context, db *sql.DB, state *runtimebus.Cl
 		log.Printf("threat feed: load config: %v", err)
 		return
 	}
-	if !cfg.Enabled || !cfg.AutoSyncConfigured() {
+	if !cfg.AutoSyncConfigured() || (!cfg.Enabled && !cfg.UsesFessFeed()) {
 		return
 	}
 	now := time.Now()
