@@ -54,6 +54,11 @@ func tickThreatFeedPoll(parent context.Context, db *sql.DB, state *runtimebus.Cl
 	if err := recordThreatFeedAutoSync(ctx, db, now); err != nil {
 		log.Printf("threat feed auto sync quota: %v", err)
 	}
+	if cfg.UsesFessFeed() {
+		if err := state.Publish(ctx, "bot_protection_updated", `{"source":"feed_subscription"}`).Err(); err != nil {
+			log.Printf("bot list publish: %v", err)
+		}
+	}
 	if err := state.Publish(ctx, "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
 		log.Printf("threat feed publish: %v", err)
 	}

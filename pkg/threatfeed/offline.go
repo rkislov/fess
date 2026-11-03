@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,9 @@ type OfflineManifest struct {
 }
 type OfflineBundle struct {
 	IPs, Hashes, Domains, URLs []string
+	ASNs                       []uint
+	BotCIDRs                   []string
+	HasBotLists                bool
 	ClamAV                     map[string]*zip.File
 	Manifest                   OfflineManifest
 }
@@ -74,12 +78,18 @@ func ParseOffline(r io.ReaderAt, size int64) (OfflineBundle, error) {
 		return out, fmt.Errorf("неподдерживаемый формат выгрузки")
 	}
 	out.ClamAV = map[string]*zip.File{}
-	allowed := map[string]bool{"ips.txt": true, "hashes.txt": true, "domains.txt": true, "urls.txt": true, "clamav/main.cvd": true, "clamav/daily.cvd": true, "clamav/bytecode.cvd": true}
+	allowed := map[string]bool{"asns.txt": true, "bot-cidrs.txt": true, "ips.txt": true, "hashes.txt": true, "domains.txt": true, "urls.txt": true, "clamav/main.cvd": true, "clamav/daily.cvd": true, "clamav/bytecode.cvd": true}
 	for _, name := range []string{"ips.txt", "hashes.txt", "domains.txt", "urls.txt"} {
 		if _, ok := out.Manifest.Files[name]; !ok {
 			return out, fmt.Errorf("нет %s в manifest", name)
 		}
 	}
+	_, hasASN := out.Manifest.Files["asns.txt"]
+	_, hasCIDR := out.Manifest.Files["bot-cidrs.txt"]
+	if hasASN != hasCIDR {
+		return out, fmt.Errorf("неполный набор списков ASN/CIDR")
+	}
+	out.HasBotLists = hasASN
 	for name, meta := range out.Manifest.Files {
 		if !allowed[name] {
 			return out, fmt.Errorf("неподдерживаемый файл данных")
@@ -116,6 +126,18 @@ func ParseOffline(r io.ReaderAt, size int64) (OfflineBundle, error) {
 			}
 			count++
 			switch name {
+			case "asns.txt":
+				n, e := strconv.ParseUint(line, 10, 32)
+				if e != nil || n == 0 {
+					return out, fmt.Errorf("некорректный ASN")
+				}
+				out.ASNs = append(out.ASNs, uint(n))
+			case "bot-cidrs.txt":
+				p, e := netip.ParsePrefix(line)
+				if e != nil {
+					return out, fmt.Errorf("некорректная сеть CIDR")
+				}
+				out.BotCIDRs = append(out.BotCIDRs, p.Masked().String())
 			case "ips.txt":
 				if a, e := netip.ParseAddr(line); e == nil {
 					out.IPs = append(out.IPs, a.Unmap().String())

@@ -225,7 +225,13 @@ func postThreatFeedUpload(w http.ResponseWriter, r *http.Request, db *sql.DB, st
 			writeJSON(w, 500, map[string]string{"error": "данные сохранены; не удалось уведомить шлюз"})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "rows_ingested": count, "ip_count": len(bundle.IPs), "hash_count": len(bundle.Hashes), "domain_count": len(bundle.Domains), "url_count": len(bundle.URLs), "clamav_files": len(bundle.ClamAV)})
+		if bundle.HasBotLists {
+			if err = state.Publish(r.Context(), "bot_protection_updated", `{"source":"offline_bundle"}`).Err(); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "списки сохранены; не удалось уведомить защиту от ботов"})
+				return
+			}
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "rows_ingested": count, "ip_count": len(bundle.IPs), "hash_count": len(bundle.Hashes), "domain_count": len(bundle.Domains), "url_count": len(bundle.URLs), "clamav_files": len(bundle.ClamAV), "asn_count": len(bundle.ASNs), "bot_cidr_count": len(bundle.BotCIDRs)})
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(fh, threatFeedMaxPageBytes+1))
@@ -274,6 +280,12 @@ func postThreatFeedSync(w http.ResponseWriter, r *http.Request, db *sql.DB, stat
 		if err := state.Publish(r.Context(), "threat_feed_updated", `{"singleton":"global"}`).Err(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
+		}
+		if cfg.UsesFessFeed() {
+			if err := state.Publish(r.Context(), "bot_protection_updated", `{"source":"feed_subscription"}`).Err(); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "не удалось обновить защиту от ботов"})
+				return
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	case errThreatFeedMissingURL:

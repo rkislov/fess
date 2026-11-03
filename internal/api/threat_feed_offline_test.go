@@ -19,12 +19,12 @@ func TestOfflineImportReplacesAllCategoriesAndRollbackPreservesSnapshot(t *testi
 	if e = db.ApplyMigrations(ctx, d); e != nil {
 		t.Fatal(e)
 	}
-	b := threatfeed.OfflineBundle{IPs: []string{"185.220.101.1"}, Hashes: []string{"da39a3ee5e6b4b0d3255bfef95601890afd80709"}, Domains: []string{"malware-host.xyz"}, URLs: []string{"https://malware-host.xyz/Case?Token=AbC#/Login"}}
+	b := threatfeed.OfflineBundle{HasBotLists: true, ASNs: []uint{12345}, BotCIDRs: []string{"185.220.101.0/24"}, IPs: []string{"185.220.101.1"}, Hashes: []string{"da39a3ee5e6b4b0d3255bfef95601890afd80709"}, Domains: []string{"malware-host.xyz"}, URLs: []string{"https://malware-host.xyz/Case?Token=AbC#/Login"}}
 	n, e := replaceOfflineData(ctx, d, b, time.Now())
 	if e != nil || n != 4 {
 		t.Fatalf("import: %d %v", n, e)
 	}
-	for _, table := range []string{"threat_feed_indicators", "threat_feed_file_hashes", "threat_feed_web_iocs"} {
+	for _, table := range []string{"threat_feed_indicators", "threat_feed_file_hashes", "threat_feed_web_iocs", "bot_protection_asn", "bot_protection_cidr"} {
 		var count int
 		if e = d.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); e != nil || count == 0 {
 			t.Fatalf("missing %s: %v", table, e)

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"testing"
 )
 
@@ -56,5 +57,45 @@ func TestSHA1BodyMatching(t *testing.T) {
 	s := NewHashSet([]string{hash})
 	if h, ok := s.MatchBody(body); !ok || h != hash {
 		t.Fatal("SHA1 did not match")
+	}
+}
+
+func TestOfflineBotListsMustBeCompleteAndVerified(t *testing.T) {
+	base := testOfflineZip(t, false)
+	z, _ := zip.NewReader(bytes.NewReader(base), int64(len(base)))
+	files := map[string][]byte{}
+	for _, f := range z.File {
+		r, _ := f.Open()
+		files[f.Name], _ = io.ReadAll(r)
+		r.Close()
+	}
+	var m OfflineManifest
+	json.Unmarshal(files["manifest.json"], &m)
+	for name, body := range map[string]string{"asns.txt": "12345\n", "bot-cidrs.txt": "185.220.101.0/24\n"} {
+		files[name] = []byte(body)
+		sum := sha256.Sum256([]byte(body))
+		m.Files[name] = OfflineFile{hex.EncodeToString(sum[:]), int64(len(body)), 1}
+	}
+	encode := func() []byte {
+		raw, _ := json.Marshal(m)
+		files["manifest.json"] = raw
+		var b bytes.Buffer
+		w := zip.NewWriter(&b)
+		for name, body := range files {
+			f, _ := w.Create(name)
+			f.Write(body)
+		}
+		w.Close()
+		return b.Bytes()
+	}
+	raw := encode()
+	b, e := ParseOffline(bytes.NewReader(raw), int64(len(raw)))
+	if e != nil || !b.HasBotLists || len(b.ASNs) != 1 || b.ASNs[0] != 12345 || len(b.BotCIDRs) != 1 {
+		t.Fatalf("lost bot lists: %+v %v", b, e)
+	}
+	delete(m.Files, "bot-cidrs.txt")
+	raw = encode()
+	if _, e = ParseOffline(bytes.NewReader(raw), int64(len(raw))); e == nil {
+		t.Fatal("accepted partial bot lists")
 	}
 }
