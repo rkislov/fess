@@ -74,6 +74,38 @@ func replaceOfflineData(ctx context.Context, db *sql.DB, b threatfeed.OfflineBun
 	if err = insert("INSERT INTO threat_feed_web_iocs(id,indicator_type,value) VALUES($1,$2,$3)", rows); err != nil {
 		return 0, err
 	}
+	if b.HasBotLists {
+		for _, table := range []string{"bot_protection_asn", "bot_protection_cidr"} {
+			if _, err = tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+				return 0, err
+			}
+		}
+		asns := map[uint]bool{}
+		botRows := [][]any{}
+		for _, asn := range b.ASNs {
+			if !asns[asn] {
+				botRows = append(botRows, []any{asn})
+				asns[asn] = true
+			}
+		}
+		if err = insert("INSERT INTO bot_protection_asn(asn) VALUES($1)", botRows); err != nil {
+			return 0, err
+		}
+		seen := map[string]bool{}
+		botRows = nil
+		for _, cidr := range b.BotCIDRs {
+			if !seen[cidr] {
+				botRows = append(botRows, []any{cidr})
+				seen[cidr] = true
+			}
+		}
+		if err = insert("INSERT INTO bot_protection_cidr(cidr) VALUES($1)", botRows); err != nil {
+			return 0, err
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE bot_protection_sync_state SET last_attempt_at=$1,last_success_at=$1,last_error='',asn_rows=$2,cidr_rows=$3 WHERE singleton='global'`, now, len(asns), len(seen)); err != nil {
+			return 0, err
+		}
+	}
 	// Stage all CVDs before replacing any file; keep old files for rollback until
 	// the IOC transaction commits. No paths from ZIP entries are used directly.
 	finish, err := stageOfflineClamAV(b.ClamAV)

@@ -196,6 +196,7 @@
 
             <!-- lists -->
             <template v-else-if="tile.id === 'lists'">
+              <p class="mb-3 text-xs text-slate-400">Списки Spamhaus ASN-DROP и DROP IPv4/IPv6 поступают автоматически по подписке FESS Feed или из офлайн ZIP в разделе IOC. Также можно загрузить собственный TXT.</p>
               <label class="flex items-center gap-2 text-sm text-slate-300">
                 <input v-model="cfg.asn_block.enabled" type="checkbox" class="rounded border-slate-600" />
                 Блок по ASN

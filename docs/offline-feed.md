@@ -2,7 +2,7 @@
 
 По подписке в кабинете https://feed.kislovs.ru/cabinet доступны два ZIP:
 
-- IOC: IP/CIDR, MD5, SHA-1, SHA-256, домены, URL.
+- IOC: IP/CIDR, MD5, SHA-1, SHA-256, домены, URL и Spamhaus ASN/CIDR.
 - IOC + ClamAV: те же IOC и main.cvd, daily.cvd, bytecode.cvd.
 
 В FESS откройте IOC → «Ручная загрузка TXT / ZIP» и выберите архив целиком.
@@ -51,3 +51,15 @@ cvd.kislovs.ru. Онлайн-обновление ClamAV выполняет fres
 от подписки и расписания IOC.
 
 Панель установленного сервиса: https://fess.kislovs.ru (обычная авторизация FESS).
+
+## Spamhaus ASN/CIDR
+
+Feed обновляет официальный ASN-DROP и DROP IPv4/IPv6. В архив входят
+`asns.txt` и `bot-cidrs.txt`. При импорте FESS заменяет соответствующие
+списки защиты от ботов в той же транзакции, что и IOC, обновляет статистику
+и уведомляет работающий шлюз. При использовании подписки это происходит
+автоматически; ручные ASN/CIDR-файлы при следующей синхронизации заменяются
+списками подписки. Настройки включения блокировки ASN/CIDR сохраняются.
+Старый архив без обоих файлов не очищает существующие ручные списки.
+Подписные TXT: `/feeds/v1/asns.txt` и `/feeds/v1/bot-cidrs.txt`.
+Источник: https://www.spamhaus.org/blocklists/do-not-route-or-peer/.

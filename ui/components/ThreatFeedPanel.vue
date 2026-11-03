@@ -66,7 +66,7 @@
     <section v-if="providerMode === 'fess_feed'" class="rounded-2xl border border-teal-900/40 bg-slate-900/50 p-5 sm:p-6">
       <h2 class="text-base font-semibold text-white">FESS Feed</h2>
       <p class="mt-1.5 text-sm text-slate-400">
-        Все IOC из включённых источников: IP/CIDR, хэши, домены и URL. Ключ берётся в кабинете на feed.kislovs.ru и вставляется ниже. С сохранённым ключом подписки обновление работает и при отключённой проверке IOC. ClamAV обновляется отдельно через cvd.kislovs.ru без подписки.
+        Все IOC из включённых источников: IP/CIDR, хэши, домены, URL и списки ASN/CIDR Spamhaus. Ключ берётся в кабинете на feed.kislovs.ru и вставляется ниже. С сохранённым ключом подписки обновление работает и при отключённой проверке IOC. ClamAV обновляется отдельно через cvd.kislovs.ru без подписки.
       </p>
       <div class="mt-3 flex flex-wrap gap-2">
         <a
@@ -242,7 +242,7 @@
     <!-- Manual upload -->
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-5 sm:p-6">
       <h2 class="text-base font-semibold text-white">Ручная загрузка TXT / ZIP</h2>
-      <p class="mt-1 text-sm text-slate-400">TXT: один IP/CIDR на строку. ZIP Security Feed: все IP/CIDR, хэши, домены и URL; полный архив также обновляет ClamAV. Списки заменяются после проверки контрольных сумм.</p>
+      <p class="mt-1 text-sm text-slate-400">TXT: один IP/CIDR на строку. ZIP Security Feed: все IP/CIDR, хэши, домены, URL и списки ASN/CIDR; полный архив также обновляет ClamAV. Списки заменяются после проверки контрольных сумм.</p>
       <motion.div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label class="block min-w-0 flex-1 text-sm text-slate-400">
           Файл
