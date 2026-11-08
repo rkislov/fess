@@ -93,8 +93,17 @@ func TestWAFCatalogMatchesOnlyImportedRevision(t *testing.T) {
 	meta := wafMeta{ID: p.ID, Version: p.Version, SHA: wafpack.Digest(raw), PolicyID: "untrusted-feed-value"}
 	var revised atomic.Bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/feeds/v1/waf/catalog.json" || r.Header.Get("X-Api-Key") != "test-key" {
-			t.Error("unexpected feed request", r.URL.Path)
+		if r.Header.Get("X-Api-Key") != "test-key" || !strings.HasPrefix(r.UserAgent(), "FESS-WAF-Feed/") {
+			http.Error(w, "unrecognized feed client", http.StatusForbidden)
+			return
+		}
+		if r.URL.Path == "/feeds/v1/waf/packs/"+p.ID+"/"+p.Version+".json" {
+			w.Write(raw)
+			return
+		}
+		if r.URL.Path != "/feeds/v1/waf/catalog.json" {
+			http.NotFound(w, r)
+			return
 		}
 		entry := meta
 		if revised.Load() {
@@ -117,17 +126,22 @@ func TestWAFCatalogMatchesOnlyImportedRevision(t *testing.T) {
 		}
 	}
 	checkPolicy("")
-	ids, err := importWAFPacks(ctx, d, [][]byte{raw})
-	if err != nil {
-		t.Fatal(err)
+	body, _ := json.Marshal(meta)
+	imported := httptest.NewRecorder()
+	wafFeedHandler(imported, httptest.NewRequest("POST", "/api/v1/waf-feed/import", strings.NewReader(string(body))), d)
+	var response struct {
+		IDs []string `json:"policy_ids"`
 	}
+	if imported.Code != http.StatusCreated || json.Unmarshal(imported.Body.Bytes(), &response) != nil || len(response.IDs) != 1 {
+		t.Fatalf("import failed: %d %s", imported.Code, imported.Body.String())
+	}
+	ids := response.IDs
 	if _, err := d.Exec("UPDATE policies SET name='renamed' WHERE id=$1::uuid", ids[0]); err != nil {
 		t.Fatal(err)
 	}
 	checkPolicy(ids[0])
 	revised.Store(true)
 	checkPolicy("")
-	body, _ := json.Marshal(meta)
 	w := httptest.NewRecorder()
 	wafFeedHandler(w, httptest.NewRequest("POST", "/api/v1/waf-feed/import", strings.NewReader(string(body))), d)
 	if w.Code != http.StatusConflict {
