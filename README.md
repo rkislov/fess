@@ -23,7 +23,7 @@ ClamAV и freshclam устанавливаются пакетным менедж
 Скачайте установщик и запустите его на сервере. Нужны Python 3.8 или новее и `curl`. Команда одинакова для установки и обновления:
 
 ```sh
-curl -fsSLo install-linux.py https://raw.githubusercontent.com/rkislov/fess/main/scripts/install-linux.py && python3 install-linux.py
+curl --retry 3 -fsSLo install-linux.py https://raw.githubusercontent.com/rkislov/fess/main/scripts/install-linux.py && python3 install-linux.py
 ```
 
 Установщик определяет архитектуру пользовательской среды, скачивает `fess` и `fess-xdp` из [GitHub Releases](https://github.com/rkislov/fess/releases) и сверяет SHA-256. По умолчанию выбирается последний релиз. Для определённой версии выполните, например, `python3 install-linux.py 2.2.8`.
