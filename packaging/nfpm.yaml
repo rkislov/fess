@@ -12,7 +12,6 @@ overrides:
   deb:
     depends: [ca-certificates, clamav-daemon, clamav-freshclam, passwd]
   rpm:
-    arch: ${FESS_RPM_ARCH}
     depends: [ca-certificates, clamav-server, clamav-update, shadow-utils]
 contents:
   - src: ../dist/fess-linux-${FESS_ARCH}

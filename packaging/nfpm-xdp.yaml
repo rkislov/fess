@@ -12,7 +12,6 @@ overrides:
   deb:
     depends: [iproute2, passwd]
   rpm:
-    arch: ${FESS_RPM_ARCH}
     depends: [iproute, shadow-utils]
 contents:
   - src: ../dist/fess-xdp-linux-${FESS_ARCH}
