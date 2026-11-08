@@ -1,0 +1,251 @@
+{
+  "format": "security-feed-waf-v1",
+  "engine": "fess-native-v1",
+  "pack_id": "bitrix-baseline",
+  "version": "1.0.0",
+  "title": "1С-Битрикс — базовый профиль",
+  "application": "bitrix",
+  "description": "Защита конфигурации, резервных копий и PHP-файлов в upload. Обмен с 1С, REST и административные AJAX-запросы не запрещаются целиком.",
+  "license": "Apache-2.0",
+  "author": "Security Feed / Роман Сергеевич Кислов",
+  "recommended_mode": "log",
+  "deployment": "root",
+  "coverage": "path-hardening",
+  "limitations": [
+    "Базовый профиль путей и методов; не является полным OWASP CRS или набором всех CVE-патчей.",
+    "Рассчитан на приложение в корне отдельного домена. Для установки в подкаталог нужна адаптация условий.",
+    "Перед блокировкой проверьте журнал на рабочем трафике."
+  ],
+  "references": [
+    "https://docs.1c-bitrix.ru/pages/security/proactive-security.html"
+  ],
+  "rules": [
+    {
+      "id": "SF-GEN-001",
+      "name": "Закрыть метаданные системы контроля версий",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1000,
+      "condition": {
+        "path_regex": "(?i)^/(?:\\.git|\\.svn|\\.hg)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-002",
+      "name": "Закрыть корневые файлы окружения",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1001,
+      "condition": {
+        "path_regex": "(?i)^/\\.env(?:$|[./_-])"
+      }
+    },
+    {
+      "id": "SF-GEN-003",
+      "name": "Закрыть зависимости и их lock-файлы",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1002,
+      "condition": {
+        "path_regex": "(?i)^/(?:composer\\.(?:json|lock)|package(?:-lock)?\\.json|yarn\\.lock|pnpm-lock\\.yaml)(?:$|/)"
+      }
+    },
+    {
+      "id": "SF-GEN-004",
+      "name": "Закрыть приватные ключи в корне сайта",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1003,
+      "condition": {
+        "path_regex": "(?i)^/(?:id_(?:rsa|dsa|ecdsa|ed25519)|\\.ssh)(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-GEN-005",
+      "name": "Обнаружить переход к родительскому каталогу",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1004,
+      "condition": {
+        "path_regex": "(?i)(?:^|/)(?:\\.|%2e){2}(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-BX-001",
+      "name": "Закрыть конфигурацию Bitrix",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1005,
+      "condition": {
+        "path_regex": "(?i)^/bitrix/(?:\\.settings(?:_extra)?\\.php|php_interface/(?:dbconn|after_connect(?:_d7)?)\\.php)(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-BX-002",
+      "name": "Закрыть прямой доступ к резервным копиям Bitrix",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1006,
+      "condition": {
+        "path_regex": "(?i)^/bitrix/backup(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-BX-003",
+      "name": "Закрыть исполняемые PHP-файлы в upload",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1007,
+      "condition": {
+        "path_regex": "(?i)^/upload/.*\\.(?:php[0-9]?|phtml|phar)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-BX-004",
+      "name": "Закрыть Apache-конфигурацию в upload",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1008,
+      "condition": {
+        "path_regex": "(?i)^/upload/(?:[^/]+/)*\\.(?:htaccess|htpasswd|user\\.ini)(?:$|/)"
+      }
+    },
+    {
+      "id": "SF-GEN-006",
+      "name": "Закрыть HTTP TRACE",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1109,
+      "condition": {
+        "method": "TRACE"
+      }
+    },
+    {
+      "id": "SF-GEN-007",
+      "name": "Закрыть HTTP TRACK",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1110,
+      "condition": {
+        "method": "TRACK"
+      }
+    }
+  ],
+  "tests": [
+    {
+      "method": "GET",
+      "path": "/.git/config",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.env.production",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/composer.lock",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.ssh/id_rsa",
+      "match": true
+    },
+    {
+      "method": "TRACE",
+      "path": "/",
+      "match": true
+    },
+    {
+      "method": "TRACK",
+      "path": "/api",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/a/../.env",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/%2eenv",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/token",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/search?q=UNION+SELECT",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/assets/app.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bitrix/.settings.php",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/bitrix/php_interface/dbconn.php",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/bitrix/backup/site.tar.gz",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/upload/iblock/a/shell.php",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/upload/1c_exchange/.htaccess",
+      "match": true
+    },
+    {
+      "method": "POST",
+      "path": "/bitrix/admin/1c_exchange.php?type=catalog&mode=import",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/bitrix/services/main/ajax.php?action=main.user.login",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bitrix/admin/index.php",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/rest/1/token/crm.lead.add.json",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/upload/iblock/a/photo.jpg",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bitrix/js/main/core/core.js",
+      "match": false
+    }
+  ]
+}

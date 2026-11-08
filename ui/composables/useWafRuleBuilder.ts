@@ -103,6 +103,7 @@ export function parseConditionJson(text: string): { blocks: ConditionBlock[]; er
   const t = text.trim() || '{}'
   try {
     const o = JSON.parse(t) as Record<string, unknown>
+    if (o && ('appsec' in o || 'exceptions' in o)) return {blocks: [], error: 'AppSec и точечные исключения редактируются через исходный JSON; конструктор их не преобразует.'}
     if (!o || typeof o !== 'object' || Array.isArray(o)) {
       return { blocks: [], error: 'condition_json должен быть объектом' }
     }
