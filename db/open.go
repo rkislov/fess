@@ -10,7 +10,6 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"modernc.org/sqlite"
 )
 
 const timeLayout = "2006-01-02 15:04:05.000000000"
@@ -56,7 +55,7 @@ func IsSQLite(d *sql.DB) bool { _, ok := d.Driver().(*sqliteDriver); return ok }
 type sqliteDriver struct{}
 
 func (*sqliteDriver) Open(name string) (driver.Conn, error) {
-	c, err := (&sqlite.Driver{}).Open(name)
+	c, err := openSQLiteConn(name)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +80,11 @@ func (c *sqliteConn) ExecContext(ctx context.Context, q string, args []driver.Na
 }
 func (c *sqliteConn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
 	normalizeArgs(args)
-	r, err := c.Conn.(driver.QueryerContext).QueryContext(ctx, sqliteQuery(q), args)
+	queryer, ok := c.Conn.(driver.QueryerContext)
+	if !ok {
+		return nil, driver.ErrSkip // database/sql will prepare the statement.
+	}
+	r, err := queryer.QueryContext(ctx, sqliteQuery(q), args)
 	if err != nil {
 		return nil, err
 	}

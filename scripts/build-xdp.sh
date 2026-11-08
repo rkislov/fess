@@ -7,4 +7,8 @@ if [ -z "${BPF_CLANG:-}" ]; then
   if [ -x "$candidate" ]; then BPF_CLANG="$candidate"; break; fi
  done
 fi
-"$BPF_CLANG" -target bpfel -mcpu=v3 -O2 -g -fdebug-prefix-map="$(pwd)"=. -Wall -Werror -c internal/xdpguard/filter.c -o internal/xdpguard/filter.o
+for endian in el eb; do
+ output=internal/xdpguard/filter.o
+ if [ "$endian" = eb ]; then output=internal/xdpguard/filter-be.o; fi
+ "$BPF_CLANG" -target "bpf$endian" -mcpu=v3 -O2 -g -fdebug-prefix-map="$(pwd)"=. -Wall -Werror -c internal/xdpguard/filter.c -o "$output"
+done
