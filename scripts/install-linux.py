@@ -19,9 +19,15 @@ VERSION = r"[0-9]+\.[0-9]+\.[0-9]+"
 
 
 def fetch(url, accept, path):
-    subprocess.run(["curl", "-fsSL", "--retry", "3", "--retry-all-errors",
-                    "--connect-timeout", "10", "--max-time", "240",
-                    "-H", "Accept: " + accept, "-o", str(path), url], check=True)
+    command = ["curl", "-fsSL", "--retry", "4", "--retry-all-errors",
+               "--connect-timeout", "10", "--max-time", "240",
+               "-H", "Accept: " + accept, "-o", str(path)]
+    headers = ""
+    if url.startswith("https://api.github.com/") and os.environ.get("GH_TOKEN"):
+        # Keep the token out of argv and any subprocess error messages.
+        headers = "Authorization: Bearer " + os.environ["GH_TOKEN"] + "\n"
+        command.extend(["-H", "@-"])
+    subprocess.run(command + [url], input=headers, text=True, check=True)
 
 
 def sha256(path):
@@ -68,7 +74,10 @@ class Release:
             raise ValueError(f"В релизе {self.version} нет {name}")
         path = self.tmp / name
         asset = self.assets[name]
-        fetch(asset["url"] + "?download=1", "application/octet-stream", path)
+        try:
+            fetch(asset["url"] + "?download=1", "application/octet-stream", path)
+        except subprocess.CalledProcessError:
+            fetch(asset["browser_download_url"], "application/octet-stream", path)
         digest = sha256(path)
         if (asset.get("digest") != "sha256:" + digest or
                 (name != "SHA256SUMS" and self.sums.get(name) != digest)):

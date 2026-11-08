@@ -60,8 +60,9 @@ jobs:
       - name: Install and start without systemd
         env:
           IMAGE: ${{ matrix.image }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          docker run --rm -v "$PWD/scripts:/scripts:ro" "$IMAGE" sh -ec '
+          docker run --rm -e GH_TOKEN -v "$PWD/scripts:/scripts:ro" "$IMAGE" sh -ec '
             if command -v apk >/dev/null; then apk add --no-cache python3 curl
             elif command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y python3 curl
             elif command -v pacman >/dev/null; then pacman -Syu --noconfirm python curl
