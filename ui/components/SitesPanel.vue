@@ -151,12 +151,13 @@
                   Сайт включён
                 </label>
                 <SitePolicySelect ref="policyPicker" v-model="wizard.policy_id" :policies="policies" :disabled="busy" @added="loadPolicies().catch(flashErr)" />
+                <UpstreamBalanceSelect v-model:mode="wizard.upstream_balance.mode" v-model:key-name="wizard.upstream_balance.key" />
               </div>
 
               <div v-show="wizardStep === 2" class="space-y-3">
                 <h3 class="text-sm font-medium text-slate-300">Бэкенд (upstream)</h3>
                 <p class="text-xs text-slate-500">
-                  Шлюз отправляет трафик на первый включённый бэкенд с наименьшим приоритетом.
+                  Добавьте первый upstream. Остальные серверы можно добавить после создания сайта.
                 </p>
                 <input
                   v-model="wizard.backend_name"
@@ -275,6 +276,7 @@
                       Включён
                     </label>
                     <SitePolicySelect ref="policyPicker" v-model="edit.policy_id" :policies="policies" :disabled="busy" @added="loadPolicies().catch(flashErr)" />
+                    <UpstreamBalanceSelect v-model:mode="edit.upstream_balance.mode" v-model:key-name="edit.upstream_balance.key" />
                     <div class="flex flex-wrap gap-2 pt-2">
                       <button type="button" class="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600" :disabled="busy" @click="saveSite">
                         Сохранить сайт
@@ -465,6 +467,7 @@ type Site = {
   priority: number
   enabled: boolean
   policy_id: string
+  upstream_balance: { mode: string; key: string }
   tls_enabled: boolean
   tls_has_certificate: boolean
 }
@@ -508,7 +511,7 @@ const selectedId = ref('')
 const selected = computed(() => sites.value.find((s) => s.id === selectedId.value) ?? null)
 const policies = ref<{ id: string; name: string }[]>([])
 const policyPicker = ref<{ resolvePolicy: () => Promise<string> } | null>(null)
-const edit = reactive({ name: '', host_pattern: '', priority: 100, enabled: true, policy_id: '' })
+const edit = reactive({ name: '', host_pattern: '', priority: 100, enabled: true, policy_id: '', upstream_balance: { mode: 'priority', key: '' } })
 const backends = ref<Backend[]>([])
 
 const wizardStep = ref(1)
@@ -518,6 +521,7 @@ const wizard = reactive({
   priority: 0,
   enabled: true,
   policy_id: '',
+  upstream_balance: { mode: 'priority', key: '' },
   backend_name: '',
   backend_url: '',
   backend_priority: 0,
@@ -595,6 +599,7 @@ function flashOk(msg: string) {
 }
 
 function normSite(raw: Record<string, unknown>): Site {
+  const balance = raw.upstream_balance as { mode?: string; key?: string } | undefined
   return {
     id: String(raw.id ?? raw.ID),
     name: String(raw.name ?? raw.Name),
@@ -602,6 +607,7 @@ function normSite(raw: Record<string, unknown>): Site {
     priority: Number(raw.priority ?? raw.Priority),
     enabled: Boolean(raw.enabled ?? raw.Enabled),
     policy_id: String(raw.policy_id ?? raw.PolicyID ?? ''),
+    upstream_balance: { mode: balance?.mode ?? 'priority', key: balance?.key ?? '' },
     tls_enabled: Boolean(raw.tls_enabled ?? raw.TLSEnabled ?? false),
     tls_has_certificate: Boolean(raw.tls_has_certificate ?? raw.TLSHasCertificate ?? false),
   }
@@ -720,6 +726,7 @@ function resetWizard() {
   wizard.priority = 0
   wizard.enabled = true
   wizard.policy_id = ''
+  wizard.upstream_balance = { mode: 'priority', key: '' }
   wizard.backend_name = ''
   wizard.backend_url = ''
   wizard.backend_priority = 0
@@ -783,6 +790,7 @@ async function finalizeWizard() {
         priority: wizard.priority || undefined,
         enabled: wizard.enabled,
         policy_id: policyId || undefined,
+        upstream_balance: wizard.upstream_balance,
       },
     })
     const siteId = siteRes.id
@@ -903,6 +911,7 @@ function applySelection(siteId: string) {
   edit.priority = s.priority
   edit.enabled = s.enabled
   edit.policy_id = s.policy_id || ''
+  edit.upstream_balance = { ...s.upstream_balance }
   loadBackends(siteId).catch(flashErr)
   loadTlsMeta(siteId).catch(flashErr)
 }
@@ -926,6 +935,7 @@ async function saveSite() {
         priority: edit.priority,
         enabled: edit.enabled,
         policy_id: policyId,
+        upstream_balance: edit.upstream_balance,
       },
     })
     await loadSites()

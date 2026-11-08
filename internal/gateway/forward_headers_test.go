@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
@@ -101,6 +102,20 @@ func TestDynamicReverseProxyPreservesPublicHost(t *testing.T) {
 	}
 	if got := req.Header.Get("Origin"); got != "https://public.example.com" {
 		t.Fatalf("Origin = %q, want preserved", got)
+	}
+}
+
+func TestProxyUsesTheRouteAlreadyCheckedByTheGateway(t *testing.T) {
+	checked, _ := url.Parse("https://checked.internal")
+	reloaded, _ := url.Parse("http://new.internal")
+	store := routing.NewStore(reloaded)
+	proxy := newDynamicReverseProxy(nil, store, clientip.ParseTrustedProxies(""))
+	req := httptest.NewRequest("GET", "http://app.test/private/resource", nil)
+	match := &routing.MatchResult{Backend: checked, MatchedPathPrefix: "/private", TLSSkipVerify: true}
+	req = req.WithContext(context.WithValue(req.Context(), selectedRouteKey{}, match))
+	proxy.Director(req)
+	if req.URL.Host != checked.Host || req.URL.Path != "/resource" || !routing.TLSSkipVerifyFromContext(req.Context()) {
+		t.Fatalf("proxy used a different route: %v", req.URL)
 	}
 }
 
