@@ -1,8 +1,6 @@
 package wafpack
 
 import (
-	"archive/zip"
-	"bytes"
 	"encoding/json"
 	"fence/pkg/engine"
 	"fence/pkg/policy"
@@ -14,7 +12,7 @@ import (
 
 func TestDistributedPacksAgainstNativeEngine(t *testing.T) {
 	files, _ := filepath.Glob("testdata/*.json")
-	if len(files) != 9 {
+	if len(files) != 11 {
 		t.Fatal(len(files))
 	}
 	for _, f := range files {
@@ -63,30 +61,6 @@ func TestRejectUnsafeConditions(t *testing.T) {
 		raw, _ := json.Marshal(p)
 		if _, e := Parse(raw); e == nil {
 			t.Fatal("accepted", c)
-		}
-	}
-}
-func TestArchiveChecksum(t *testing.T) {
-	b, _ := os.ReadFile("testdata/generic-web-1.0.0.json")
-	for _, valid := range []bool{true, false} {
-		var out bytes.Buffer
-		z := zip.NewWriter(&out)
-		sum := Digest(b)
-		if !valid {
-			sum = "bad"
-		}
-		m, _ := json.Marshal(map[string]any{"format": "security-feed-waf-catalog-v1", "packs": []any{map[string]any{"id": "generic-web", "version": "1.0.0", "sha256": sum}}})
-		w, _ := z.Create("catalog.json")
-		w.Write(m)
-		w, _ = z.Create("generic-web-1.0.0.json")
-		w.Write(b)
-		z.Close()
-		p, e := DecodeArchive(out.Bytes())
-		if valid && (e != nil || len(p) != 1) {
-			t.Fatal(e)
-		}
-		if !valid && e == nil {
-			t.Fatal("bad checksum accepted")
 		}
 	}
 }

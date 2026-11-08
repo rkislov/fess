@@ -1,0 +1,264 @@
+{
+  "format": "security-feed-waf-v1",
+  "engine": "fess-native-v1",
+  "pack_id": "bigbluebutton-baseline",
+  "version": "1.0.0",
+  "title": "BigBlueButton — HTTP-профиль",
+  "application": "bigbluebutton",
+  "description": "Базовая защита служебных файлов и приватных каталогов; HTTP API, сигнализация конференций и штатные публичные ресурсы не блокируются профилем.",
+  "license": "Apache-2.0",
+  "author": "Security Feed / Роман Сергеевич Кислов",
+  "recommended_mode": "log",
+  "deployment": "root",
+  "coverage": "path-hardening",
+  "limitations": [
+    "Базовый профиль путей и методов; не является полным OWASP CRS или набором всех CVE-патчей.",
+    "Рассчитан на приложение в корне отдельного домена. Для установки в подкаталог нужна адаптация условий.",
+    "Перед блокировкой проверьте журнал на рабочем трафике.",
+    "Не заменяет проверку checksum/shared secret в API, права на записи или защиту WebRTC, FreeSWITCH, RTP/UDP и TURN. WebSocket-кадры не анализируются.",
+    "Проверены HTTP-пути и условия; реальная конференция за WAF в этом окружении не запускалась."
+  ],
+  "references": [
+    "https://docs.bigbluebutton.org/development/api/",
+    "https://docs.bigbluebutton.org/administration/privacy/"
+  ],
+  "rules": [
+    {
+      "id": "SF-GEN-001",
+      "name": "Закрыть метаданные системы контроля версий",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1000,
+      "condition": {
+        "path_regex": "(?i)^/(?:\\.git|\\.svn|\\.hg)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-002",
+      "name": "Закрыть корневые файлы окружения",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1001,
+      "condition": {
+        "path_regex": "(?i)^/\\.env(?:$|[./_-])"
+      }
+    },
+    {
+      "id": "SF-GEN-003",
+      "name": "Закрыть зависимости и их lock-файлы",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1002,
+      "condition": {
+        "path_regex": "(?i)^/(?:composer\\.(?:json|lock)|package(?:-lock)?\\.json|yarn\\.lock|pnpm-lock\\.yaml)(?:$|/)"
+      }
+    },
+    {
+      "id": "SF-GEN-004",
+      "name": "Закрыть приватные ключи в корне сайта",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1003,
+      "condition": {
+        "path_regex": "(?i)^/(?:id_(?:rsa|dsa|ecdsa|ed25519)|\\.ssh)(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-GEN-005",
+      "name": "Обнаружить переход к родительскому каталогу",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1004,
+      "condition": {
+        "path_regex": "(?i)(?:^|/)(?:\\.|%2e){2}(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-006",
+      "name": "Закрыть HTTP TRACE",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1105,
+      "condition": {
+        "method": "TRACE"
+      }
+    },
+    {
+      "id": "SF-GEN-007",
+      "name": "Закрыть HTTP TRACK",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1106,
+      "condition": {
+        "method": "TRACK"
+      }
+    },
+    {
+      "id": "SF-BBB-001",
+      "name": "Закрыть конфигурацию BBB и серверный shared secret",
+      "category": "conference-hardening",
+      "action": "block",
+      "priority": 1207,
+      "condition": {
+        "path_regex": "(?i)^/(?:(?:bbb-web\\.properties|bigbluebutton\\.properties|bigbluebutton\\.ya?ml)(?:$|[./_-])|etc/bigbluebutton(?:/|$)|usr/local/bigbluebutton/core/scripts/bigbluebutton\\.ya?ml(?:$|[./_-]))"
+      }
+    },
+    {
+      "id": "SF-BBB-002",
+      "name": "Закрыть внутренности Java-приложения BBB",
+      "category": "conference-hardening",
+      "action": "block",
+      "priority": 1208,
+      "condition": {
+        "path_regex": "(?i)^/(?:bigbluebutton/)?(?:WEB-INF|META-INF)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-BBB-003",
+      "name": "Закрыть прямой доступ к сырым записям BBB на диске",
+      "category": "conference-hardening",
+      "action": "block",
+      "priority": 1209,
+      "condition": {
+        "path_regex": "(?i)^/var/bigbluebutton/recording/(?:raw|process|status)(?:/|$)"
+      }
+    }
+  ],
+  "tests": [
+    {
+      "method": "GET",
+      "path": "/.git/config",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.env.production",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/composer.lock",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.ssh/id_rsa",
+      "match": true
+    },
+    {
+      "method": "TRACE",
+      "path": "/",
+      "match": true
+    },
+    {
+      "method": "TRACK",
+      "path": "/api",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/a/../.env",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/%2eenv",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/token",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/search?q=UNION+SELECT",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/assets/app.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bbb-web.properties",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/etc/bigbluebutton/bbb-web.properties",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/bigbluebutton/WEB-INF/web.xml",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/var/bigbluebutton/recording/raw/private-id/events.xml",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/bigbluebutton/api",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bigbluebutton/api/join?meetingID=demo&checksum=abc",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/bigbluebutton/api/create",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/html5client/join?sessionToken=AbC",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/graphql?sessionToken=AbC",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/bbb-webrtc-sfu?sessionToken=AbC",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/websocket",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/bigbluebutton/presentation/upload",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/presentation/meeting/document.pdf",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/playback/presentation/2.3/meeting-id",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/recordings/meeting-id/video.webm",
+      "match": false
+    }
+  ]
+}

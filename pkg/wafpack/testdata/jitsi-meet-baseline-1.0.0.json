@@ -1,0 +1,244 @@
+{
+  "format": "security-feed-waf-v1",
+  "engine": "fess-native-v1",
+  "pack_id": "jitsi-meet-baseline",
+  "version": "1.0.0",
+  "title": "Jitsi Meet — HTTP-профиль",
+  "application": "jitsi-meet",
+  "description": "Базовая защита служебных файлов и приватных каталогов; HTTP API, сигнализация конференций и штатные публичные ресурсы не блокируются профилем.",
+  "license": "Apache-2.0",
+  "author": "Security Feed / Роман Сергеевич Кислов",
+  "recommended_mode": "log",
+  "deployment": "root",
+  "coverage": "path-hardening",
+  "limitations": [
+    "Базовый профиль путей и методов; не является полным OWASP CRS или набором всех CVE-патчей.",
+    "Рассчитан на приложение в корне отдельного домена. Для установки в подкаталог нужна адаптация условий.",
+    "Перед блокировкой проверьте журнал на рабочем трафике.",
+    "Не проверяет JWT, XMPP-содержимое и WebSocket-кадры. WebRTC, RTP/UDP и TURN требуют отдельной сетевой защиты.",
+    "Проверены HTTP-пути и условия; реальная конференция за WAF в этом окружении не запускалась."
+  ],
+  "references": [
+    "https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker/",
+    "https://github.com/jitsi/jitsi-meet/blob/master/doc/debian/jitsi-meet/jitsi-meet.example-apache"
+  ],
+  "rules": [
+    {
+      "id": "SF-GEN-001",
+      "name": "Закрыть метаданные системы контроля версий",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1000,
+      "condition": {
+        "path_regex": "(?i)^/(?:\\.git|\\.svn|\\.hg)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-002",
+      "name": "Закрыть корневые файлы окружения",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1001,
+      "condition": {
+        "path_regex": "(?i)^/\\.env(?:$|[./_-])"
+      }
+    },
+    {
+      "id": "SF-GEN-003",
+      "name": "Закрыть зависимости и их lock-файлы",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1002,
+      "condition": {
+        "path_regex": "(?i)^/(?:composer\\.(?:json|lock)|package(?:-lock)?\\.json|yarn\\.lock|pnpm-lock\\.yaml)(?:$|/)"
+      }
+    },
+    {
+      "id": "SF-GEN-004",
+      "name": "Закрыть приватные ключи в корне сайта",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1003,
+      "condition": {
+        "path_regex": "(?i)^/(?:id_(?:rsa|dsa|ecdsa|ed25519)|\\.ssh)(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-GEN-005",
+      "name": "Обнаружить переход к родительскому каталогу",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1004,
+      "condition": {
+        "path_regex": "(?i)(?:^|/)(?:\\.|%2e){2}(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-006",
+      "name": "Закрыть HTTP TRACE",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1105,
+      "condition": {
+        "method": "TRACE"
+      }
+    },
+    {
+      "id": "SF-GEN-007",
+      "name": "Закрыть HTTP TRACK",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1106,
+      "condition": {
+        "method": "TRACK"
+      }
+    },
+    {
+      "id": "SF-JIT-001",
+      "name": "Закрыть конфигурацию компонентов Jitsi",
+      "category": "conference-hardening",
+      "action": "block",
+      "priority": 1207,
+      "condition": {
+        "path_regex": "(?i)^/(?:jicofo\\.conf|jvb\\.conf|sip-communicator\\.properties|prosody\\.cfg\\.lua)(?:$|[./_-])"
+      }
+    },
+    {
+      "id": "SF-JIT-002",
+      "name": "Закрыть системные каталоги конфигурации и XMPP-хранилища",
+      "category": "conference-hardening",
+      "action": "block",
+      "priority": 1208,
+      "condition": {
+        "path_regex": "(?i)^/(?:etc/(?:jitsi|prosody)|var/lib/prosody)(?:/|$)"
+      }
+    }
+  ],
+  "tests": [
+    {
+      "method": "GET",
+      "path": "/.git/config",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.env.production",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/composer.lock",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.ssh/id_rsa",
+      "match": true
+    },
+    {
+      "method": "TRACE",
+      "path": "/",
+      "match": true
+    },
+    {
+      "method": "TRACK",
+      "path": "/api",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/a/../.env",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/%2eenv",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/token",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/search?q=UNION+SELECT",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/assets/app.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/jicofo.conf",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/sip-communicator.properties.bak",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/etc/jitsi/videobridge/jvb.conf",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/var/lib/prosody/secret",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/config.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/interface_config.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/external_api.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/team-meeting",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/xmpp-websocket?room=Team",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/http-bind?room=Team",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/colibri-ws/default-id/meeting/endpoint?pwd=abc",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/socket.io/?EIO=4&transport=websocket",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/token",
+      "match": false
+    }
+  ]
+}

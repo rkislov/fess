@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fence/pkg/appsecadapt"
 	"fence/pkg/auth"
 	"fence/pkg/policy"
 	"fence/pkg/wafpack"
@@ -120,6 +119,12 @@ func importWAFPacks(ctx context.Context, db *sql.DB, raws [][]byte) ([]string, e
 }
 func wafFeedHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	fail := func(status int, e error) { writeJSON(w, status, map[string]string{"error": e.Error()}) }
+	if strings.HasPrefix(r.URL.Path, "/api/v1/waf-feed/adaptation/") {
+		if _, err := loadWAFCatalog(r.Context(), db); err != nil {
+			fail(http.StatusForbidden, fmt.Errorf("адаптация доступна по действующей подписке Feed: %w", err))
+			return
+		}
+	}
 	switch r.URL.Path {
 	case "/api/v1/waf-feed/catalog":
 		if r.Method != http.MethodGet {
@@ -188,45 +193,6 @@ func wafFeedHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			return
 		}
 		writeJSON(w, 201, map[string]any{"policy_ids": ids, "enabled": false, "mode": "log", "published": false})
-	case "/api/v1/waf-feed/offline":
-		if r.Method != http.MethodPost {
-			w.WriteHeader(405)
-			return
-		}
-		b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20))
-		if e != nil {
-			fail(400, e)
-			return
-		}
-		raws, e := wafpack.DecodeArchive(b)
-		if e != nil {
-			fail(400, e)
-			return
-		}
-		ids, e := importWAFPacks(r.Context(), db, raws)
-		if e != nil {
-			fail(400, e)
-			return
-		}
-		writeJSON(w, 201, map[string]any{"policy_ids": ids, "enabled": false, "mode": "log", "published": false})
-	case "/api/v1/waf-feed/crowdsec/preview":
-		if r.Method != http.MethodPost {
-			w.WriteHeader(405)
-			return
-		}
-		b, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-		if e != nil {
-			fail(400, e)
-			return
-		}
-		report := appsecadapt.Adapt(b)
-		out := map[string]any{"report": report}
-		if report.Supported {
-			cond, _ := json.Marshal(map[string]any{"appsec": report.Expression})
-			p := wafpack.Pack{Format: "security-feed-waf-v1", Engine: "fess-native-v2", ID: "crowdsec-" + report.SHA256[:16], Version: "1.0.0", Title: report.Name, License: "MIT (CrowdSec Hub; verify source license)", Rules: []wafpack.Rule{{ID: "CS-" + report.SHA256[:16], Name: report.Name, Action: "block", Priority: 50, Condition: cond}}}
-			out["pack"] = p
-		}
-		writeJSON(w, 200, out)
 	case "/api/v1/waf-feed/adaptation/hits":
 		if r.Method != http.MethodGet {
 			w.WriteHeader(405)

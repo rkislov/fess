@@ -13,7 +13,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/darwin/docs" "$stage/source"
 cp LICENSE NOTICE README.md "$stage/darwin/"
-cp docs/admin-guide.md docs/openapi.yaml "$stage/darwin/docs/"
+cp docs/admin-guide.md docs/waf-feed.md docs/openapi.yaml "$stage/darwin/docs/"
 for arch in amd64 arm64; do
  CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.version=$FESS_VERSION" -o "$stage/darwin/fess" ./cmd/fess
  tar -czf "$release_dir/fess_${FESS_VERSION}_darwin_$arch.tar.gz" -C "$stage/darwin" .

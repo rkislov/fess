@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fence/db"
 	"fence/pkg/wafpack"
-	"net/http/httptest"
+
 	"os"
 	"path/filepath"
+
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestWAFImportDisabledIdempotentAndInvalidBatchAtomic(t *testing.T) {
@@ -57,28 +59,46 @@ func TestWAFImportDisabledIdempotentAndInvalidBatchAtomic(t *testing.T) {
 	if n != 1 {
 		t.Fatal("partial import")
 	}
-	var rid string
-	d.QueryRow("SELECT id FROM rules LIMIT 1").Scan(&rid)
-	_, e = d.Exec(`INSERT INTO waf_logs(request_id,policy_id,rule_id,action,method,path,host,created_at) VALUES('test',$1::uuid,$2::uuid,'log','GET','/probe','example.com',$3)`, ids[0], rid, time.Now().UTC())
+}
+
+func TestFileImportEndpointsAreAbsent(t *testing.T) {
+	for _, path := range []string{"/api/v1/waf-feed/offline", "/api/v1/waf-feed/crowdsec/preview"} {
+		w := httptest.NewRecorder()
+		wafFeedHandler(w, httptest.NewRequest("POST", path, strings.NewReader("ignored")), nil)
+		if w.Code != 404 {
+			t.Fatal(path, w.Code)
+		}
+	}
+}
+func TestAdaptationRequiresActiveFeedSubscription(t *testing.T) {
+	ctx := context.Background()
+	d, e := db.Open(ctx, "sqlite", filepath.Join(t.TempDir(), "fess.db"))
 	if e != nil {
 		t.Fatal(e)
 	}
+	defer d.Close()
+	if e = db.ApplyMigrations(ctx, d); e != nil {
+		t.Fatal(e)
+	}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/api/v1/waf-feed/adaptation/hits?policy_id="+ids[0], nil)
-	wafFeedHandler(w, r, d)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "example.com") {
+	wafFeedHandler(w, httptest.NewRequest("GET", "/api/v1/waf-feed/adaptation/hits", nil), d)
+	if w.Code != 403 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	body := `{"rule_id":"` + rid + `","confirmed":true,"exception":{"host":"example.com","path":"/probe","method":"GET"}}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Api-Key") != "subscription-key" {
+			t.Error("missing subscription key")
+		}
+		w.WriteHeader(403)
+	}))
+	defer upstream.Close()
+	cfg, _ := json.Marshal(map[string]any{"api_key": "subscription-key", "fess_feed_base_url": upstream.URL})
+	if _, e = d.Exec("UPDATE threat_feed_settings SET config=$1::jsonb WHERE singleton='global'", string(cfg)); e != nil {
+		t.Fatal(e)
+	}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("POST", "/api/v1/waf-feed/adaptation/exception", strings.NewReader(body))
-	wafFeedHandler(w, r, d)
-	if w.Code != 200 {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	var cond string
-	d.QueryRow("SELECT condition_json FROM rules WHERE id=$1::uuid", rid).Scan(&cond)
-	if !strings.Contains(cond, "exceptions") {
-		t.Fatal(cond)
+	wafFeedHandler(w, httptest.NewRequest("POST", "/api/v1/waf-feed/adaptation/exception", strings.NewReader(`{}`)), d)
+	if w.Code != 403 {
+		t.Fatal("expired subscription accepted", w.Code, w.Body.String())
 	}
 }

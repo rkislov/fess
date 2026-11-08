@@ -22,7 +22,7 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/fess/docs" "$stage/xdp"
 cp "dist/fess-linux-$target" "$stage/fess/fess"
 cp LICENSE NOTICE README.md "$stage/fess/"
-cp docs/admin-guide.md docs/openapi.yaml "$stage/fess/docs/"
+cp docs/admin-guide.md docs/waf-feed.md docs/openapi.yaml "$stage/fess/docs/"
 tar -czf "$out/fess_${FESS_VERSION}_linux_$target.tar.gz" -C "$stage/fess" .
 cp "dist/fess-xdp-linux-$target" "$stage/xdp/fess-xdp"
 cp LICENSE NOTICE packaging/xdp.json.example packaging/systemd/fess-xdp*.service "$stage/xdp/"
