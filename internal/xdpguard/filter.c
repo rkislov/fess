@@ -21,11 +21,14 @@ struct prefix4 {u32 bits; u8 addr[4];};
 struct prefix6 {u32 bits; u8 addr[16];};
 struct source {u32 family; u8 addr[16];};
 // Keep field order synchronized with limits in runner_linux.go.
+struct port_limits {u32 pps,packet_burst,bps,byte_burst,syns,syn_burst;};
+struct echo_limits {u32 pps,burst,ip_pps,ip_burst;};
 struct limits {
  u32 packets_per_sec, syns_per_sec, drop_fragments;
- u32 global_pps, global_packet_burst, global_bps, global_byte_burst, global_syns, global_syn_burst;
- u32 icmp_pps, icmp_burst, icmp_ip_pps, icmp_ip_burst;
+ struct port_limits global;
+ struct echo_limits echo;
  u32 invalid_lengths, invalid_flags, temporary_blocks;
+ struct port_limits trial_global; struct echo_limits trial_echo;
 };
 struct budget {u64 packets;u64 syns;};
 struct bucket {u64 at;u64 credit;};
@@ -36,10 +39,11 @@ TRIE(allow4,struct prefix4); TRIE(allow6,struct prefix6);
 struct {__uint(type,1);__uint(max_entries,4096);__type(key,u32);__type(value,u32);} ports SEC(".maps");
 struct {__uint(type,2);__uint(max_entries,1);__type(key,u32);__type(value,struct limits);} config SEC(".maps");
 struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,struct budget);} rates SEC(".maps");
-struct {__uint(type,2);__uint(max_entries,2);__type(key,u32);__type(value,struct token_budget);} shared_budgets SEC(".maps");
+struct {__uint(type,2);__uint(max_entries,4);__type(key,u32);__type(value,struct token_budget);} shared_budgets SEC(".maps");
 struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,u64);} echo_rates SEC(".maps");
+struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,u64);} trial_echo_rates SEC(".maps");
 struct {__uint(type,9);__uint(max_entries,65536);__type(key,struct source);__type(value,u64);} temporary_bans SEC(".maps");
-struct {__uint(type,6);__uint(max_entries,15);__type(key,u32);__type(value,u64);} counters SEC(".maps");
+struct {__uint(type,6);__uint(max_entries,17);__type(key,u32);__type(value,u64);} counters SEC(".maps");
 INLINE void add_count(u32 key,u64 amount){u64 *v=lookup(&counters,&key);if(v)(*v)+=amount;}
 INLINE void count(u32 key){add_count(key,1);}
 INLINE int passed(void){count(1);return PASS;}
@@ -66,13 +70,13 @@ INLINE int token(struct bucket *b,u64 now,u32 rate,u32 burst,u32 cost){
  if(b->credit<need)return 0;
  b->credit-=need;return 1;
 }
-INLINE int global_budget(struct limits *cfg,u32 length,u32 syn,u64 now){
- if(!cfg->global_pps&&!cfg->global_bps&&!cfg->global_syns)return 1;
- u32 key=0;struct token_budget *b=lookup(&shared_budgets,&key);if(!b)return 0;
+INLINE int global_budget(struct port_limits *cfg,u32 length,u32 syn,u64 now,u32 key){
+ if(!cfg->pps&&!cfg->bps&&!cfg->syns)return 1;
+ struct token_budget *b=lookup(&shared_budgets,&key);if(!b)return 0;
  spin_lock(&b->lock);
- int ok=token(&b->packets,now,cfg->global_pps,cfg->global_packet_burst,1);
- ok &= token(&b->bytes,now,cfg->global_bps,cfg->global_byte_burst,length);
- if(syn)ok &= token(&b->syns,now,cfg->global_syns,cfg->global_syn_burst,1);
+ int ok=token(&b->packets,now,cfg->pps,cfg->packet_burst,1);
+ ok &= token(&b->bytes,now,cfg->bps,cfg->byte_burst,length);
+ if(syn)ok &= token(&b->syns,now,cfg->syns,cfg->syn_burst,1);
  spin_unlock(&b->lock);return ok;
 }
 // Existing per-source limits retain their fixed-second semantics.
@@ -88,26 +92,19 @@ INLINE int consume(u64 *slot,u32 now,u32 limit){
  }
  return 0;
 }
-INLINE int echo(struct source *src,const u8 *l4,const u8 *end,struct limits *cfg,u32 available){
- // Rate-limit Echo Requests only. Error messages, NDP and Echo Replies pass.
- if(l4+8>end||available<8)return unparsed();
- if(l4[0]!=(src->family==4?8:128)||l4[1]!=0)return passed();
- count(14);
- if(!cfg||(!cfg->icmp_pps&&!cfg->icmp_ip_pps))return passed();
- if(allowed(src))return passed();
- u64 now=ktime_ns();
- if(cfg->icmp_pps){
-  u32 key=1;struct token_budget *b=lookup(&shared_budgets,&key);if(!b)return dropped(7);
-  spin_lock(&b->lock);int ok=token(&b->packets,now,cfg->icmp_pps,cfg->icmp_burst,1);spin_unlock(&b->lock);
-  if(!ok)return dropped(7);
+INLINE int echo_budget(struct source *src, struct echo_limits *limit,u64 now,u32 key,void *rates_map){
+ if(limit->pps){
+  struct token_budget *b=lookup(&shared_budgets,&key);if(!b)return 0;
+  spin_lock(&b->lock);int ok=token(&b->packets,now,limit->pps,limit->burst,1);spin_unlock(&b->lock);
+  if(!ok)return 0;
  }
- if(cfg->icmp_ip_pps){
-  u64 *slot=lookup(&echo_rates,src);
-  if(!slot){u64 empty=0;update(&echo_rates,src,&empty,1);slot=lookup(&echo_rates,src);if(!slot)return dropped(7);}
+ if(limit->ip_pps){
+  u64 *slot=lookup(rates_map,src);
+  if(!slot){u64 empty=0;update(rates_map,src,&empty,1);slot=lookup(rates_map,src);if(!slot)return 0;}
   // LRU maps cannot contain spin locks. GCRA uses one atomic virtual arrival
   // timestamp; interval rounding is conservative (at most one nanosecond).
-  u64 interval=(1000000000ULL+(u64)cfg->icmp_ip_pps-1)/(u64)cfg->icmp_ip_pps;
-  u64 cap=now+(u64)cfg->icmp_ip_burst*interval;
+  u64 interval=(1000000000ULL+(u64)limit->ip_pps-1)/(u64)limit->ip_pps;
+  u64 cap=now+(u64)limit->ip_burst*interval;
   int ok=0;
   #pragma unroll
   for(int i=0;i<8;i++){
@@ -115,8 +112,20 @@ INLINE int echo(struct source *src,const u8 *l4,const u8 *end,struct limits *cfg
    if(next>cap)break;
    if(__sync_val_compare_and_swap(slot,old,next)==old){ok=1;break;}
   }
-  if(!ok)return dropped(7);
+  if(!ok)return 0;
  }
+ return 1;
+}
+INLINE int echo(struct source *src,const u8 *l4,const u8 *end,struct limits *cfg,u32 available){
+ // Rate-limit Echo Requests only. Error messages, NDP and Echo Replies pass.
+ if(l4+8>end||available<8)return unparsed();
+ if(l4[0]!=(src->family==4?8:128)||l4[1]!=0)return passed();
+ count(14);
+ if(!cfg||(!cfg->echo.pps&&!cfg->echo.ip_pps&&!cfg->trial_echo.pps&&!cfg->trial_echo.ip_pps))return passed();
+ if(allowed(src))return passed();
+ u64 now=ktime_ns();
+ if(!echo_budget(src,&cfg->trial_echo,now,3,&trial_echo_rates))count(16);
+ if(!echo_budget(src,&cfg->echo,now,1,&echo_rates))return dropped(7);
  return passed();
 }
 INLINE int decide(struct source *src,const u8 *l4,const u8 *end,u8 protocol,struct limits *cfg,u32 length,u32 broken,u32 available){
@@ -145,7 +154,8 @@ INLINE int decide(struct source *src,const u8 *l4,const u8 *end,u8 protocol,stru
  if(!cfg)return passed();
  u64 now=ktime_ns();
  if(cfg->temporary_blocks){u64 *until=lookup(&temporary_bans,src);if(until&&*until>now)return dropped(9);}
- if(!global_budget(cfg,length,syn,now))return dropped(6);
+ if(!global_budget(&cfg->trial_global,length,syn,now,2))count(15);
+ if(!global_budget(&cfg->global,length,syn,now,0))return dropped(6);
  if(!cfg->packets_per_sec&&!cfg->syns_per_sec)return passed();
  struct budget *budget=lookup(&rates,src);
  if(!budget){struct budget empty={};update(&rates,src,&empty,1);budget=lookup(&rates,src);if(!budget)return dropped(3);}

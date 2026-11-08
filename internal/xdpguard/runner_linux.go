@@ -29,6 +29,8 @@ type limits struct {
 	GlobalPackets, GlobalPacketBurst, GlobalBytes, GlobalByteBurst, GlobalSYNs, GlobalSYNBurst uint32
 	ICMPPackets, ICMPBurst, ICMPIPPackets, ICMPIPBurst                                         uint32
 	InvalidLengths, InvalidFlags, TemporaryBlocks                                              uint32
+	TrialGlobal                                                                                [6]uint32
+	TrialICMP                                                                                  [4]uint32
 }
 type key4 struct {
 	Bits uint32
@@ -46,6 +48,9 @@ func load(c Config) (*ebpf.Collection, error) {
 	spec, err := ebpf.LoadCollectionSpecFromReader(bytes.NewReader(object))
 	if err != nil {
 		return nil, err
+	}
+	if !c.Observation.ICMPPing.Enabled || c.Observation.ICMPPing.PerIPPacketsPerSecond == 0 {
+		spec.Maps["trial_echo_rates"].MaxEntries = 1
 	}
 	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
@@ -69,6 +74,12 @@ func load(c Config) (*ebpf.Collection, error) {
 		b := c.ICMPPing
 		v.ICMPPackets, v.ICMPBurst = b.PacketsPerSecond, b.Burst
 		v.ICMPIPPackets, v.ICMPIPBurst = b.PerIPPacketsPerSecond, b.PerIPBurst
+	}
+	if b := c.Observation.GlobalBudget; b.Enabled {
+		v.TrialGlobal = [6]uint32{b.PacketsPerSecond, b.PacketBurst, b.BytesPerSecond, b.ByteBurst, b.SYNsPerSecond, b.SYNBurst}
+	}
+	if b := c.Observation.ICMPPing; b.Enabled {
+		v.TrialICMP = [4]uint32{b.PacketsPerSecond, b.Burst, b.PerIPPacketsPerSecond, b.PerIPBurst}
 	}
 	if c.MalformedPackets.Enabled {
 		if c.MalformedPackets.InvalidLengths {

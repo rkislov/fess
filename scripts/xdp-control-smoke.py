@@ -28,7 +28,7 @@ def call(method, path, body=None, want=200):
  finally: c.close()
 
 def command(*args,check=True): return subprocess.run(args,check=check,capture_output=True,text=True)
-def get(port): return command('ip','netns','exec',namespace,'curl','--silent','--fail','--max-time','.3',f'http://192.0.2.1:{port}/',check=False)
+def get(port): return command('ip','netns','exec',namespace,'curl','--noproxy','*','--silent','--show-error','--fail','--max-time','1',f'http://192.0.2.1:{port}/',check=False)
 
 try:
  if config_path.exists(): raise RuntimeError('refusing to overwrite /etc/fess/xdp.json')
@@ -40,11 +40,19 @@ try:
  command('ip','netns','exec',namespace,'ip','link','set',peer,'up')
  command('ip','netns','exec',namespace,'ip','link','set','lo','up')
  for port in [18080,18081]: processes.append(subprocess.Popen([loadgen,'-serve',f'192.0.2.1:{port}'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE))
- time.sleep(.2)
- assert get(18080).returncode == 0, 'baseline HTTP unavailable'
+ # A new netns and two newly spawned HTTP listeners may not be ready together.
+ deadline=time.monotonic()+10
+ while True:
+  for proc in processes:
+   if proc.poll() is not None: raise RuntimeError('upstream exited: '+proc.stderr.read().decode())
+  checks=[get(port) for port in (18080,18081)]
+  if all(r.returncode==0 for r in checks): break
+  if time.monotonic()>=deadline: raise AssertionError('baseline HTTP unavailable: '+str([(r.returncode,r.stderr) for r in checks]))
+  time.sleep(.1)
  cfg = {'interface':host,'mode':'generic','ports':[{'protocol':'tcp','port':18080}],
   'global_budget':{'enabled':True,'packets_per_second':10000,'packet_burst':20000},
   'icmp_ping':{'enabled':True,'packets_per_second':100,'burst':200,'per_ip_packets_per_second':10,'per_ip_burst':20},
+  'observation':{'global_budget':{'enabled':True,'packets_per_second':1,'packet_burst':1}},
   'malformed_packets':{'enabled':True,'invalid_lengths':True,'invalid_tcp_flags':True},
   'temporary_blocks':{'enabled':True,'socket_path':'/run/fess-xdp/blocks.sock','socket_group':'fess','ttl_seconds':2}}
  assert host in [i['name'] for i in call('GET','/interfaces')['items']]
@@ -55,12 +63,13 @@ try:
  assert get(18080).returncode == 0, 'valid HTTP affected with all protections enabled'
  deadline=time.monotonic()+15
  while time.monotonic()<deadline:
+  assert get(18080).returncode == 0, 'observation affected protected HTTP'
   sample=call('GET','/status').get('statistics')
-  if sample and sample['interval_seconds']>0 and sample['counters'].get('protected_packets',0)>0: break
+  if sample and sample['rates'].get('protected_packets',0)>0 and sample['counters'].get('trial_budget_hit',0)>0: break
   time.sleep(.2)
  else: raise AssertionError('no live kernel statistics published')
  assert not sample['stale'] and sample['interface']==host, sample
- assert sample['rates'].get('protected_packets',0)>0, sample
+ assert sample['counters'].get('global_budget_drop')==0, sample
  call('PUT','/config',{'config':cfg},want=409)
  with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as s: s.sendto(b'192.0.2.2','/run/fess-xdp/blocks.sock')
  time.sleep(.05)

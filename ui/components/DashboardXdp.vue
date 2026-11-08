@@ -1,4 +1,5 @@
 <template>
+  <XdpAlerts />
   <XdpStatistics :statistics="statistics" :running="running" :interface-name="status?.interface" :error="error || status?.statistics_error" :history="history" :history-error="historyError" :history-loading="historyLoading" :period="period" @period-change="changePeriod" graph />
 </template>
 

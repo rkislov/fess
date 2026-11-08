@@ -60,19 +60,31 @@ func runXDPHistoryCollector(ctx context.Context, db *sql.DB) {
 	defer client.CloseIdleConnections()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	var lastPrune, lastLog time.Time
+	var lastPrune, lastLog, lastAlert time.Time
 	for {
 		now := time.Now()
 		work, cancel := context.WithTimeout(ctx, 4*time.Second)
 		err := collectXDPHistory(work, db, client, now)
+		cancel()
+		if now.Sub(lastAlert) >= 15*time.Second {
+			// Give monitoring its own deadline even if the controller times out.
+			aw, done := context.WithTimeout(ctx, 3*time.Second)
+			if ae := xdphistory.EvaluateAlerts(aw, db, now); ae != nil {
+				err = ae
+			}
+			done()
+			lastAlert = now
+		}
 		if now.Sub(lastPrune) >= time.Hour {
-			if pruneErr := xdphistory.Prune(work, db, now); pruneErr != nil {
+			pw, done := context.WithTimeout(ctx, 4*time.Second)
+			pruneErr := xdphistory.Prune(pw, db, now)
+			done()
+			if pruneErr != nil {
 				err = pruneErr
 			} else {
 				lastPrune = now
 			}
 		}
-		cancel()
 		if err != nil && ctx.Err() == nil && now.Sub(lastLog) >= time.Minute {
 			log.Printf("XDP history: %v", err)
 			lastLog = now
@@ -113,4 +125,25 @@ func xdpHistoryHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, history)
+}
+
+func xdpAlertsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok || !auth.CanAdmin(claims.Role) {
+		writeJSON(w, 403, map[string]string{"error": "admin required"})
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	alerts, err := xdphistory.RecentAlerts(ctx, db)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "XDP alerts unavailable"})
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, map[string]any{"items": alerts})
 }
