@@ -37,6 +37,17 @@ jobs:
           for target in $TARGETS; do
             scripts/package-linux.sh "$target" "$RUNNER_TEMP/packages"
             python3 scripts/verify-linux-target.py "$target" "$FESS_VERSION"
+            if [[ $target == amd64 ]]; then
+              docker run --rm -v "$RUNNER_TEMP/packages:/rpms:ro" fedora:latest sh -ec '
+                dnf -y install /rpms/*.x86_64.rpm
+                fess version && fess-xdp version
+                command -v clamd && command -v freshclam
+                FESS_CONFIG=/etc/fess/fess.env fess &
+                pid=$!
+                trap "kill $pid" EXIT
+                curl -fsS --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+              '
+            fi
           done
   portable:
     runs-on: ubuntu-24.04
