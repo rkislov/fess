@@ -4,7 +4,7 @@
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
-    <section id="waf-policy-list" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+    <section id="waf-policy-list" class="scroll-mt-40 rounded-2xl sm:scroll-mt-28 border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">{{ view === 'builder' ? 'Политика для правила' : 'Политики WAF' }}</h2>
       <p v-if="view === 'builder' && !detail" class="mt-1 text-sm text-slate-400">
         Выберите политику. Если нужной политики ещё нет, создайте её в разделе «Политики WAF».

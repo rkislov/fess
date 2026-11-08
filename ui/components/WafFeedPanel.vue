@@ -1,11 +1,11 @@
 <template>
-  <section id="waf-feed-packs" class="space-y-5 rounded-2xl border border-teal-800 bg-slate-900/70 p-6">
+  <section id="waf-feed-packs" class="scroll-mt-40 space-y-5 rounded-2xl sm:scroll-mt-28 border border-teal-800 bg-slate-900/70 p-6">
     <h2 class="text-lg font-semibold text-white">Наборы правил для приложений · Feed</h2>
     <p class="text-sm text-slate-300">Наборы импортируются выключенными, в режиме log, без публикации. Затем выберите политику в разделе Policies, назначьте её тестовому сайту, включите и опубликуйте для наблюдения. В режиме log запросы проходят без блокировки.</p>
     <p v-if="message" role="status" class="text-sm text-teal-200">{{ message }}</p>
     <p v-if="error" role="alert" class="text-sm text-rose-300">{{ error }}. Проверьте ключ подписки в «Настройки → IOC / FESS Feed», затем обновите каталог.</p>
     <p v-if="busy && !packs.length" role="status" class="text-sm text-slate-400">Загружаем доступные наборы по подписке…</p>
-    <p v-else-if="packs.length" class="text-sm text-teal-200">Доступно наборов: {{ packs.length }}. Выберите приложение и нажмите «Получить по подписке».</p>
+    <p v-else-if="packs.length" class="text-sm text-slate-300">Доступно наборов: {{ packs.length }}. Выберите приложение и нажмите «Получить по подписке».</p>
     <div class="flex flex-wrap items-center gap-3">
       <button class="rounded bg-teal-700 px-3 py-2 disabled:opacity-40" :disabled="busy" @click="catalog">Обновить каталог</button>
 
