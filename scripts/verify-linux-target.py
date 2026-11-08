@@ -16,6 +16,9 @@ with tempfile.TemporaryDirectory() as work:
     for app in ("fess", "fess-xdp"):
         banner = subprocess.check_output([*run, base / f"{app}-linux-{target}", "version"], text=True)
         assert banner.split()[-1] == version, banner
+    xdp = (base / f"fess-xdp-linux-{target}").read_bytes()
+    bpf = Path("internal/xdpguard") / ("filter-be.o" if xdp[5] == 2 else "filter.o")
+    assert bpf.read_bytes() in xdp, "embedded BPF must match the target ELF byte order"
     subprocess.run([*run, base / f"fess-xdp-linux-{target}", "--check", "--config", "packaging/xdp.json.example"], check=True)
     proc = subprocess.Popen([*run, base / f"fess-linux-{target}", "--data-dir", work, "--admin", "127.0.0.1:18082",
                              "--http", "127.0.0.1:18080", "--https", ""])

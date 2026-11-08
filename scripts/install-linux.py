@@ -45,7 +45,20 @@ class Release:
         if not re.fullmatch("v" + VERSION, tag) or (version and tag != "v" + version):
             raise ValueError(f"Неожиданный тег релиза: {tag}")
         self.version = tag[1:]
-        self.assets = {item["name"]: item for item in release["assets"]}
+        items = release["assets"]
+        # The embedded asset list may be truncated for a multi-architecture release.
+        if len(items) >= 30:
+            items = []
+            page = 1
+            while True:
+                fetch(f"{release['assets_url']}?per_page=100&page={page}",
+                      "application/vnd.github+json", metadata)
+                batch = json.loads(metadata.read_text())
+                items.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+        self.assets = {item["name"]: item for item in items}
         self.sums = {}
         manifest = self.get("SHA256SUMS")
         self.sums = {n: h for h, n in (line.split() for line in manifest.read_text().splitlines())}
@@ -103,6 +116,8 @@ def native_plan(release, family):
         manager = shutil.which("dnf") or shutil.which("yum")
         if manager:
             arch = subprocess.check_output(["rpm", "--eval", "%{_arch}"], text=True).strip()
+            if re.fullmatch(r"i[4-6]86", arch):
+                arch = "i386"
             candidates = []
             for app in APPS:
                 matches = [n for n in release.assets if re.fullmatch(

@@ -55,3 +55,27 @@ jobs:
     uses: ./.github/workflows/ubuntu-packages.yml
     with:
       tag: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+
+  verify-source:
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install from the published source bundle and exercise SQLite and UI
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          root="$RUNNER_TEMP/fess-from-source"
+          python3 scripts/install-linux.py --source --prefix "$root" "$version"
+          "$root/current/start-fess" &
+          pid=$!
+          trap 'kill "$pid"' EXIT
+          curl -fsS --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+          curl -fsS http://127.0.0.1:8082/ | grep '/_nuxt/'
+          test -s "$root/data/fess.db"

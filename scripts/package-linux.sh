@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.."
 target=${1:?Specify a Linux target}
 out=${2:?Specify an absolute output directory}
 export CGO_ENABLED=0 GOOS=linux GOARCH="$target" FESS_ARCH="$target"
+export FESS_RPM_ARCH=""
 case "$target" in
+ loong64) export FESS_RPM_ARCH=loongarch64 ;;
  arm5) export GOARCH=arm GOARM=5,softfloat ;;
  arm7) export GOARCH=arm GOARM=7,hardfloat ;;
  386) export GO386=softfloat ;;
