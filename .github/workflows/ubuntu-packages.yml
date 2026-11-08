@@ -1,0 +1,79 @@
+name: Verify Ubuntu release packages
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (leave empty for latest)
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/ubuntu-packages.yml
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Ubuntu ${{ matrix.os }} / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['24.04', '26.04']
+        arch: [amd64, arm64]
+    runs-on: ubuntu-${{ matrix.os }}${{ matrix.arch == 'arm64' && '-arm' || '' }}
+    steps:
+      - name: Download released DEBs and verify checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECT_OS: ${{ matrix.os }}
+          EXPECT_ARCH: ${{ matrix.arch }}
+        run: |
+          . /etc/os-release
+          test "$ID/$VERSION_ID" = "ubuntu/$EXPECT_OS"
+          test "$(dpkg --print-architecture)" = "$EXPECT_ARCH"
+          tag=${TAG:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version=${tag#v}
+          dir="$RUNNER_TEMP/fess-packages"
+          mkdir -p "$dir"
+          cd "$dir"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" -p SHA256SUMS \
+            -p "fess_${version}_${EXPECT_ARCH}.deb" -p "fess-xdp_${version}_${EXPECT_ARCH}.deb"
+          for package in fess fess-xdp; do
+            file="${package}_${version}_${EXPECT_ARCH}.deb"
+            awk -v name="$file" '$2 == name { print; n++ } END { if (n != 1) exit 1 }' SHA256SUMS | sha256sum --check -
+          done
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Install with Ubuntu dependencies and start FESS
+        run: |
+          cd "$RUNNER_TEMP/fess-packages"
+          sudo apt-get update -qq
+          sudo apt-get install -y ./*.deb
+          version=${RELEASE_TAG#v}
+          for package in fess fess-xdp; do
+            test "$(dpkg-query -W -f='${Version}' "$package")" = "$version"
+            test "$("$package" version | awk '{print $NF}')" = "$version"
+          done
+          sudo systemctl start fess
+          curl -fsS --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+          curl -fsS http://127.0.0.1:8082/ | grep -q '/_nuxt/'
+          test "$(systemctl is-enabled fess-xdp.service || true)" = disabled
+          systemctl is-active fess-xdp-control.service
+          fess-xdp --check --config /etc/fess/xdp.json.example
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Exercise the installed XDP service on a disposable veth
+        run: |
+          go build -o "$RUNNER_TEMP/fess-load" ./cmd/fess-load
+          sudo python3 scripts/xdp-control-smoke.py "$RUNNER_TEMP/fess-load"
