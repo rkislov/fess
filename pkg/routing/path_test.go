@@ -39,11 +39,11 @@ func TestSnapshotPickBackend_longestPrefix(t *testing.T) {
 			{PathPrefix: "/api", PathPriority: 50, BackendPriority: 50, Backend: u2, BackendName: "api"},
 		},
 	}
-	br := site.pickBackend("/api/ws")
+	br := site.pickBackend("/api/ws", nil, "")
 	if br == nil || br.BackendName != "api" {
 		t.Fatalf("got %+v", br)
 	}
-	br = site.pickBackend("/other")
+	br = site.pickBackend("/other", nil, "")
 	if br == nil || br.BackendName != "default" {
 		t.Fatalf("got %+v", br)
 	}
