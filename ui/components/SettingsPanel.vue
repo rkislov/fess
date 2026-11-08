@@ -27,6 +27,7 @@
             {{ s.icon }} {{ s.label }}
           </button>
           <nav v-if="s.id === 'policies' && sub === 'policies'" aria-label="Политики WAF" class="ml-4 border-l border-slate-700 pl-2">
+            <button type="button" class="w-full rounded-lg px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800" @click="openFeedPacks">Наборы правил приложений</button>
             <button
               type="button"
               class="w-full rounded-lg px-3 py-1.5 text-left text-sm"
@@ -325,6 +326,12 @@ const appearanceHint = computed(() => {
 
 const sub = ref<SubId>('policies')
 const policyView = ref<'overview' | 'builder'>('overview')
+
+async function openFeedPacks() {
+  policyView.value='overview'
+  await nextTick()
+  document.getElementById('waf-feed-packs')?.scrollIntoView({behavior:'smooth',block:'start'})
+}
 
 function openSecuritySection(id: SubId) {
   sub.value = id
