@@ -27,6 +27,47 @@ type wafMeta struct {
 	RuleCount   int      `json:"rule_count"`
 	SHA         string   `json:"sha256"`
 	Limitations []string `json:"limitations"`
+	PolicyID    string   `json:"policy_id,omitempty"`
+}
+
+func wafProfilePolicyID(id, version, digest string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("fess-waf:"+id+":"+version+":"+digest)).String()
+}
+
+// Match the exact catalog revision, including policies renamed after import.
+func matchWAFPolicies(ctx context.Context, db *sql.DB, packs []wafMeta) error {
+	if len(packs) == 0 {
+		return nil
+	}
+	params := make([]string, len(packs))
+	ids := make([]any, len(packs))
+	for i, p := range packs {
+		packs[i].PolicyID = "" // Only the local database can establish this link.
+		ids[i] = wafProfilePolicyID(p.ID, p.Version, p.SHA)
+		params[i] = fmt.Sprintf("$%d::uuid", i+1)
+	}
+	rows, err := db.QueryContext(ctx, "SELECT id::text FROM policies WHERE id IN ("+strings.Join(params, ",")+")", ids...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	found := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		found[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if value := id.(string); found[value] {
+			packs[i].PolicyID = value
+		}
+	}
+	return nil
 }
 
 func fetchWAF(ctx context.Context, db *sql.DB, path string) ([]byte, error) {
@@ -35,7 +76,7 @@ func fetchWAF(ctx context.Context, db *sql.DB, path string) ([]byte, error) {
 		return nil, e
 	}
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("настройте API-ключ подписки FESS Feed")
+		return nil, fmt.Errorf("задайте ключ в «Настройки → IOC / FESS Feed»")
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ResolvedFessFeedBase()+"/feeds/v1/waf/"+path, nil)
 	if e != nil {
@@ -49,6 +90,9 @@ func fetchWAF(ctx context.Context, db *sql.DB, path string) ([]byte, error) {
 		return nil, fmt.Errorf("Feed недоступен")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("FESS Feed отклонил доступ. Проверьте ключ в «Настройки → IOC / FESS Feed»")
+	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("Feed HTTP %d", resp.StatusCode)
 	}
@@ -68,7 +112,7 @@ func loadWAFCatalog(ctx context.Context, db *sql.DB) (wafCatalog, error) {
 		return c, e
 	}
 	e = json.Unmarshal(b, &c)
-	if e == nil && (c.Format != "security-feed-waf-catalog-v1" || len(c.Packs) > 64) {
+	if e == nil && (c.Format != "security-feed-waf-catalog-v1" || c.Packs == nil || len(c.Packs) > 64) {
 		e = fmt.Errorf("invalid catalog")
 	}
 	return c, e
@@ -91,17 +135,18 @@ func importWAFPacks(ctx context.Context, db *sql.DB, raws [][]byte) ([]string, e
 	defer tx.Rollback()
 	ids := []string{}
 	for i, p := range packs {
-		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte("fess-waf:"+p.ID+":"+p.Version+":"+wafpack.Digest(raws[i]))).String()
+		id := wafProfilePolicyID(p.ID, p.Version, wafpack.Digest(raws[i]))
 		ids = append(ids, id)
-		var count int
-		if e = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM policies WHERE id=$1::uuid", id).Scan(&count); e != nil {
+		insert, e := tx.ExecContext(ctx, `INSERT INTO policies(id,name,mode,priority,enabled) VALUES($1::uuid,$2,'log',50,FALSE) ON CONFLICT (id) DO NOTHING`, id, p.Title+" · "+p.Version)
+		if e != nil {
 			return nil, e
 		}
-		if count > 0 {
+		created, e := insert.RowsAffected()
+		if e != nil {
+			return nil, e
+		}
+		if created == 0 {
 			continue
-		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO policies(id,name,mode,priority,enabled) VALUES($1::uuid,$2,'log',50,FALSE)`, id, p.Title+" · "+p.Version); e != nil {
-			return nil, e
 		}
 		for _, r := range p.Rules {
 			if _, e = tx.ExecContext(ctx, `INSERT INTO rules(id,policy_id,name,action,priority,condition_json,transform_json,enabled) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::jsonb,'{}'::jsonb,TRUE)`, uuid.NewString(), id, "["+r.ID+"] "+r.Name, r.Action, r.Priority, string(r.Condition)); e != nil {
@@ -136,6 +181,10 @@ func wafFeedHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			fail(502, e)
 			return
 		}
+		if err := matchWAFPolicies(r.Context(), db, c.Packs); err != nil {
+			fail(500, err)
+			return
+		}
 		writeJSON(w, 200, c)
 	case "/api/v1/waf-feed/import":
 		if r.Method != http.MethodPost {
@@ -145,6 +194,7 @@ func wafFeedHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		var q struct {
 			ID      string `json:"id"`
 			Version string `json:"version"`
+			SHA     string `json:"sha256"`
 		}
 		if e := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q); e != nil {
 			fail(400, e)
@@ -167,6 +217,10 @@ func wafFeedHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		}
 		if sum == "" {
 			fail(404, fmt.Errorf("pack not in catalog"))
+			return
+		}
+		if q.SHA != "" && q.SHA != sum {
+			fail(http.StatusConflict, fmt.Errorf("профиль изменился. Обновите каталог и выберите заготовку снова"))
 			return
 		}
 		b, e := fetchWAF(r.Context(), db, "packs/"+q.ID+"/"+q.Version+".json")

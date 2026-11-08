@@ -90,6 +90,7 @@
         <div
           class="relative mt-0 w-full max-w-4xl rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/40 sm:mt-8"
         >
+          <p v-if="err" role="alert" class="mx-6 mt-5 rounded-lg bg-rose-950 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
           <!-- Создание -->
           <div v-if="sitePanelMode === 'create'" class="p-6 sm:p-8">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -149,13 +150,7 @@
                   <input v-model="wizard.enabled" type="checkbox" class="rounded border-slate-600" />
                   Сайт включён
                 </label>
-                <div>
-                  <label class="text-xs text-slate-500">Политика WAF (необязательно)</label>
-                  <select v-model="wizard.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
-                    <option value="">Все включённые политики (по умолчанию)</option>
-                    <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
-                  </select>
-                </div>
+                <SitePolicySelect ref="policyPicker" v-model="wizard.policy_id" :policies="policies" :disabled="busy" @added="loadPolicies().catch(flashErr)" />
               </div>
 
               <div v-show="wizardStep === 2" class="space-y-3">
@@ -279,13 +274,7 @@
                       <input v-model="edit.enabled" type="checkbox" class="rounded border-slate-600" />
                       Включён
                     </label>
-                    <div>
-                      <label class="text-xs text-slate-500">Политика WAF</label>
-                      <select v-model="edit.policy_id" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
-                        <option value="">Все включённые политики</option>
-                        <option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }}</option>
-                      </select>
-                    </div>
+                    <SitePolicySelect ref="policyPicker" v-model="edit.policy_id" :policies="policies" :disabled="busy" @added="loadPolicies().catch(flashErr)" />
                     <div class="flex flex-wrap gap-2 pt-2">
                       <button type="button" class="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600" :disabled="busy" @click="saveSite">
                         Сохранить сайт
@@ -518,6 +507,7 @@ const sites = ref<Site[]>([])
 const selectedId = ref('')
 const selected = computed(() => sites.value.find((s) => s.id === selectedId.value) ?? null)
 const policies = ref<{ id: string; name: string }[]>([])
+const policyPicker = ref<{ resolvePolicy: () => Promise<string> } | null>(null)
 const edit = reactive({ name: '', host_pattern: '', priority: 100, enabled: true, policy_id: '' })
 const backends = ref<Backend[]>([])
 
@@ -718,6 +708,7 @@ function openEditModal(s: Site) {
 }
 
 function closeSitePanel() {
+  if (busy.value) return
   sitePanelOpen.value = false
   resetWizard()
 }
@@ -763,6 +754,7 @@ function wizardNext() {
 }
 
 async function finalizeWizard() {
+  if (!policyPicker.value) return
   if (!wizard.name.trim() || !wizard.host_pattern.trim()) {
     wizardStep.value = 1
     flashErr(new Error('Укажите название и шаблон хоста'))
@@ -782,6 +774,7 @@ async function finalizeWizard() {
   busy.value = true
   err.value = ''
   try {
+    const policyId = await policyPicker.value.resolvePolicy()
     const siteRes = await apiFetch<{ id: string }>(apiUrl('/sites'), {
       method: 'POST',
       body: {
@@ -789,7 +782,7 @@ async function finalizeWizard() {
         host_pattern: wizard.host_pattern.trim(),
         priority: wizard.priority || undefined,
         enabled: wizard.enabled,
-        policy_id: wizard.policy_id || undefined,
+        policy_id: policyId || undefined,
       },
     })
     const siteId = siteRes.id
@@ -920,10 +913,11 @@ function selectSite(s: Site) {
 }
 
 async function saveSite() {
-  if (!selected.value) return
+  if (!selected.value || !policyPicker.value) return
   busy.value = true
   err.value = ''
   try {
+    const policyId = await policyPicker.value.resolvePolicy()
     await apiFetch(apiUrl(`/sites/${selected.value.id}`), {
       method: 'PUT',
       body: {
@@ -931,7 +925,7 @@ async function saveSite() {
         host_pattern: edit.host_pattern,
         priority: edit.priority,
         enabled: edit.enabled,
-        policy_id: edit.policy_id || '',
+        policy_id: policyId,
       },
     })
     await loadSites()
