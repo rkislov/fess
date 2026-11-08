@@ -22,12 +22,18 @@ ClamAV и freshclam устанавливаются пакетным менедж
 Установите пакет через менеджер зависимостей:
 
 ```sh
-sudo apt install ./fess_2.1.0_arm64.deb
+# Ubuntu 24.04 LTS и 26.04 LTS используют одни и те же файлы для каждой архитектуры.
+# Скачайте fess и fess-xdp своей архитектуры (dpkg --print-architecture).
+version=2.2.7
+arch=$(dpkg --print-architecture)
+sudo apt install "./fess_${version}_${arch}.deb" "./fess-xdp_${version}_${arch}.deb"
 # Для RPM-систем (могут потребоваться репозитории дистрибутива/EPEL с ClamAV):
 # sudo dnf install ./fess-2.1.0-1.aarch64.rpm
 sudo editor /etc/fess/fess.env
 sudo systemctl start fess
 ```
+
+Для установки только WAF достаточно пакета `fess`. Пакет `fess-xdp` добавляет локальный контроллер. Привязка фильтра к интерфейсу включается отдельно в **Настройки → XDP**.
 
 При первом запуске укажите `FESS_ADMIN_PASSWORD` в конфигурации. Если он не задан,
 создаётся `admin` / `fessfess`; смените пароль в панели. JWT-секрет генерируется
