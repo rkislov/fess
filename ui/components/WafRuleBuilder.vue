@@ -227,7 +227,7 @@
       <button
         type="button"
         class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-        :disabled="disabled || !policyId"
+        :disabled="disabled || !policyId || unsupportedCondition"
         @click="emitSave('create')"
       >
         Создать правило в политике
@@ -235,7 +235,7 @@
       <button
         type="button"
         class="rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-600 disabled:opacity-50"
-        :disabled="disabled || !policyId"
+        :disabled="disabled || !policyId || unsupportedCondition"
         @click="emitApply"
       >
         Перенести в форму добавления (JSON)
@@ -244,7 +244,7 @@
         v-if="editingRuleId"
         type="button"
         class="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white hover:bg-violet-600 disabled:opacity-50"
-        :disabled="disabled || !policyId"
+        :disabled="disabled || !policyId || unsupportedCondition"
         @click="emitSave('update')"
       >
         Сохранить правило #{{ editingRuleId.slice(0, 8) }}…
@@ -323,6 +323,7 @@ function onFieldChange(block: ConditionBlock) {
 }
 
 function resetBuilder() {
+  unsupportedCondition.value = false
   blocks.value = []
   ruleName.value = ''
   ruleAction.value = 'block'
@@ -335,6 +336,8 @@ function resetBuilder() {
   addBlock('path_contains')
 }
 
+const unsupportedCondition = ref(false)
+
 function loadFromRule(row: { id: string; name: string; action: string; priority: number; conditionText: string; transformText: string }) {
   editingRuleId.value = row.id
   ruleName.value = row.name
@@ -343,6 +346,7 @@ function loadFromRule(row: { id: string; name: string; action: string; priority:
   const parsed = parseConditionJson(row.conditionText)
   blocks.value = parsed.blocks.length ? parsed.blocks : [{ id: newBlockId(), field: 'path_contains', value: '' }]
   jsonError.value = parsed.error || ''
+  unsupportedCondition.value = !!parsed.error
   const tf = parseTransformJson(row.transformText)
   transform.redirect_url = tf.redirect_url
   transform.replace_from = tf.replace_from
@@ -350,10 +354,12 @@ function loadFromRule(row: { id: string; name: string; action: string; priority:
 }
 
 function emitApply() {
+  if (unsupportedCondition.value) return
   emit('apply', payload())
 }
 
 function emitSave(mode: 'create' | 'update') {
+  if (unsupportedCondition.value) return
   if (!ruleName.value.trim()) {
     jsonError.value = 'Укажите имя правила'
     return

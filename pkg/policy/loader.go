@@ -1,10 +1,13 @@
 package policy
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fence/pkg/appsecadapt"
 	"fmt"
+	"io"
 	"net/netip"
 	"regexp"
 	"sort"
@@ -99,17 +102,19 @@ ORDER BY priority ASC, created_at ASC`
 }
 
 type ruleCondition struct {
-	Method             string            `json:"method"`
-	PathExact          string            `json:"path_exact"`
-	PathPrefix         string            `json:"path_prefix"`
-	PathContains       string            `json:"path_contains"`
-	PathRegex          string            `json:"path_regex"`
-	BodyContains       string            `json:"body_contains"`
-	RequestURIContains string            `json:"request_uri_contains"`
-	QueryEquals        map[string]string `json:"query_equals"`
-	HeaderContains     map[string]string `json:"header_contains"`
-	ClientIPIn         []string          `json:"client_ip_in"`
-	ClientIPNotIn      []string          `json:"client_ip_not_in"`
+	AppSec             *appsecadapt.Expression `json:"appsec"`
+	Exceptions         []RuleException         `json:"exceptions"`
+	Method             string                  `json:"method"`
+	PathExact          string                  `json:"path_exact"`
+	PathPrefix         string                  `json:"path_prefix"`
+	PathContains       string                  `json:"path_contains"`
+	PathRegex          string                  `json:"path_regex"`
+	BodyContains       string                  `json:"body_contains"`
+	RequestURIContains string                  `json:"request_uri_contains"`
+	QueryEquals        map[string]string       `json:"query_equals"`
+	HeaderContains     map[string]string       `json:"header_contains"`
+	ClientIPIn         []string                `json:"client_ip_in"`
+	ClientIPNotIn      []string                `json:"client_ip_not_in"`
 }
 
 type ruleTransform struct {
@@ -162,6 +167,22 @@ func compileRule(rr rawRule) (CompiledRule, error) {
 	}
 	cr.ClientIPNotIn = ipNotIn
 
+	cr.Exceptions = cond.Exceptions
+	if len(cr.Exceptions) > 256 {
+		return CompiledRule{}, fmt.Errorf("слишком много исключений")
+	}
+	for _, x := range cr.Exceptions {
+		if x.Host == "" || strings.ContainsAny(x.Host, "*/?@# \t\r\n") || x.Path == "" || x.Path[0] != '/' || strings.ContainsAny(x.Path, "?#\r\n") || x.Method == "" || strings.ContainsAny(x.Method, " \t\r\n") {
+			return CompiledRule{}, fmt.Errorf("исключение требует точные Host, Path и Method")
+		}
+	}
+	if cond.AppSec != nil {
+		var err error
+		cr.AppSec, err = appsecadapt.Compile(*cond.AppSec)
+		if err != nil {
+			return CompiledRule{}, err
+		}
+	}
 	if cond.PathRegex != "" {
 		re, err := regexp.Compile(cond.PathRegex)
 		if err != nil {
@@ -208,4 +229,22 @@ func parsePrefixList(list []string) ([]netip.Prefix, error) {
 		out = append(out, pfx)
 	}
 	return out, nil
+}
+
+// CompileCondition validates imported conditions strictly before any database write.
+func CompileCondition(raw json.RawMessage) (CompiledRule, error) {
+	var c ruleCondition
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&c); err != nil {
+		return CompiledRule{}, err
+	}
+	var extra any
+	if d.Decode(&extra) != io.EOF {
+		return CompiledRule{}, fmt.Errorf("one condition required")
+	}
+	if c.AppSec == nil && c.Method == "" && c.PathExact == "" && strings.TrimSpace(c.PathPrefix) == "" && c.PathContains == "" && c.PathRegex == "" && c.BodyContains == "" && c.RequestURIContains == "" && len(c.QueryEquals) == 0 && len(c.HeaderContains) == 0 && len(c.ClientIPIn) == 0 {
+		return CompiledRule{}, fmt.Errorf("positive match condition required")
+	}
+	return compileRule(rawRule{ConditionJSON: raw})
 }
