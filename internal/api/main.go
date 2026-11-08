@@ -159,6 +159,7 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	mux.HandleFunc("/api/v1/dashboard/system", func(w http.ResponseWriter, r *http.Request) {
 		systemHealthHandler(w, r)
 	})
+	mux.HandleFunc("/api/v1/dashboard/xdp/alerts", func(w http.ResponseWriter, r *http.Request) { xdpAlertsHandler(w, r, db) })
 	mux.HandleFunc("/api/v1/dashboard/xdp/history", func(w http.ResponseWriter, r *http.Request) {
 		xdpHistoryHandler(w, r, db)
 	})

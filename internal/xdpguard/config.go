@@ -47,7 +47,13 @@ type TemporaryBlockConfig struct {
 	WindowSeconds uint32 `json:"window_seconds"`
 }
 
+type ObservationConfig struct {
+	GlobalBudget BudgetConfig `json:"global_budget"`
+	ICMPPing     ICMPConfig   `json:"icmp_ping"`
+}
+
 type Config struct {
+	Observation      ObservationConfig    `json:"observation"`
 	Interface        string               `json:"interface"`
 	Mode             string               `json:"mode"`
 	Ports            []Port               `json:"ports"`
@@ -116,28 +122,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("rate limits must not exceed 1000000000")
 	}
 
-	for _, pair := range []struct {
-		name        string
-		rate, burst uint32
-	}{
-		{"global packets", c.GlobalBudget.PacketsPerSecond, c.GlobalBudget.PacketBurst},
-		{"global bytes", c.GlobalBudget.BytesPerSecond, c.GlobalBudget.ByteBurst},
-		{"global SYNs", c.GlobalBudget.SYNsPerSecond, c.GlobalBudget.SYNBurst},
-		{"ICMP global", c.ICMPPing.PacketsPerSecond, c.ICMPPing.Burst},
-		{"ICMP per IP", c.ICMPPing.PerIPPacketsPerSecond, c.ICMPPing.PerIPBurst},
-	} {
-		if pair.rate > 1000000000 || pair.burst > 1000000000 {
-			return fmt.Errorf("%s rate/burst must not exceed 1000000000", pair.name)
-		}
-		if (pair.rate == 0) != (pair.burst == 0) {
-			return fmt.Errorf("%s: rate and burst must both be zero or positive", pair.name)
-		}
+	if err := validateBudgets(c.GlobalBudget, c.ICMPPing); err != nil {
+		return err
 	}
-	if c.GlobalBudget.Enabled && c.GlobalBudget.PacketsPerSecond == 0 && c.GlobalBudget.BytesPerSecond == 0 && c.GlobalBudget.SYNsPerSecond == 0 {
-		return fmt.Errorf("global_budget requires at least one rate")
-	}
-	if c.ICMPPing.Enabled && c.ICMPPing.PacketsPerSecond == 0 && c.ICMPPing.PerIPPacketsPerSecond == 0 {
-		return fmt.Errorf("icmp_ping requires at least one rate")
+	if err := validateBudgets(c.Observation.GlobalBudget, c.Observation.ICMPPing); err != nil {
+		return fmt.Errorf("observation: %w", err)
 	}
 	if c.MalformedPackets.Enabled && !c.MalformedPackets.InvalidLengths && !c.MalformedPackets.InvalidTCPFlags {
 		return fmt.Errorf("malformed_packets requires at least one check")
@@ -158,6 +147,33 @@ func (c *Config) Validate() error {
 		if c.TemporaryBlocks.TTLSeconds == 0 || c.TemporaryBlocks.TTLSeconds > 86400 {
 			return fmt.Errorf("temporary_blocks.ttl_seconds must be 1..86400")
 		}
+	}
+	return nil
+}
+
+func validateBudgets(budget BudgetConfig, ping ICMPConfig) error {
+	for _, pair := range []struct {
+		name        string
+		rate, burst uint32
+	}{
+		{"global packets", budget.PacketsPerSecond, budget.PacketBurst},
+		{"global bytes", budget.BytesPerSecond, budget.ByteBurst},
+		{"global SYNs", budget.SYNsPerSecond, budget.SYNBurst},
+		{"ICMP global", ping.PacketsPerSecond, ping.Burst},
+		{"ICMP per IP", ping.PerIPPacketsPerSecond, ping.PerIPBurst},
+	} {
+		if pair.rate > 1000000000 || pair.burst > 1000000000 {
+			return fmt.Errorf("%s rate/burst must not exceed 1000000000", pair.name)
+		}
+		if (pair.rate == 0) != (pair.burst == 0) {
+			return fmt.Errorf("%s: rate and burst must both be zero or positive", pair.name)
+		}
+	}
+	if budget.Enabled && budget.PacketsPerSecond == 0 && budget.BytesPerSecond == 0 && budget.SYNsPerSecond == 0 {
+		return fmt.Errorf("global_budget requires at least one rate")
+	}
+	if ping.Enabled && ping.PacketsPerSecond == 0 && ping.PerIPPacketsPerSecond == 0 {
+		return fmt.Errorf("icmp_ping requires at least one rate")
 	}
 	return nil
 }
