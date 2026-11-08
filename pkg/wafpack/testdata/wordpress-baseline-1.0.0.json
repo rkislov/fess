@@ -1,0 +1,231 @@
+{
+  "format": "security-feed-waf-v1",
+  "engine": "fess-native-v1",
+  "pack_id": "wordpress-baseline",
+  "version": "1.0.0",
+  "title": "WordPress — базовый профиль",
+  "application": "wordpress",
+  "description": "Защита конфигурации, журнала отладки и PHP в uploads. wp-admin, REST API и XML-RPC не запрещаются целиком.",
+  "license": "Apache-2.0",
+  "author": "Security Feed / Роман Сергеевич Кислов",
+  "recommended_mode": "log",
+  "deployment": "root",
+  "coverage": "path-hardening",
+  "limitations": [
+    "Базовый профиль путей и методов; не является полным OWASP CRS или набором всех CVE-патчей.",
+    "Рассчитан на приложение в корне отдельного домена. Для установки в подкаталог нужна адаптация условий.",
+    "Перед блокировкой проверьте журнал на рабочем трафике."
+  ],
+  "references": [
+    "https://developer.wordpress.org/advanced-administration/security/hardening/"
+  ],
+  "rules": [
+    {
+      "id": "SF-GEN-001",
+      "name": "Закрыть метаданные системы контроля версий",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1000,
+      "condition": {
+        "path_regex": "(?i)^/(?:\\.git|\\.svn|\\.hg)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-002",
+      "name": "Закрыть корневые файлы окружения",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1001,
+      "condition": {
+        "path_regex": "(?i)^/\\.env(?:$|[./_-])"
+      }
+    },
+    {
+      "id": "SF-GEN-003",
+      "name": "Закрыть зависимости и их lock-файлы",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1002,
+      "condition": {
+        "path_regex": "(?i)^/(?:composer\\.(?:json|lock)|package(?:-lock)?\\.json|yarn\\.lock|pnpm-lock\\.yaml)(?:$|/)"
+      }
+    },
+    {
+      "id": "SF-GEN-004",
+      "name": "Закрыть приватные ключи в корне сайта",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1003,
+      "condition": {
+        "path_regex": "(?i)^/(?:id_(?:rsa|dsa|ecdsa|ed25519)|\\.ssh)(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-GEN-005",
+      "name": "Обнаружить переход к родительскому каталогу",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1004,
+      "condition": {
+        "path_regex": "(?i)(?:^|/)(?:\\.|%2e){2}(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-WP-001",
+      "name": "Закрыть wp-config и его копии",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1005,
+      "condition": {
+        "path_regex": "(?i)^/wp-config\\.php(?:$|[./~_-])"
+      }
+    },
+    {
+      "id": "SF-WP-002",
+      "name": "Закрыть журнал отладки WordPress",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1006,
+      "condition": {
+        "path_regex": "(?i)^/wp-content/debug\\.log(?:$|[./])"
+      }
+    },
+    {
+      "id": "SF-WP-003",
+      "name": "Закрыть исполняемые PHP-файлы в uploads",
+      "category": "path-hardening",
+      "action": "block",
+      "priority": 1007,
+      "condition": {
+        "path_regex": "(?i)^/wp-content/uploads/.*\\.(?:php[0-9]?|phtml|phar)(?:/|$)"
+      }
+    },
+    {
+      "id": "SF-GEN-006",
+      "name": "Закрыть HTTP TRACE",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1108,
+      "condition": {
+        "method": "TRACE"
+      }
+    },
+    {
+      "id": "SF-GEN-007",
+      "name": "Закрыть HTTP TRACK",
+      "category": "http-hardening",
+      "action": "block",
+      "priority": 1109,
+      "condition": {
+        "method": "TRACK"
+      }
+    }
+  ],
+  "tests": [
+    {
+      "method": "GET",
+      "path": "/.git/config",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.env.production",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/composer.lock",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/.ssh/id_rsa",
+      "match": true
+    },
+    {
+      "method": "TRACE",
+      "path": "/",
+      "match": true
+    },
+    {
+      "method": "TRACK",
+      "path": "/api",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/a/../.env",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/%2eenv",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/token",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/search?q=UNION+SELECT",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/assets/app.js",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/wp-config.php.bak",
+      "match": true
+    },
+    {
+      "method": "GET",
+      "path": "/wp-content/debug.log",
+      "match": true
+    },
+    {
+      "method": "POST",
+      "path": "/wp-content/uploads/2026/shell.php",
+      "match": true
+    },
+    {
+      "method": "POST",
+      "path": "/wp-json/wp/v2/posts",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/wp-admin/admin-ajax.php",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/xmlrpc.php",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/wp-content/uploads/2026/photo.jpg",
+      "match": false
+    },
+    {
+      "method": "GET",
+      "path": "/wp-admin/",
+      "match": false
+    },
+    {
+      "method": "POST",
+      "path": "/wp-login.php",
+      "match": false
+    }
+  ]
+}

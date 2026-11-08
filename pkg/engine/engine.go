@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -42,6 +43,24 @@ func (e *Evaluator) EvaluateBody(r *http.Request, snapshot policy.Snapshot, site
 			continue
 		}
 		for _, rule := range p.Rules {
+			excluded := false
+			for _, x := range rule.Exceptions {
+				host := r.Host
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+				if strings.EqualFold(strings.TrimSuffix(host, "."), strings.TrimSuffix(x.Host, ".")) && r.URL.Path == x.Path && r.Method == x.Method {
+					excluded = true
+					break
+				}
+			}
+			if excluded {
+				continue
+			}
+			if rule.AppSec != nil && !rule.AppSec.Matches(r, body) {
+				continue
+			}
+
 			if !clientIPMatchesRule(rule, clientHost) {
 				continue
 			}

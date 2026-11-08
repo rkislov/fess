@@ -246,6 +246,7 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 	mux.HandleFunc("/api/v1/ai/ask", func(w http.ResponseWriter, r *http.Request) {
 		aiAskHandler(w, r, db)
 	})
+	mux.HandleFunc("/api/v1/waf-feed/", func(w http.ResponseWriter, r *http.Request) { wafFeedHandler(w, r, db) })
 	mux.HandleFunc("/api/v1/owasp/packs", func(w http.ResponseWriter, r *http.Request) {
 		owaspPacksHandler(w, r)
 	})

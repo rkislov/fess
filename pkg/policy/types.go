@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"fence/pkg/appsecadapt"
 	"net/netip"
 	"regexp"
 )
@@ -40,5 +41,13 @@ type CompiledRule struct {
 	ReplaceFrom        string            `json:"replace_from,omitempty"`
 	ReplaceTo          string            `json:"replace_to,omitempty"`
 
-	PathRegex *regexp.Regexp `json:"-"`
+	PathRegex  *regexp.Regexp        `json:"-"`
+	AppSec     *appsecadapt.Compiled `json:"-"`
+	Exceptions []RuleException       `json:"exceptions,omitempty"`
+}
+
+type RuleException struct {
+	Host   string `json:"host"`
+	Path   string `json:"path"`
+	Method string `json:"method"`
 }
