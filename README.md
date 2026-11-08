@@ -18,19 +18,13 @@ ClamAV и freshclam устанавливаются пакетным менедж
 
 ## Установка на Ubuntu 24.04 и 26.04
 
-**1. Установите пакеты на сервере.** Этот блок сам определит архитектуру (`amd64` или `arm64`) и скачает FESS и модуль XDP из [GitHub Releases](https://github.com/rkislov/fess/releases).
+**1. Установите пакеты на сервере.** Выполните команду в терминале Ubuntu. Установщик сам выберет `amd64` или `arm64`, скачает `fess` и `fess-xdp` из GitHub Releases и проверит SHA-256. APT запросит подтверждение установки.
 
 ```sh
-version=2.2.7
-arch=$(dpkg --print-architecture)
-base="https://github.com/rkislov/fess/releases/download/v$version"
-waf="fess_${version}_${arch}.deb"
-xdp="fess-xdp_${version}_${arch}.deb"
-
-curl -fL --retry 3 -o "$waf" "$base/$waf" &&
-curl -fL --retry 3 -o "$xdp" "$base/$xdp" &&
-sudo apt update && sudo apt install "./$waf" "./$xdp"
+curl -fsSLo install-ubuntu.py https://raw.githubusercontent.com/rkislov/fess/main/scripts/install-ubuntu.py && python3 install-ubuntu.py
 ```
+
+По умолчанию устанавливается последний релиз. Для конкретной версии укажите её номер, например `python3 install-ubuntu.py 2.2.7`. Пакеты также доступны для [скачивания вручную](https://github.com/rkislov/fess/releases/latest).
 
 **2. Задайте пароль и запустите FESS.** Перед первым запуском откройте файл настроек.
 
@@ -60,7 +54,7 @@ FESS принимает веб-трафик на портах 80 и 443. Сай�
 ## Обновление на Ubuntu
 
 1. Сохраните копию конфигурации и базы по [инструкции резервного копирования](docs/admin-guide.md#данные-и-резервное-копирование).
-2. Повторите **шаг 1** установки, указав в `version` номер нового [релиза](https://github.com/rkislov/fess/releases/latest) без буквы `v`. APT обновит пакеты. При обновлении работающие службы перезапустятся.
+2. Повторите команду из **шага 1**. Она скачает последний релиз и обновит оба пакета через APT. Работающие службы перезапустятся.
 3. Запустите FESS, если останавливали его для копирования базы. Проверьте версии и доступность панели.
 
 ```sh
