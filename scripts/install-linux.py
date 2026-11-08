@@ -19,7 +19,7 @@ VERSION = r"[0-9]+\.[0-9]+\.[0-9]+"
 
 
 def fetch(url, accept, path):
-    command = ["curl", "-fsSL", "--retry", "4", "--retry-all-errors",
+    command = ["curl", "-fsSL", "--retry", "4",
                "--connect-timeout", "10", "--max-time", "240",
                "-H", "Accept: " + accept, "-o", str(path)]
     headers = ""
