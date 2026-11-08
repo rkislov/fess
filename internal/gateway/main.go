@@ -113,14 +113,15 @@ func New(ctx context.Context, db *sql.DB, state *runtimebus.Client) (http.Handle
 		if serveBrandAsset(w, r) {
 			return
 		}
-		mr := routeStore.Current().Match(publicHostHeader(r, ipRes), r.URL.Path)
-		if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
-			return
-		}
 		clientHost := ipRes.ClientHost(r)
 		if strings.TrimSpace(clientHost) == "" {
 			clientHost = clientip.PeerHost(r)
 		}
+		mr := routeStore.Current().MatchRequest(publicHostHeader(r, ipRes), r, clientHost)
+		if !enforceBackendIPAllow(w, r, mr, db, ipRes) {
+			return
+		}
+		r = r.WithContext(context.WithValue(r.Context(), selectedRouteKey{}, &mr))
 		ipBypassed := clientIPBypassed(bypassStore, clientHost)
 
 		var gateTF threatFeedGateResult

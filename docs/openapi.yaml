@@ -1236,6 +1236,18 @@ components:
           type: string
           format: uuid
           description: Empty = all enabled policies
+        upstream_balance:
+          type: object
+          description: Distributes requests among enabled upstreams with the same winning prefix, path priority and backend priority. Omit on update to retain the current strategy.
+          required: [mode]
+          properties:
+            mode:
+              type: string
+              enum: [priority, round_robin, ip_hash, path_hash, header_hash, cookie_hash]
+              default: priority
+            key:
+              type: string
+              description: Header or cookie name for header_hash or cookie_hash. Missing values use the resolved client IP.
     BackendWrite:
       type: object
       properties:

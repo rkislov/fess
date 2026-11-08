@@ -18,20 +18,15 @@ import (
 )
 
 type siteCreateRequest struct {
-	Name        string `json:"name"`
-	HostPattern string `json:"host_pattern"`
-	Priority    int    `json:"priority"`
-	Enabled     *bool  `json:"enabled"`
-	PolicyID    string `json:"policy_id"`
+	Name            string                 `json:"name"`
+	HostPattern     string                 `json:"host_pattern"`
+	Priority        int                    `json:"priority"`
+	Enabled         *bool                  `json:"enabled"`
+	PolicyID        string                 `json:"policy_id"`
+	UpstreamBalance *routing.BalanceConfig `json:"upstream_balance"`
 }
 
-type siteUpdateRequest struct {
-	Name        string `json:"name"`
-	HostPattern string `json:"host_pattern"`
-	Priority    int    `json:"priority"`
-	Enabled     *bool  `json:"enabled"`
-	PolicyID    string `json:"policy_id"`
-}
+type siteUpdateRequest = siteCreateRequest
 
 type backendCreateRequest struct {
 	Name          string                     `json:"name"`
@@ -296,7 +291,7 @@ func listSites(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 SELECT id::text, name, host_pattern, priority, enabled, COALESCE(policy_id::text, ''), tls_enabled,
   (length(trim(COALESCE(tls_cert_pem, ''))) > 0 AND length(trim(COALESCE(tls_key_pem, ''))) > 0
     OR certificate_id IS NOT NULL) AS tls_has_certificate,
-  COALESCE(certificate_id::text, ''),
+  COALESCE(certificate_id::text, ''), upstream_mode, upstream_key,
   created_at, updated_at
 FROM sites
 ORDER BY priority ASC, created_at ASC`)
@@ -306,22 +301,23 @@ ORDER BY priority ASC, created_at ASC`)
 	}
 	defer rows.Close()
 	type row struct {
-		ID                string    `json:"id"`
-		Name              string    `json:"name"`
-		HostPattern       string    `json:"host_pattern"`
-		Priority          int       `json:"priority"`
-		Enabled           bool      `json:"enabled"`
-		PolicyID          string    `json:"policy_id"`
-		TLSEnabled        bool      `json:"tls_enabled"`
-		TLSHasCertificate bool      `json:"tls_has_certificate"`
-		CertificateID     string    `json:"certificate_id"`
-		CreatedAt         time.Time `json:"created_at"`
-		UpdatedAt         time.Time `json:"updated_at"`
+		ID                string                `json:"id"`
+		Name              string                `json:"name"`
+		HostPattern       string                `json:"host_pattern"`
+		Priority          int                   `json:"priority"`
+		Enabled           bool                  `json:"enabled"`
+		PolicyID          string                `json:"policy_id"`
+		TLSEnabled        bool                  `json:"tls_enabled"`
+		TLSHasCertificate bool                  `json:"tls_has_certificate"`
+		CertificateID     string                `json:"certificate_id"`
+		UpstreamBalance   routing.BalanceConfig `json:"upstream_balance"`
+		CreatedAt         time.Time             `json:"created_at"`
+		UpdatedAt         time.Time             `json:"updated_at"`
 	}
 	var items []row
 	for rows.Next() {
 		var it row
-		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.TLSEnabled, &it.TLSHasCertificate, &it.CertificateID, &it.CreatedAt, &it.UpdatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.HostPattern, &it.Priority, &it.Enabled, &it.PolicyID, &it.TLSEnabled, &it.TLSHasCertificate, &it.CertificateID, &it.UpstreamBalance.Mode, &it.UpstreamBalance.Key, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -355,11 +351,19 @@ func createSite(w http.ResponseWriter, r *http.Request, db *sql.DB, state *runti
 		}
 		policyArg = pid
 	}
+	balance := routing.BalanceConfig{Mode: "priority"}
+	if payload.UpstreamBalance != nil {
+		balance = *payload.UpstreamBalance
+		if err := balance.Validate(); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	id := uuid.NewString()
 	_, err := db.ExecContext(r.Context(), `
-INSERT INTO sites(id, name, host_pattern, priority, enabled, policy_id)
-VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid)`,
-		id, payload.Name, strings.TrimSpace(payload.HostPattern), payload.Priority, en, policyArg)
+INSERT INTO sites(id, name, host_pattern, priority, enabled, policy_id, upstream_mode, upstream_key)
+VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7, $8)`,
+		id, payload.Name, strings.TrimSpace(payload.HostPattern), payload.Priority, en, policyArg, balance.Mode, balance.Key)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "host_pattern already exists"})
@@ -396,9 +400,17 @@ func updateSite(w http.ResponseWriter, r *http.Request, db *sql.DB, state *runti
 		}
 		policyArg = pid
 	}
+	var mode, key *string
+	if b := payload.UpstreamBalance; b != nil {
+		if err := b.Validate(); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		mode, key = &b.Mode, &b.Key
+	}
 	res, err := db.ExecContext(r.Context(), `
-UPDATE sites SET name=$2, host_pattern=$3, priority=$4, enabled=$5, policy_id=$6::uuid, updated_at=NOW()
-WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.HostPattern), payload.Priority, en, policyArg)
+UPDATE sites SET name=$2, host_pattern=$3, priority=$4, enabled=$5, policy_id=$6::uuid, upstream_mode=COALESCE($7,upstream_mode), upstream_key=COALESCE($8,upstream_key), updated_at=NOW()
+WHERE id=$1::uuid`, id, payload.Name, strings.TrimSpace(payload.HostPattern), payload.Priority, en, policyArg, mode, key)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "host_pattern already exists"})

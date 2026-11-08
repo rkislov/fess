@@ -200,6 +200,8 @@ type cancelBody struct {
 
 func (b *cancelBody) Close() error { defer b.cancel(); return b.ReadCloser.Close() }
 
+type selectedRouteKey struct{}
+
 func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRes *clientip.Resolver) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		FlushInterval: 100 * time.Millisecond,
@@ -210,7 +212,12 @@ func newDynamicReverseProxy(defaultUpstream *url.URL, store *routing.Store, ipRe
 		Director: func(req *http.Request) {
 			originalHost := publicHostHeader(req, ipRes)
 			originalScheme := requestScheme(req)
-			mr := store.Current().Match(originalHost, req.URL.Path)
+			// Reuse the exact route whose ACL, WAF and limits were evaluated for this request.
+			mr, ok := req.Context().Value(selectedRouteKey{}).(*routing.MatchResult)
+			if !ok {
+				match := store.Current().MatchRequest(originalHost, req, ipRes.ClientHost(req))
+				mr = &match
+			}
 			target := mr.Backend
 			if target == nil {
 				target = defaultUpstream
