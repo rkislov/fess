@@ -17,16 +17,27 @@
           {{ s.icon }} {{ s.label }}
         </button>
         <p class="mb-1 mt-3 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Защита</p>
-        <button
-          v-for="s in securitySectionsVisible"
-          :key="s.id"
-          type="button"
-          class="rounded-lg px-3 py-2 text-left text-sm font-medium transition"
-          :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'"
-          @click="sub = s.id"
-        >
-          {{ s.icon }} {{ s.label }}
-        </button>
+        <template v-for="s in securitySectionsVisible" :key="s.id">
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-left text-sm font-medium transition"
+            :class="sub === s.id ? 'bg-teal-600 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'"
+            @click="openSecuritySection(s.id)"
+          >
+            {{ s.icon }} {{ s.label }}
+          </button>
+          <nav v-if="s.id === 'policies' && sub === 'policies'" aria-label="Политики WAF" class="ml-4 border-l border-slate-700 pl-2">
+            <button
+              type="button"
+              class="w-full rounded-lg px-3 py-1.5 text-left text-sm"
+              :class="policyView === 'builder' ? 'bg-teal-900 text-teal-100' : 'text-slate-400 hover:bg-slate-800'"
+              :aria-current="policyView === 'builder' ? 'page' : undefined"
+              @click="policyView = 'builder'"
+            >
+              Конструктор правил
+            </button>
+          </nav>
+        </template>
         <button
           v-if="sub === 'users' || sub === 'auth' || sub === 'siem' || sub === 'ai'"
           type="button"
@@ -246,7 +257,7 @@
     </section>
 
     <!-- Security tools (all authenticated users) -->
-    <PoliciesPanel v-else-if="sub === 'policies'" />
+    <PoliciesPanel v-else-if="sub === 'policies'" v-model:view="policyView" />
     <MalwarePanel v-else-if="sub === 'antivirus'" />
     <ThreatFeedPanel v-else-if="sub === 'qfeed'" />
     <BotProtectionPanel v-else-if="sub === 'bots'" />
@@ -313,6 +324,12 @@ const appearanceHint = computed(() => {
 })
 
 const sub = ref<SubId>('policies')
+const policyView = ref<'overview' | 'builder'>('overview')
+
+function openSecuritySection(id: SubId) {
+  sub.value = id
+  if (id === 'policies') policyView.value = 'overview'
+}
 
 const busy = ref(false)
 const err = ref('')

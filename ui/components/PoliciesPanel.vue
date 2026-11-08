@@ -4,13 +4,17 @@
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
     <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-white">Policies</h2>
-      <p class="mt-1 text-sm text-slate-400">Create, edit, publish. Rules use JSON condition/transform schemas.</p>
+      <h2 class="text-lg font-semibold text-white">{{ view === 'builder' ? 'Политика для правила' : 'Политики WAF' }}</h2>
+      <p v-if="view === 'builder' && !detail" class="mt-1 text-sm text-slate-400">
+        Выберите политику. Если нужной политики ещё нет, создайте её в разделе «Политики WAF».
+      </p>
       <div class="mt-4 flex flex-wrap gap-2">
         <button
           v-for="p in policies"
           :key="p.id"
           type="button"
+          :disabled="busy"
+          :aria-pressed="selectedId === p.id"
           class="rounded-lg border px-3 py-1.5 text-sm transition"
           :class="
             selectedId === p.id
@@ -22,15 +26,17 @@
           {{ p.name }}
         </button>
         <button
+          v-if="selectedId"
           type="button"
+          :disabled="busy"
           class="rounded-lg border border-dashed border-slate-600 px-3 py-1.5 text-sm text-slate-400 hover:border-slate-400 hover:text-slate-200"
           @click="clearSelection"
         >
-          Clear
+          Снять выбор
         </button>
       </div>
 
-      <div class="mt-6 grid gap-4 border-t border-slate-800 pt-6 md:grid-cols-2">
+      <div v-if="view === 'overview'" class="mt-6 grid gap-4 border-t border-slate-800 pt-6 md:grid-cols-2">
         <div>
           <h3 class="text-sm font-medium text-slate-300">New policy</h3>
           <div class="mt-2 space-y-2">
@@ -102,19 +108,20 @@
       </div>
     </section>
 
-    <section v-if="detail" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-white">Rules</h2>
+    <KeepAlive v-if="detail" :key="detail.id">
+      <WafRuleBuilder
+        v-if="view === 'builder'"
+        ref="ruleBuilderRef"
+        class="rounded-2xl border border-white/10 bg-slate-900/50 p-6"
+        :policy-id="detail.id"
+        :disabled="busy"
+        @apply="onBuilderApply"
+        @save="onBuilderSave"
+      />
+    </KeepAlive>
 
-      <div id="waf-rule-builder" class="mt-4 border-b border-slate-800 pb-6">
-        <WafRuleBuilder
-          ref="ruleBuilderRef"
-          :policy-id="detail?.id ?? null"
-          :disabled="busy"
-          @apply="onBuilderApply"
-          @save="onBuilderSave"
-        />
-      </div>
-
+    <section v-if="view === 'overview' && detail" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+      <h2 class="text-lg font-semibold text-white">Правила</h2>
       <div class="mt-4 space-y-6">
         <div
           v-for="(r, idx) in ruleRows"
@@ -150,6 +157,7 @@
             <button
               type="button"
               class="rounded border border-teal-700/60 bg-teal-950/40 px-3 py-1.5 text-sm text-teal-200 hover:bg-teal-900/50"
+              :disabled="busy"
               @click="editRuleInBuilder(r)"
             >
               В конструкторе
@@ -176,10 +184,10 @@
         </div>
       </div>
 
-      <div class="mt-6 border-t border-slate-800 pt-6">
-        <h3 class="text-sm font-medium text-slate-300">Добавить правило (JSON)</h3>
+      <details ref="jsonForm" class="mt-6 border-t border-slate-800 pt-6">
+        <summary class="cursor-pointer text-sm font-medium text-slate-300">Добавить правило (JSON)</summary>
         <div class="mt-2 space-y-2">
-          <input v-model="newRule.name" placeholder="Name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+          <input ref="jsonName" v-model="newRule.name" placeholder="Name" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
           <select v-model="newRule.action" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
             <option value="block">block</option>
             <option value="log">log</option>
@@ -204,10 +212,10 @@
             Add rule
           </button>
         </div>
-      </div>
+      </details>
     </section>
 
-    <section class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
+    <section v-if="view === 'overview'" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6 shadow-lg shadow-black/25 backdrop-blur-sm">
       <h2 class="text-lg font-semibold text-white">OWASP packs</h2>
       <p class="mt-1 text-sm text-slate-400">
         Импорт встроенных наборов: <strong class="text-slate-200">crs-bundle-v1</strong> — полный набор эвристик; <strong class="text-slate-200">crs-lite-v1</strong> — 15
@@ -257,6 +265,9 @@
 import type { FetchError } from 'ofetch'
 
 const { apiUrl, apiFetch } = useApi()
+const view = defineModel<'overview' | 'builder'>('view', { required: true })
+const jsonForm = ref<HTMLDetailsElement | null>(null)
+const jsonName = ref<HTMLInputElement | null>(null)
 
 const err = ref('')
 const ok = ref('')
@@ -283,17 +294,19 @@ type RuleRow = {
 const ruleRows = ref<RuleRow[]>([])
 
 const newPolicy = reactive({ name: '', mode: 'block' as 'block' | 'log', priority: 0 })
-const newRule = reactive({
+const blankRule = () => ({
   name: '',
   action: 'block',
   priority: 0,
   conditionText: '{}',
   transformText: '{}',
 })
+const newRule = reactive(blankRule())
 
 const ruleBuilderRef = ref<{
   loadFromRule: (row: RuleRow) => void
   resetBuilder: () => void
+  focusName: () => void
 } | null>(null)
 
 const packs = ref<{ id: string; title: string; rule_count: number }[]>([])
@@ -333,19 +346,19 @@ async function loadPacks() {
   owasp.packId = prefer?.id || packs.value[0]?.id || ''
 }
 
-function onBuilderApply(payload: {
+async function onBuilderApply(payload: {
   name: string
   action: string
   priority: number
   conditionText: string
   transformText: string
 }) {
-  newRule.name = payload.name
-  newRule.action = payload.action
-  newRule.priority = payload.priority
-  newRule.conditionText = payload.conditionText
-  newRule.transformText = payload.transformText
-  flashOk('Данные конструктора перенесены в форму ниже')
+  Object.assign(newRule, payload)
+  view.value = 'overview'
+  await nextTick()
+  if (jsonForm.value) jsonForm.value.open = true
+  jsonName.value?.focus()
+  flashOk('Данные конструктора перенесены в форму добавления правила')
 }
 
 async function onBuilderSave(payload: {
@@ -358,6 +371,7 @@ async function onBuilderSave(payload: {
   transformText: string
 }) {
   if (!detail.value) return
+  const builder = ruleBuilderRef.value
   busy.value = true
   err.value = ''
   try {
@@ -375,15 +389,18 @@ async function onBuilderSave(payload: {
         },
       })
       await selectPolicy(detail.value.id)
-      ruleBuilderRef.value?.resetBuilder()
+      builder?.resetBuilder()
       flashOk('Правило создано')
     } else if (payload.ruleId) {
+      const rule = ruleRows.value.find((row) => row.id === payload.ruleId)
+      if (!rule) throw new Error('Правило не найдено в выбранной политике')
       await apiFetch(apiUrl(`/rules/${payload.ruleId}`), {
         method: 'PUT',
         body: {
           name: payload.name,
           action: payload.action,
           priority: payload.priority,
+          enabled: rule.enabled,
           condition_json,
           transform_json,
         },
@@ -398,10 +415,11 @@ async function onBuilderSave(payload: {
   }
 }
 
-function editRuleInBuilder(r: RuleRow) {
+async function editRuleInBuilder(r: RuleRow) {
+  view.value = 'builder'
+  await nextTick()
   ruleBuilderRef.value?.loadFromRule(r)
-  document.getElementById('waf-rule-builder')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  flashOk('Правило загружено в конструктор')
+  ruleBuilderRef.value?.focusName()
 }
 
 async function downloadOwaspPack() {
@@ -444,6 +462,7 @@ function stringifyJson(raw: unknown) {
 
 async function selectPolicy(id: string) {
   err.value = ''
+  if (selectedId.value !== id) Object.assign(newRule, blankRule())
   selectedId.value = id
   busy.value = true
   try {
@@ -489,6 +508,7 @@ async function selectPolicy(id: string) {
 }
 
 function clearSelection() {
+  Object.assign(newRule, blankRule())
   selectedId.value = null
   detail.value = null
   ruleRows.value = []
