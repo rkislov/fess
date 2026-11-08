@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-8">
-    <WafFeedPanel :policies="policies" @changed="loadPolicies" />
+    <WafFeedPanel v-if="view === 'overview'" :policies="policies" @changed="loadPolicies" />
     <p v-if="err" class="rounded-lg border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">{{ err }}</p>
     <p v-if="ok" class="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{{ ok }}</p>
 
