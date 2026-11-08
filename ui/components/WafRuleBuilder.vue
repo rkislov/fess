@@ -12,6 +12,7 @@
         <button
           type="button"
           class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-700"
+          :aria-expanded="showReference"
           @click="showReference = !showReference"
         >
           {{ showReference ? 'Скрыть справочник' : 'Справочник переменных' }}
@@ -73,6 +74,7 @@
         <div class="lg:col-span-2">
           <label class="text-xs text-slate-500">Имя правила</label>
           <input
+            ref="nameInput"
             v-model="ruleName"
             class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             placeholder="block-admin-from-internet"
@@ -236,7 +238,7 @@
         :disabled="disabled || !policyId"
         @click="emitApply"
       >
-        Применить к форме ниже
+        Перенести в форму добавления (JSON)
       </button>
       <button
         v-if="editingRuleId"
@@ -286,7 +288,8 @@ const emit = defineEmits<{
   save: [payload: { mode: 'create' | 'update'; ruleId?: string; name: string; action: string; priority: number; conditionText: string; transformText: string }]
 }>()
 
-const showReference = ref(true)
+const showReference = ref(false)
+const nameInput = ref<HTMLInputElement | null>(null)
 const ruleName = ref('')
 const ruleAction = ref('block')
 const rulePriority = ref(100)
@@ -382,7 +385,11 @@ async function copyJson() {
   }
 }
 
-defineExpose({ loadFromRule, resetBuilder, addBlock })
+function focusName() {
+  nameInput.value?.focus()
+}
+
+defineExpose({ loadFromRule, resetBuilder, focusName })
 
 if (blocks.value.length === 0) {
   addBlock('path_contains')
