@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 
 	"fence/pkg/ratelimit"
 )
@@ -35,6 +37,7 @@ type Snapshot struct {
 
 // ResolvedBackend is one upstream path rule (flattened backend + path row).
 type ResolvedBackend struct {
+	ID                  string
 	PreservePath        bool
 	PathPrefix          string
 	PathPriority        int
@@ -53,6 +56,9 @@ type ResolvedBackend struct {
 
 // ResolvedSite is one enabled site with backends and optional WAF policy scope.
 type ResolvedSite struct {
+	Balance     BalanceConfig
+	poolsOnce   sync.Once
+	pools       []*backendPool
 	HostPattern string
 	Priority    int
 	PolicyID    string
@@ -80,17 +86,27 @@ type MatchResult struct {
 
 // Match returns upstream URL and optional policy filter for the HTTP Host header and request path.
 func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
+	return s.match(hostHeader, requestPath, nil, "")
+}
+
+// MatchRequest chooses a single upstream using the original request and resolved client IP.
+func (s Snapshot) MatchRequest(hostHeader string, r *http.Request, clientIP string) MatchResult {
+	return s.match(hostHeader, r.URL.Path, r, clientIP)
+}
+
+func (s Snapshot) match(hostHeader, requestPath string, r *http.Request, clientIP string) MatchResult {
 	h := strings.TrimSpace(strings.ToLower(hostHeader))
 	if h2, _, err := net.SplitHostPort(h); err == nil {
 		h = strings.ToLower(h2)
 	}
 	reqPath := RequestPath(requestPath)
 
-	for _, site := range s.Sites {
+	for i := range s.Sites {
+		site := &s.Sites[i]
 		if !HostMatch(site.HostPattern, h) {
 			continue
 		}
-		if br := site.pickBackend(reqPath); br != nil && br.Backend != nil {
+		if br := site.pickBackend(reqPath, r, clientIP); br != nil && br.Backend != nil {
 			return MatchResult{
 				Backend:             br.Backend,
 				PreservePath:        br.PreservePath,
@@ -111,56 +127,14 @@ func (s Snapshot) Match(hostHeader, requestPath string) MatchResult {
 	return MatchResult{Backend: s.Default, PolicyID: "", Splash: true}
 }
 
-func (site ResolvedSite) pickBackend(reqPath string) *ResolvedBackend {
-	if len(site.Backends) == 0 {
-		return nil
-	}
-	var best *ResolvedBackend
-	bestLen := -1
-	var defaults []*ResolvedBackend
-
-	for i := range site.Backends {
-		b := &site.Backends[i]
-		if b.Backend == nil {
-			continue
-		}
-		prefix := NormalizePathPrefix(b.PathPrefix)
-		if IsCatchAllPath(prefix) {
-			defaults = append(defaults, b)
-			continue
-		}
-		if !PathMatchesPrefix(reqPath, prefix) {
-			continue
-		}
-		plen := len(prefix)
-		if plen > bestLen {
-			best = b
-			bestLen = plen
-			continue
-		}
-		if plen == bestLen && best != nil {
-			if b.PathPriority < best.PathPriority {
-				best = b
-			} else if b.PathPriority == best.PathPriority && b.BackendPriority < best.BackendPriority {
-				best = b
-			}
+func (site *ResolvedSite) pickBackend(reqPath string, r *http.Request, clientIP string) *ResolvedBackend {
+	site.poolsOnce.Do(site.buildPools)
+	for _, pool := range site.pools {
+		if PathMatchesPrefix(reqPath, pool.prefix) {
+			return pool.choose(site.Balance, r, reqPath, clientIP)
 		}
 	}
-	if best != nil {
-		return best
-	}
-	if len(defaults) == 0 {
-		return nil
-	}
-	def := defaults[0]
-	for _, b := range defaults[1:] {
-		if b.PathPriority < def.PathPriority {
-			def = b
-		} else if b.PathPriority == def.PathPriority && b.BackendPriority < def.BackendPriority {
-			def = b
-		}
-	}
-	return def
+	return nil
 }
 
 // HostMatch reports whether reqHost matches pattern (same rules as gateway routing: *, exact, or *.example.com).
@@ -185,7 +159,7 @@ func LoadSnapshot(ctx context.Context, db *sql.DB, defaultUpstream *url.URL) (Sn
 
 	rows, err := db.QueryContext(ctx, `
 SELECT s.host_pattern, s.priority, COALESCE(s.policy_id::text, ''),
-  b.name, b.base_url, b.priority, b.tls_skip_verify,
+  s.upstream_mode, s.upstream_key, b.id::text, b.name, b.base_url, b.priority, b.tls_skip_verify,
   COALESCE(p.path_prefix, '*'), p.priority, p.websocket_enabled,
   p.timeout_sec, p.idle_timeout_sec, p.ip_allow_mode, p.allowed_cidrs,
   b.rate_limit_override, p.rate_limit_override, p.preserve_path
@@ -210,14 +184,15 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.p
 		var hostPat string
 		var sitePri int
 		var policyID string
-		var backendName, base string
+		var balance BalanceConfig
+		var backendID, backendName, base string
 		var backendPri, pathPri int
 		var tlsSkip, wsEn, preservePath bool
 		var pathPrefix string
 		var timeoutSec, idleTimeoutSec int
 		var ipAllowMode, allowedCIDRsJSON string
 		var backendRLRaw, pathRLRaw []byte
-		if err := rows.Scan(&hostPat, &sitePri, &policyID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &pathPri, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON, &backendRLRaw, &pathRLRaw, &preservePath); err != nil {
+		if err := rows.Scan(&hostPat, &sitePri, &policyID, &balance.Mode, &balance.Key, &backendID, &backendName, &base, &backendPri, &tlsSkip, &pathPrefix, &pathPri, &wsEn, &timeoutSec, &idleTimeoutSec, &ipAllowMode, &allowedCIDRsJSON, &backendRLRaw, &pathRLRaw, &preservePath); err != nil {
 			return out, err
 		}
 		backendRL, err := ratelimit.ParseOverrideJSON(backendRLRaw)
@@ -242,6 +217,7 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.p
 			siteIndex[key] = idx
 			out.Sites = append(out.Sites, ResolvedSite{
 				HostPattern: hostPat,
+				Balance:     balance,
 				Priority:    sitePri,
 				PolicyID:    strings.TrimSpace(policyID),
 			})
@@ -261,6 +237,7 @@ ORDER BY s.priority ASC, s.created_at ASC, b.priority ASC, b.created_at ASC, p.p
 			}
 		}
 		out.Sites[idx].Backends = append(out.Sites[idx].Backends, ResolvedBackend{
+			ID:                  backendID,
 			PathPrefix:          NormalizePathPrefix(pathPrefix),
 			PreservePath:        preservePath,
 			PathPriority:        pathPri,
