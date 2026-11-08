@@ -1,0 +1,66 @@
+name: Linux portability
+on:
+  pull_request:
+    paths:
+      - 'scripts/*linux*'
+      - scripts/build-xdp.sh
+      - scripts/release.sh
+      - 'db/sqlite_*.go'
+      - db/open.go
+      - 'internal/xdpguard/object*'
+      - .github/workflows/linux-portability.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        targets: ['amd64 arm64', '386 arm5 arm7', 'loong64 riscv64', 'mips mipsle', 'mips64 mips64le', 'ppc64 ppc64le s390x']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install package and emulation tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+      - name: Build DEB, RPM and portable archives, run the actual binaries
+        env:
+          TARGETS: ${{ matrix.targets }}
+          FESS_VERSION: 0.0.1
+        run: |
+          for target in $TARGETS; do
+            scripts/package-linux.sh "$target" "$RUNNER_TEMP/packages"
+            python3 scripts/verify-linux-target.py "$target" "$FESS_VERSION"
+          done
+  portable:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['alpine:3.22', 'debian:bookworm-slim', 'fedora:latest', 'archlinux:base']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and start without systemd
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD/scripts:/scripts:ro" "$IMAGE" sh -ec '
+            if command -v apk >/dev/null; then apk add --no-cache python3 curl
+            elif command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y python3 curl
+            elif command -v pacman >/dev/null; then pacman -Syu --noconfirm python curl
+            elif command -v dnf >/dev/null; then dnf install -y python3
+            fi
+            python3 /scripts/install-linux.py --prefix /opt/fess 2.2.7
+            /opt/fess/current/start-fess &
+            pid=$!
+            trap "kill $pid" EXIT
+            curl -fsS --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+            /opt/fess/current/fess-xdp version
+            test -s /opt/fess/data/fess.db
+          '
