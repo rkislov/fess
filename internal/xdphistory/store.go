@@ -15,7 +15,7 @@ import (
 const Retention = 8 * 24 * time.Hour
 
 // Schema columns are fixed independently of future kernel counter additions.
-var metrics = []string{"seen", "passed", "cidr_drop", "rate_drop", "fragment_drop", "malformed_pass", "global_budget_drop", "icmp_ping_drop", "malformed_drop", "temporary_block_drop", "frame_bytes", "protected_packets", "protected_bytes", "protected_syn", "icmp_echo"}
+var metrics = []string{"seen", "passed", "cidr_drop", "rate_drop", "fragment_drop", "malformed_pass", "global_budget_drop", "icmp_ping_drop", "malformed_drop", "temporary_block_drop", "frame_bytes", "protected_packets", "protected_bytes", "protected_syn", "icmp_echo", "trial_budget_hit", "trial_icmp_hit"}
 
 type Point struct {
 	At              int64              `json:"at"`
@@ -56,6 +56,10 @@ func Save(ctx context.Context, db *sql.DB, s *xdpguard.Statistics, now time.Time
 	args := []any{s.SampledAt.UnixMilli(), source, s.Interface, s.IntervalSeconds}
 	for _, key := range metrics {
 		value, ok := s.Rates[key]
+		if !ok && (key == "trial_budget_hit" || key == "trial_icmp_hit") {
+			args = append(args, 0)
+			continue
+		} // Older XDP agents have no trial policy.
 		if !ok || value < 0 || math.IsInf(value, 0) || math.IsNaN(value) {
 			return nil
 		}
@@ -70,6 +74,9 @@ func Save(ctx context.Context, db *sql.DB, s *xdpguard.Statistics, now time.Time
 }
 
 func Prune(ctx context.Context, db *sql.DB, now time.Time) error {
+	if _, err := db.ExecContext(ctx, `DELETE FROM xdp_alerts WHERE closed_ms < $1`, now.Add(-Retention).UnixMilli()); err != nil {
+		return err
+	}
 	_, err := db.ExecContext(ctx, `DELETE FROM xdp_samples WHERE sampled_ms < $1`, now.Add(-Retention).UnixMilli())
 	return err
 }

@@ -993,6 +993,30 @@ paths:
         "200": { description: Service state, interface XDP program ID and current statistics snapshot with rates and freshness }
         "403": { description: Admin role required }
         "503": { description: XDP controller unavailable }
+  /api/v1/dashboard/xdp/alerts:
+    get:
+      tags: [dashboard]
+      summary: Active and recently resolved XDP alerts (admin only)
+      description: Up to 20 incidents, active first. Times are Unix milliseconds; closed_ms is null while active. Drop reason and percentage describe the triggering 90-second window. Calculated by FESS while the dashboard is closed.
+      responses:
+        "200":
+          description: XDP incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind: { type: string, enum: [drop_share, collection_gap] }
+                        opened_ms: { type: integer, format: int64 }
+                        closed_ms: { type: integer, format: int64, nullable: true }
+                        reason: { type: string }
+                        drop_percent: { type: number }
+        "403": { description: Admin role required }
   /api/v1/dashboard/xdp/history:
     get:
       tags: [dashboard]
