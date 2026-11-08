@@ -1,0 +1,75 @@
+name: Verify Ubuntu release packages
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (leave empty for latest)
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/ubuntu-packages.yml
+      - scripts/install-ubuntu.py
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Ubuntu ${{ matrix.os }} / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['24.04', '26.04']
+        arch: [amd64, arm64]
+    runs-on: ubuntu-${{ matrix.os }}${{ matrix.arch == 'arm64' && '-arm' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install the release with the Ubuntu installer
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          EXPECT_OS: ${{ matrix.os }}
+          EXPECT_ARCH: ${{ matrix.arch }}
+        run: |
+          . /etc/os-release
+          test "$ID/$VERSION_ID" = "ubuntu/$EXPECT_OS"
+          test "$(dpkg --print-architecture)" = "$EXPECT_ARCH"
+          if [[ -n "$TAG" ]]; then
+            tag=$TAG
+            python3 scripts/install-ubuntu.py --yes "${tag#v}"
+          else
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            python3 scripts/install-ubuntu.py --yes
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Start the installed services
+        run: |
+          version=${RELEASE_TAG#v}
+          for package in fess fess-xdp; do
+            test "$(dpkg-query -W -f='${Version}' "$package")" = "$version"
+            test "$("$package" version | awk '{print $NF}')" = "$version"
+          done
+          sudo systemctl start fess
+          curl -fsS --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+          curl -fsS http://127.0.0.1:8082/ | grep -q '/_nuxt/'
+          test "$(systemctl is-enabled fess-xdp.service || true)" = disabled
+          systemctl is-active fess-xdp-control.service
+          fess-xdp --check --config /etc/fess/xdp.json.example
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Exercise the installed XDP service on a disposable veth
+        run: |
+          go build -o "$RUNNER_TEMP/fess-load" ./cmd/fess-load
+          sudo python3 scripts/xdp-control-smoke.py "$RUNNER_TEMP/fess-load"

@@ -47,3 +47,11 @@ jobs:
           else
             gh release create "v$version" "$out"/*.tar.gz "$out"/*.deb "$out"/*.rpm "$out"/SHA256SUMS --title "FESS $version" --generate-notes --target "$GITHUB_SHA"
           fi
+
+  verify-ubuntu:
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ubuntu-packages.yml
+    with:
+      tag: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
