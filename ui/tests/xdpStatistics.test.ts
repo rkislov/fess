@@ -86,3 +86,15 @@ test('missing history is unavailable while an observed zero is a real zero', () 
   assert.equal(xdpHistoryTotals(history([])), null)
   assert.equal(xdpHistoryTotals(history([{ ...point(10000), rates: { seen: 0 } }]))?.counters.seen, 0)
 })
+
+test('trial budget and echo hits accumulate without increasing drops in totals or chart', () => {
+  const sample = point(10000)
+  sample.rates.trial_budget_hit = 7
+  sample.rates.trial_icmp_hit = 5
+  const h = history([sample])
+  const totals = xdpHistoryTotals(h)!
+  assert.equal(totals.counters.trial_budget_hit, 70)
+  assert.equal(totals.counters.trial_icmp_hit, 50)
+  assert.equal(xdpDropped(totals.counters), 30)
+  assert.equal(xdpChartPoints(h)[0]?.rates?.dropped, 3)
+})

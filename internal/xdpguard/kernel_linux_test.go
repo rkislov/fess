@@ -436,3 +436,47 @@ func TestKernelTrafficCounters(t *testing.T) {
 		}
 	}
 }
+
+func TestKernelObservationIsIndependentOfEnforcement(t *testing.T) {
+	// The first packet consumes a separate token from each policy. On the
+	// second only the trial rejects, and on the third both policies reject.
+	for _, tc := range []struct {
+		name       string
+		cfg        Config
+		makePacket func() []byte
+		hit, drop  string
+	}{
+		{"ports", Config{GlobalBudget: BudgetConfig{Enabled: true, PacketsPerSecond: 1, PacketBurst: 2}, Observation: ObservationConfig{GlobalBudget: BudgetConfig{Enabled: true, PacketsPerSecond: 1, PacketBurst: 1}}}, func() []byte { return ipv4Packet("192.0.2.5", 443, 2) }, "trial_budget_hit", "global_budget_drop"},
+		{"echo_global", Config{ICMPPing: ICMPConfig{Enabled: true, PacketsPerSecond: 1, Burst: 2}, Observation: ObservationConfig{ICMPPing: ICMPConfig{Enabled: true, PacketsPerSecond: 1, Burst: 1}}}, func() []byte { return icmpPacket(true, "2001:db8::5", 128) }, "trial_icmp_hit", "icmp_ping_drop"},
+		{"echo_per_ip", Config{ICMPPing: ICMPConfig{Enabled: true, PerIPPacketsPerSecond: 1, PerIPBurst: 2}, Observation: ObservationConfig{ICMPPing: ICMPConfig{Enabled: true, PerIPPacketsPerSecond: 1, PerIPBurst: 1}}}, func() []byte { return icmpPacket(false, "192.0.2.5", 8) }, "trial_icmp_hit", "icmp_ping_drop"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := kernelCollection(t, tc.cfg)
+			p := tc.makePacket()
+			for i, want := range []uint32{2, 2, 1} {
+				if got := action(t, c, p); got != want {
+					t.Fatalf("packet %d verdict %d want %d", i+1, got, want)
+				}
+			}
+			counters, err := readCounters(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if counters[tc.hit] != 2 || counters[tc.drop] != 1 || counters["passed"] != 2 {
+				t.Fatalf("counter isolation: %v", counters)
+			}
+		})
+	}
+}
+func TestKernelObservationScope(t *testing.T) {
+	c := kernelCollection(t, Config{AllowCIDRs: []string{"192.0.2.1/32"}, Observation: ObservationConfig{GlobalBudget: BudgetConfig{Enabled: true, SYNsPerSecond: 1, SYNBurst: 1}, ICMPPing: ICMPConfig{Enabled: true, PerIPPacketsPerSecond: 1, PerIPBurst: 1}}})
+	for _, p := range [][]byte{ipv4Packet("192.0.2.2", 443, 2), ipv4Packet("192.0.2.2", 443, 2), ipv4Packet("192.0.2.2", 443, 16), ipv4Packet("192.0.2.2", 22, 2), ipv4Packet("192.0.2.1", 443, 2), icmpPacket(false, "192.0.2.2", 8), icmpPacket(false, "192.0.2.2", 8), icmpPacket(false, "192.0.2.3", 8), icmpPacket(false, "192.0.2.2", 0)} {
+		if got := action(t, c, p); got != 2 {
+			t.Fatalf("trial changed verdict: %d", got)
+		}
+	}
+	s, err := readCounters(c)
+	if err != nil || s["trial_budget_hit"] != 1 || s["trial_icmp_hit"] != 1 || s["seen"] != s["passed"] {
+		t.Fatalf("scope: %+v %v", s, err)
+	}
+}

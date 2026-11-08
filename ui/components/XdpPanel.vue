@@ -50,12 +50,12 @@
         <label class="mt-4 flex items-center gap-2 text-sm"><input v-model="cfg.drop_fragments" type="checkbox" />Отбрасывать IP-фрагменты на всём интерфейсе</label>
       </div>
 
-      <div v-for="section in budgets" :key="section.key" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
-        <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="cfg[section.key].enabled" type="checkbox" />{{ section.title }}</label>
+      <div v-for="section in budgetSections" :key="section.title" class="rounded-2xl border border-white/10 bg-slate-900/50 p-6">
+        <label class="flex items-center gap-2 text-sm font-semibold"><input v-model="section.values.enabled" type="checkbox" />{{ section.title }}</label>
         <p class="mt-2 text-xs text-slate-400">{{ section.hint }}</p>
         <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label v-for="field in section.fields" :key="field.key" class="text-xs text-slate-400">{{ field.label }}
-            <input v-model.number="cfg[section.key][field.key]" type="number" min="0" max="1000000000" :disabled="!cfg[section.key].enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white disabled:opacity-40" />
+            <input v-model.number="section.values[field.key]" type="number" min="0" max="1000000000" :disabled="!section.values.enabled" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white disabled:opacity-40" />
           </label>
         </div>
       </div>
@@ -86,7 +86,9 @@ import type { XdpStatistics as Statistics } from '~/utils/xdpStatistics'
 const { apiUrl, apiFetch } = useApi()
 type Budget = { enabled: boolean; [key: string]: number | boolean }
 type Status = { service: Record<string, string>; interface: string; mode: string; attachment: { prog?: { id?: number }; prog_id?: number } | null; attachment_error?: string; config_error?: string; statistics?: Statistics | null; statistics_error?: string }
+type Profile = { global_budget: Budget; icmp_ping: Budget }
 const cfg = ref({
+  observation: undefined as Profile | undefined,
   interface: '', mode: 'native', ports: [] as { protocol: string; port: number }[], block_cidrs: [] as string[], allow_cidrs: [] as string[],
   packets_per_second: 10000, syns_per_second: 1000, drop_fragments: false,
   global_budget: { enabled: false, packets_per_second: 100000, packet_burst: 200000, bytes_per_second: 100000000, byte_burst: 200000000, syns_per_second: 10000, syn_burst: 20000 } as Budget,
@@ -102,6 +104,15 @@ const budgets: { key: 'global_budget' | 'icmp_ping'; title: string; hint: string
     { key: 'packets_per_second', label: 'Всего пакетов/с' }, { key: 'burst', label: 'Общий burst' }, { key: 'per_ip_packets_per_second', label: 'Пакетов/с на IP' }, { key: 'per_ip_burst', label: 'Burst на IP' },
   ] },
 ]
+const budgetSections = computed(() => {
+  const active = budgets.map(b => ({ ...b, values: cfg.value[b.key] }))
+  const trial = cfg.value.observation
+  if (!trial) return active // Older controller: do not send unsupported observation settings.
+  return [...active, ...budgets.map(b => ({
+    ...b, values: trial[b.key], title: b.key === 'global_budget' ? 'Наблюдение: бюджет защищаемых портов' : 'Наблюдение: ICMP Echo',
+    hint: 'Пробные пороги только считают превышения. Действующие ограничения продолжают работать независимо.',
+  }))]
+})
 const ports = ref('tcp/80\ntcp/443'), blockedCIDRs = ref(''), allowedCIDRs = ref('')
 const interfaces = ref<{ name: string; up: boolean; addresses: string[] }[]>([])
 const status = ref<Status | null>(null)

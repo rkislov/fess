@@ -48,6 +48,11 @@
           <p>Новые SYN: <strong>{{ rate('protected_syn', 1, 1) }}</strong>/с</p>
           <p>Echo Request: <strong>{{ rate('icmp_echo', 1, 1) }}</strong>/с</p>
         </div>
+        <div v-if="'trial_budget_hit' in counters" class="mt-4 rounded-lg border border-teal-500/30 p-3 text-sm">
+          <h5 class="font-semibold">Пробные лимиты · {{ graph ? periodLabel : 'с запуска' }}</h5>
+          <p class="mt-2">Превышения бюджета портов: <strong>{{ number(counters.trial_budget_hit) }}</strong> · ICMP Echo: <strong>{{ number(counters.trial_icmp_hit) }}</strong></p>
+          <p class="mt-1 text-xs text-slate-400">Пробные пороги не блокируют пакеты. Счётчики растут только при включённом наблюдении.</p>
+        </div>
         <h5 class="mt-5 text-xs font-semibold text-slate-400">Причины отбрасывания<span v-if="graph"> · {{ periodLabel }}</span></h5>
         <div class="mt-3 grid gap-2 sm:grid-cols-2">
           <div v-for="reason in dropReasons" :key="reason.key" class="flex justify-between gap-3 rounded-lg bg-slate-800/50 px-3 py-2 text-xs"><span>{{ reason.label }}</span><span class="font-mono tabular-nums">{{ number(counters[reason.key]) }}</span></div>

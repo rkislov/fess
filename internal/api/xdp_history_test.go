@@ -88,3 +88,32 @@ func TestXDPHistoryCollectorPersistenceAndAPI(t *testing.T) {
 type historyTransport func(*http.Request) (*http.Response, error)
 
 func (f historyTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestXDPAlertsAccess(t *testing.T) {
+	db, err := fencedb.Open(context.Background(), "sqlite", filepath.Join(t.TempDir(), "alerts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = fencedb.ApplyMigrations(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		role, method string
+		want         int
+	}{{"viewer", "GET", 403}, {"", "GET", 403}, {"operator", "GET", 403}, {"admin", "POST", 405}, {"admin", "GET", 200}} {
+		r := httptest.NewRequest(c.method, "/api/v1/dashboard/xdp/alerts", nil)
+		r = r.WithContext(auth.WithClaims(r.Context(), auth.Claims{Role: c.role}))
+		w := httptest.NewRecorder()
+		xdpAlertsHandler(w, r, db)
+		if w.Code != c.want {
+			t.Fatalf("%s %s: %d", c.role, c.method, w.Code)
+		}
+		if w.Code == 200 {
+			var body struct{ Items []xdphistory.Alert }
+			if json.Unmarshal(w.Body.Bytes(), &body) != nil || body.Items == nil || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal(w.Body.String())
+			}
+		}
+	}
+}
