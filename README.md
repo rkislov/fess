@@ -16,44 +16,62 @@ ClamAV и freshclam устанавливаются пакетным менедж
 
 Автор: Роман Сергеевич Кислов · [Apache-2.0](LICENSE)
 
-## Установка Linux
+## Установка на Ubuntu 24.04 и 26.04
 
-Скачайте deb/rpm для своей архитектуры из [Releases](https://github.com/rkislov/fess/releases).
-Установите пакет через менеджер зависимостей:
+**1. Установите пакеты на сервере.** Этот блок сам определит архитектуру (`amd64` или `arm64`) и скачает FESS и модуль XDP из [GitHub Releases](https://github.com/rkislov/fess/releases).
 
 ```sh
-# Ubuntu 24.04 LTS и 26.04 LTS используют одни и те же файлы для каждой архитектуры.
-# Скачайте fess и fess-xdp своей архитектуры (dpkg --print-architecture).
 version=2.2.7
 arch=$(dpkg --print-architecture)
-sudo apt install "./fess_${version}_${arch}.deb" "./fess-xdp_${version}_${arch}.deb"
-# Для RPM-систем (могут потребоваться репозитории дистрибутива/EPEL с ClamAV):
-# sudo dnf install ./fess-2.1.0-1.aarch64.rpm
-sudo editor /etc/fess/fess.env
-sudo systemctl start fess
+base="https://github.com/rkislov/fess/releases/download/v$version"
+waf="fess_${version}_${arch}.deb"
+xdp="fess-xdp_${version}_${arch}.deb"
+
+curl -fL --retry 3 -o "$waf" "$base/$waf" &&
+curl -fL --retry 3 -o "$xdp" "$base/$xdp" &&
+sudo apt update && sudo apt install "./$waf" "./$xdp"
 ```
 
-Для установки только WAF достаточно пакета `fess`. Пакет `fess-xdp` добавляет локальный контроллер. Привязка фильтра к интерфейсу включается отдельно в **Настройки → XDP**.
-
-При первом запуске укажите `FESS_ADMIN_PASSWORD` в конфигурации. Если он не задан,
-создаётся `admin` / `fessfess`; смените пароль в панели. JWT-секрет генерируется
-автоматически и хранится в `/var/lib/fess/jwt.secret` с правами `0600`.
-
-Панель и API по умолчанию доступны на `127.0.0.1:8082`. Для удалённого доступа:
+**2. Задайте пароль и запустите FESS.** Перед первым запуском откройте файл настроек.
 
 ```sh
-ssh -L 8082:127.0.0.1:8082 user@server
+sudoedit /etc/fess/fess.env
 ```
 
-Откройте `http://127.0.0.1:8082`. Шлюз слушает `80` и `443`; сайты, upstream и
-сертификаты настраиваются в панели. HTTPS требует сертификата для выбранного SNI.
-Без совпадающего сайта HTTP показывает заставку FESS.
+Найдите строку `# FESS_ADMIN_PASSWORD=choose-a-password`, уберите `#`, замените значение на свой пароль и сохраните файл. Запустите службу и проверьте ответ панели.
 
-Пакет включает `fess.service`, `fess-clamd.service`, `fess-freshclam.service`.
-ClamAV использует `/var/lib/fess-clamav` и `/run/fess-clamav/clamd.sock`.
-При первом старте freshclam скачивает сигнатуры. Пока сканер не готов, запросы,
-подлежащие антивирусной проверке, блокируются; остальные функции доступны.
-Диагностика — в панели и `journalctl -u fess -u fess-clamd -u fess-freshclam`.
+```sh
+sudo systemctl start fess
+curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+```
+
+Ответ `ok` означает, что FESS запустился.
+
+**3. Откройте панель.** На своём компьютере выполните команду, подставив пользователя и адрес сервера.
+
+```sh
+ssh -N -L 8082:127.0.0.1:8082 user@server
+```
+
+Оставьте SSH-соединение открытым и перейдите на [http://127.0.0.1:8082](http://127.0.0.1:8082). Войдите как `admin` с паролем из шага 2. Для SSH на другом порту добавьте к команде `-p НОМЕР_ПОРТА`.
+
+FESS принимает веб-трафик на портах 80 и 443. Сайты, upstream и сертификаты настраиваются в панели. Если нужна фильтрация XDP, откройте **Настройки → XDP**, выберите сетевой интерфейс и нажмите **Сохранить и запустить с привязкой**.
+
+## Обновление на Ubuntu
+
+1. Сохраните копию конфигурации и базы по [инструкции резервного копирования](docs/admin-guide.md#данные-и-резервное-копирование).
+2. Повторите **шаг 1** установки, указав в `version` номер нового [релиза](https://github.com/rkislov/fess/releases/latest) без буквы `v`. APT обновит пакеты. При обновлении работающие службы перезапустятся.
+3. Проверьте версии и доступность панели.
+
+```sh
+fess version
+fess-xdp version
+curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/healthz
+```
+
+**Для RPM-систем** скачайте RPM своей архитектуры из того же релиза и установите через `sudo dnf install ./имя-пакета.rpm`. Для зависимостей ClamAV может потребоваться репозиторий EPEL.
+
+Диагностика FESS и ClamAV описана в [руководстве администратора](docs/admin-guide.md).
 
 ## Запуск бинарника
 
