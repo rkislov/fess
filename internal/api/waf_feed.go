@@ -83,6 +83,8 @@ func fetchWAF(ctx context.Context, db *sql.DB, path string) ([]byte, error) {
 		return nil, e
 	}
 	req.Header.Set("X-Api-Key", cfg.APIKey)
+	req.Header.Set("User-Agent", "FESS-WAF-Feed/1.0")
+	req.Header.Set("Accept", "application/json")
 	// Never forward a subscription key to redirect targets.
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, e := client.Do(req)
@@ -91,7 +93,7 @@ func fetchWAF(ctx context.Context, db *sql.DB, path string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("FESS Feed отклонил доступ. Проверьте ключ в «Настройки → IOC / FESS Feed»")
+		return nil, fmt.Errorf("доступ к %s отклонён (HTTP %d). Проверьте доступ к профилю и журнал шлюза Feed", path, resp.StatusCode)
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("Feed HTTP %d", resp.StatusCode)
