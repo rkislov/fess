@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/ubuntu-packages.yml
-      - scripts/install-ubuntu.py
+      - scripts/install-linux.py
 
 permissions:
   contents: read
@@ -43,10 +43,10 @@ jobs:
           test "$(dpkg --print-architecture)" = "$EXPECT_ARCH"
           if [[ -n "$TAG" ]]; then
             tag=$TAG
-            python3 scripts/install-ubuntu.py --yes "${tag#v}"
+            python3 scripts/install-linux.py --yes "${tag#v}"
           else
             tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-            python3 scripts/install-ubuntu.py --yes
+            python3 scripts/install-linux.py --yes
           fi
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
       - name: Start the installed services
